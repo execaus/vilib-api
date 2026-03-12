@@ -8,15 +8,18 @@ import (
 
 const (
 	RegisterURL = "auth/register"
+	APIVersion1 = "v1"
 )
 
 type Handler struct {
-	saga service.SagaRunner
+	saga         service.SagaRunner
+	localMailBox chan string
 }
 
-func NewHandler(saga service.SagaRunner) *Handler {
+func NewHandler(saga service.SagaRunner, localMailBox chan string) *Handler {
 	h := &Handler{
-		saga: saga,
+		saga:         saga,
+		localMailBox: localMailBox,
 	}
 
 	return h
@@ -27,9 +30,13 @@ func (h *Handler) GetRouter() *gin.Engine {
 
 	api := engine.Group("api")
 
-	v1 := api.Group("v1")
+	v1 := api.Group(APIVersion1)
 
 	v1.POST(RegisterURL, h.Register)
 
 	return engine
+}
+
+func (h *Handler) LocalMailBox() <-chan string {
+	return h.localMailBox
 }

@@ -1,0 +1,126 @@
+package test
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"vilib-api/internal/handler"
+	mock_postgres "vilib-api/internal/repository/mocks"
+	"vilib-api/internal/service"
+	mock_service "vilib-api/internal/service/mocks"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/mock/gomock"
+)
+
+type Requester struct {
+	method         string
+	target         string
+	body           any
+	localMailBox   chan string
+	prepareService func(t *testing.T, service *ServiceMock)
+	version        string
+	t              *testing.T
+}
+
+func Request(t *testing.T, apiVersion string) *Requester {
+	return &Requester{
+		version: apiVersion,
+		t:       t,
+	}
+}
+
+func (r *Requester) Method(method string) *Requester {
+	r.method = method
+	return r
+}
+
+func (r *Requester) Target(target string) *Requester {
+	r.target = target
+	return r
+}
+
+func (r *Requester) Body(body any) *Requester {
+	r.body = body
+	return r
+}
+
+func (r *Requester) LocalMailBox(localMailBox chan string) *Requester {
+	r.localMailBox = localMailBox
+	return r
+}
+
+func (r *Requester) PrepareService(prepareService func(t *testing.T, service *ServiceMock)) *Requester {
+	r.prepareService = prepareService
+	return r
+}
+
+func (r *Requester) Version(version string) *Requester {
+	r.version = version
+	return r
+}
+
+func (r *Requester) Run(response any) (status int) {
+	gin.SetMode(gin.TestMode)
+
+	ctrl := gomock.NewController(r.t)
+	defer ctrl.Finish()
+
+	s := &ServiceMock{
+		Auth:    mock_service.NewMockAuth(ctrl),
+		Account: mock_service.NewMockAccount(ctrl),
+		User:    mock_service.NewMockUser(ctrl),
+		Email:   mock_service.NewMockEmail(ctrl),
+	}
+
+	if r.prepareService != nil {
+		r.prepareService(r.t, s)
+	}
+
+	repo := mock_postgres.NewMockTransactable(ctrl)
+	tx := mock_postgres.NewMockBobTransaction(ctrl)
+
+	tx.EXPECT().Commit(gomock.Any()).Return(nil)
+	repo.EXPECT().WithTx(gomock.Any()).Return(tx, nil)
+
+	h := handler.NewHandler(service.NewSagaRunner(s.ToServices(), repo), r.localMailBox)
+	router := h.GetRouter()
+
+	recorder := httptest.NewRecorder()
+
+	var (
+		jsonBody []byte
+		err      error
+	)
+
+	if r.body != nil {
+		jsonBody, err = json.Marshal(r.body)
+		if err != nil {
+			r.t.Fatal(err)
+		}
+	}
+
+	req := httptest.NewRequest(r.method, getFullURI(r.version, r.target), bytes.NewBuffer(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	router.ServeHTTP(recorder, req)
+
+	if recorder.Code == http.StatusInternalServerError {
+		return recorder.Code
+	}
+
+	if response != nil {
+		if err = json.Unmarshal(recorder.Body.Bytes(), response); err != nil {
+			r.t.Fatal(err)
+		}
+	}
+
+	return recorder.Code
+}
+
+func getFullURI(version, target string) string {
+	return fmt.Sprintf("/api/%s/%s", version, target)
+}

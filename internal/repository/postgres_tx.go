@@ -7,8 +7,13 @@ import (
 	"github.com/stephenafamo/bob"
 )
 
+//go:generate mockgen -source=./postgres_tx.go -destination=./mocks/postgres_tx.go -package=mock_postgres
 type Transactable interface {
 	WithTx(ctx context.Context) (bob.Transaction, error)
+}
+
+type BobTransaction interface {
+	bob.Transaction
 }
 
 type TransactionalRepository struct {

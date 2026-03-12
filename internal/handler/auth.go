@@ -6,6 +6,7 @@ import (
 	"vilib-api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func (h *Handler) Register(c *gin.Context) {
@@ -20,11 +21,45 @@ func (h *Handler) Register(c *gin.Context) {
 		token string
 	)
 	if err := h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		//services.Auth.GeneratePassword()
-		//services.Account.Create()
-		//services.User.Create()
-		//services.Permission.IssueAdmin()
-		//services.Email.SendPassword()
+		password, err := services.Auth.GeneratePassword()
+		if err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		passwordHash, err := services.Auth.HashPassword(ctx, password)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		user, err := services.User.Create(ctx, req.Name, req.Surname, req.Email, passwordHash)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		account, err := services.Account.Create(ctx, user.ID, user.Email)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		if err = services.User.IssueAdmin(ctx, user.ID, account.ID); err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		token, err = services.Auth.GenerateToken(ctx, user.ID, account.ID)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		if err = services.Email.SendRegisteredMail(ctx, user.Email, password); err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
 
 		return nil
 	}); err != nil {
