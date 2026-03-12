@@ -1,0 +1,43 @@
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+dist/
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Coverage and profiling
+coverage.out
+*.cover
+*.prof
+
+# Dependency directories (если используются)
+vendor/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Configuration files (local / sensitive)
+config/config*.yaml
+
+.env
+
+./Dockerfile
+
+./publish.sh
