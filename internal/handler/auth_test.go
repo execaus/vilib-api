@@ -15,7 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestRegisterHandler_Success_Registered(t *testing.T) {
+func TestRegister_Success_Registered(t *testing.T) {
 	var response dto.RegisterResponse
 
 	var (
@@ -23,7 +23,7 @@ func TestRegisterHandler_Success_Registered(t *testing.T) {
 		password     string
 	)
 
-	code := test.Request(t, handler.APIVersion1).
+	code := test.RequestWithMocks(t, handler.APIVersion1).
 		Method(http.MethodPost).
 		Target(handler.RegisterURL).
 		Body(dto.RegisterRequest{
@@ -46,7 +46,7 @@ func TestRegisterHandler_Success_Registered(t *testing.T) {
 			service.Account.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(models.Account{
 				ID:        "accountID",
 				Name:      "accountName",
-				Owner:     "accountOwner",
+				OwnerID:   "accountOwner",
 				Email:     "accountEmail",
 				CreatedAt: time.Now(),
 			}, nil)
@@ -67,8 +67,4 @@ func TestRegisterHandler_Success_Registered(t *testing.T) {
 	assert.Equal(t, password, sentMail)
 	assert.Equal(t, http.StatusCreated, code)
 	assert.NotEmpty(t, response.Token)
-}
-
-func TestRegisterHandler_UserExists_Conflict(t *testing.T) {
-	// TODO
 }

@@ -3,7 +3,6 @@ package test
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-type Requester struct {
+type RequesterWithMocks struct {
 	method         string
 	target         string
 	body           any
@@ -26,44 +25,44 @@ type Requester struct {
 	t              *testing.T
 }
 
-func Request(t *testing.T, apiVersion string) *Requester {
-	return &Requester{
+func RequestWithMocks(t *testing.T, apiVersion string) *RequesterWithMocks {
+	return &RequesterWithMocks{
 		version: apiVersion,
 		t:       t,
 	}
 }
 
-func (r *Requester) Method(method string) *Requester {
+func (r *RequesterWithMocks) Method(method string) *RequesterWithMocks {
 	r.method = method
 	return r
 }
 
-func (r *Requester) Target(target string) *Requester {
+func (r *RequesterWithMocks) Target(target string) *RequesterWithMocks {
 	r.target = target
 	return r
 }
 
-func (r *Requester) Body(body any) *Requester {
+func (r *RequesterWithMocks) Body(body any) *RequesterWithMocks {
 	r.body = body
 	return r
 }
 
-func (r *Requester) LocalMailBox(localMailBox chan string) *Requester {
+func (r *RequesterWithMocks) LocalMailBox(localMailBox chan string) *RequesterWithMocks {
 	r.localMailBox = localMailBox
 	return r
 }
 
-func (r *Requester) PrepareService(prepareService func(t *testing.T, service *ServiceMock)) *Requester {
+func (r *RequesterWithMocks) PrepareService(prepareService func(t *testing.T, service *ServiceMock)) *RequesterWithMocks {
 	r.prepareService = prepareService
 	return r
 }
 
-func (r *Requester) Version(version string) *Requester {
+func (r *RequesterWithMocks) Version(version string) *RequesterWithMocks {
 	r.version = version
 	return r
 }
 
-func (r *Requester) Run(response any) (status int) {
+func (r *RequesterWithMocks) Run(response any) (status int) {
 	gin.SetMode(gin.TestMode)
 
 	ctrl := gomock.NewController(r.t)
@@ -83,8 +82,8 @@ func (r *Requester) Run(response any) (status int) {
 	repo := mock_postgres.NewMockTransactable(ctrl)
 	tx := mock_postgres.NewMockBobTransaction(ctrl)
 
-	tx.EXPECT().Commit(gomock.Any()).Return(nil)
-	repo.EXPECT().WithTx(gomock.Any()).Return(tx, nil)
+	tx.EXPECT().Commit(gomock.Any()).Return(nil).AnyTimes()
+	repo.EXPECT().WithTx(gomock.Any()).Return(tx, nil).AnyTimes()
 
 	h := handler.NewHandler(service.NewSagaRunner(s.ToServices(), repo), r.localMailBox)
 	router := h.GetRouter()
@@ -103,7 +102,7 @@ func (r *Requester) Run(response any) (status int) {
 		}
 	}
 
-	req := httptest.NewRequest(r.method, getFullURI(r.version, r.target), bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequest(r.method, FullURI(r.version, r.target), bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	router.ServeHTTP(recorder, req)
@@ -119,8 +118,4 @@ func (r *Requester) Run(response any) (status int) {
 	}
 
 	return recorder.Code
-}
-
-func getFullURI(version, target string) string {
-	return fmt.Sprintf("/api/%s/%s", version, target)
 }

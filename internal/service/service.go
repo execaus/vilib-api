@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"vilib-api/config"
 	"vilib-api/internal/models"
 	"vilib-api/internal/repository"
 )
@@ -37,9 +38,13 @@ type Service struct {
 	repo repository.Transactable
 }
 
-func NewService(r *repository.TransactionalRepository) *Service {
+func NewService(cfg config.Config, r *repository.TransactionalRepository) *Service {
 	s := &Service{
-		repo: r,
+		Auth:    NewAuthService(cfg.Auth),
+		Account: NewAccountService(r),
+		User:    nil,
+		Email:   nil,
+		repo:    r,
 	}
 
 	return s

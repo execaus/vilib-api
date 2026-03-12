@@ -46,3 +46,44 @@
 
 ## AI функции
 - [ ] Автоматическое создание тайм‑кодов для видео
+
+---
+
+## Генерация кода (bob)
+
+Для генерации кода через **bob** необходимо создать конфигурационный файл `bobgen.yaml` в корне проекта.
+
+Пример конфигурации (без конфиденциальных данных):
+
+```yaml
+psql:
+  dsn: "postgres://<user>:<password>@<host>:<port>/<database>?sslmode=disable"
+  driver: "github.com/jackc/pgx/v5/stdlib"
+  schemas:
+    - "app"
+  uuid_pkg: "google"
+  queries:
+    - ./internal/repository
+
+plugins:
+  dbinfo:
+    disabled: true
+  enums:
+    disabled: true
+  models:
+    disabled: false
+    pkgname: "schema"
+    destination: "./internal/gen/schema"
+  factory:
+    disabled: true
+  dberrors:
+    disabled: false
+    pkgname: "dberrors"
+    destination: "./internal/gen/dberrors"
+  where:
+    disabled: true
+  loaders:
+    disabled: true
+  joins:
+    disabled: true
+```
