@@ -15,7 +15,7 @@ import (
 func TestRegisterHandler_Success_Registered(t *testing.T) {
 	var response dto.RegisterResponse
 
-	code := test.Request(
+	code := test.RequestV1(
 		t,
 		http.MethodPost,
 		handler.RegisterURL,
@@ -26,8 +26,8 @@ func TestRegisterHandler_Success_Registered(t *testing.T) {
 		},
 	)
 
-	// Проверяем статус
 	assert.Equal(t, http.StatusCreated, code)
+	assert.NotEmpty(t, response.Token)
 }
 
 func TestRegisterHandler_UserExists_Conflict(t *testing.T) {

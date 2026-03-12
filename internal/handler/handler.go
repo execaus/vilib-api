@@ -25,7 +25,9 @@ func NewHandler(saga service.SagaRunner) *Handler {
 func (h *Handler) GetRouter() *gin.Engine {
 	engine := gin.Default()
 
-	v1 := engine.Group("v1")
+	api := engine.Group("api")
+
+	v1 := api.Group("v1")
 
 	v1.POST(RegisterURL, h.Register)
 

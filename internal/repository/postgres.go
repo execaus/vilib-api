@@ -3,7 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
-	"horsy_api/config"
+	"net"
+	"vilib-api/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -11,12 +12,13 @@ import (
 )
 
 func NewPostgresDB(cfg *config.DatabaseConfig) (*bob.DB, *pgxpool.Pool, error) {
+	hostPort := net.JoinHostPort(cfg.Host, cfg.Port)
+
 	connStr := fmt.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?search_path=%s",
+		"postgres://%s:%s@%s/%s?search_path=%s",
 		cfg.User,
 		cfg.Password,
-		cfg.Host,
-		cfg.Port,
+		hostPort,
 		cfg.Name,
 		cfg.Path,
 	)
@@ -27,7 +29,6 @@ func NewPostgresDB(cfg *config.DatabaseConfig) (*bob.DB, *pgxpool.Pool, error) {
 	}
 
 	s := stdlib.OpenDBFromPool(pool)
-
 	db := bob.NewDB(s)
 
 	return &db, pool, nil

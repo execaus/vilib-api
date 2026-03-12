@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http/httptest"
 	"testing"
 	"vilib-api/internal/handler"
@@ -13,12 +14,28 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func Request(
+const (
+	v1 = "v1"
+)
+
+func RequestV1(
 	t *testing.T,
 	method string,
 	target string,
 	response any,
 	body any,
+	prepareService func(t *testing.T, service *service.Service),
+) (status int) {
+	return request(t, method, target, response, body, v1, prepareService)
+}
+
+func request(
+	t *testing.T,
+	method string,
+	target string,
+	response any,
+	body any,
+	targetVersion string,
 	prepareService func(t *testing.T, service *service.Service),
 ) (status int) {
 	gin.SetMode(gin.TestMode)
@@ -49,7 +66,7 @@ func Request(
 		}
 	}
 
-	req := httptest.NewRequest(method, target, bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequest(method, getFullURI(targetVersion, target), bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	router.ServeHTTP(recorder, req)
@@ -61,4 +78,8 @@ func Request(
 	}
 
 	return recorder.Code
+}
+
+func getFullURI(version, target string) string {
+	return fmt.Sprintf("/api/%s/%s", version, target)
 }
