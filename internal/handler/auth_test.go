@@ -1,36 +1,35 @@
 package handler_test
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
+
 	"testing"
+	"vilib-api/internal/dto"
+	"vilib-api/internal/handler"
+	"vilib-api/internal/service"
+	"vilib-api/test"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRegisterHandler(t *testing.T) {
-	body := map[string]string{
-		"email":    "test@mail.com",
-		"password": "123456",
-	}
+func TestRegisterHandler_Success_Registered(t *testing.T) {
+	var response dto.RegisterResponse
 
-	jsonBody, _ := json.Marshal(body)
-
-	req := httptest.NewRequest(
+	code := test.Request(
+		t,
 		http.MethodPost,
-		"/register",
-		bytes.NewBuffer(jsonBody),
+		handler.RegisterURL,
+		&response,
+		dto.RegisterRequest{Email: "test@mail.ru"},
+		func(t *testing.T, service *service.Service) {
+			// TODO
+		},
 	)
 
-	req.Header.Set("Content-Type", "application/json")
+	// Проверяем статус
+	assert.Equal(t, http.StatusCreated, code)
+}
 
-	rr := httptest.NewRecorder()
-
-	handler := http.HandlerFunc(RegisterHandler)
-
-	handler.ServeHTTP(rr, req)
-
-	assert.Equal(t, http.StatusCreated, rr.Code)
+func TestRegisterHandler_UserExists_Conflict(t *testing.T) {
+	// TODO
 }

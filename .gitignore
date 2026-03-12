@@ -38,6 +38,4 @@ config/config*.yaml
 
 .env
 
-./Dockerfile
-
-./publish.sh
+mocks
