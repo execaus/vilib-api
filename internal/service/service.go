@@ -42,7 +42,7 @@ func NewService(cfg config.Config, r *repository.TransactionalRepository) *Servi
 	s := &Service{
 		Auth:    NewAuthService(cfg.Auth),
 		Account: NewAccountService(r),
-		User:    nil,
+		User:    NewUserService(r),
 		Email:   nil,
 		repo:    r,
 	}

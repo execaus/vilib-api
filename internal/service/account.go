@@ -46,9 +46,9 @@ func (s *AccountService) Create(ctx context.Context, ownerID, email string) (mod
 		Email:   omit.From(email),
 	}).One(ctx, exec)
 	if err != nil {
-		if errors.Is(err, dberrors.AccountErrors.ErrUniqueAccountsPkey) {
+		if errors.Is(err, dberrors.AccountErrors.ErrUniqueAccountsNameKey) {
 			zap.L().Warn(err.Error())
-			return account, ErrAccountExists
+			return account, ErrAccountNameExists
 		}
 		zap.L().Error(err.Error())
 		return account, err

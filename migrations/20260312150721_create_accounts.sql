@@ -2,10 +2,10 @@
 -- +goose StatementBegin
 CREATE TABLE IF NOT EXISTS app.accounts(
     account_id uuid primary key default gen_random_uuid(),
-    name varchar not null,
+    name varchar unique not null,
     owner_id uuid not null,
     email varchar not null,
-    created_at timestamp not null default time_now()
+    created_at timestamp not null default now()
 );
 
 COMMENT ON TABLE app.accounts IS 'Аккаунты организаций';

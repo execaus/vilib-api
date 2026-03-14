@@ -53,5 +53,9 @@ func mainScenario(t *testing.T, localMailBox chan string) {
 		adminPassword := <-localMailBox
 
 		assert.NotEmpty(t, adminPassword, "admin password is not created")
+
+		t.Run("account_name_exists_error", func(t *testing.T) {
+			// TODO
+		})
 	})
 }

@@ -1,6 +1,6 @@
 package service
 
 var (
-	ErrEmailInvalid  = NewServiceError("invalid email")
-	ErrAccountExists = NewServiceError("account exists")
+	ErrEmailInvalid      = NewServiceError("invalid email")
+	ErrAccountNameExists = NewServiceError("account name exists")
 )

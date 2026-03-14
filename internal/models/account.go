@@ -18,5 +18,5 @@ func (a *Account) FromDB(db *schema.Account) {
 	a.Name = db.Name
 	a.OwnerID = db.OwnerID.String()
 	a.Email = db.Email
-	a.CreatedAt = db.CreatedAt.GetOrZero()
+	a.CreatedAt = db.CreatedAt
 }
