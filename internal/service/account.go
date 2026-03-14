@@ -34,15 +34,9 @@ func (s *AccountService) Create(ctx context.Context, ownerID, email string) (mod
 		return account, ErrEmailInvalid
 	}
 
-	ownerUUID, err := uuid.Parse(ownerID)
-	if err != nil {
-		zap.L().Error(err.Error())
-		return account, err
-	}
-
 	accountDB, err := schema.Accounts.Insert(&schema.AccountSetter{
 		Name:    omit.From(accountName),
-		OwnerID: omit.From(ownerUUID),
+		OwnerID: omit.From(uuid.MustParse(ownerID)),
 		Email:   omit.From(email),
 	}).One(ctx, exec)
 	if err != nil {

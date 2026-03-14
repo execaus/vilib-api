@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"time"
 	"vilib-api/internal/gen/schema"
 	"vilib-api/internal/models"
 	"vilib-api/internal/repository"
 
 	"github.com/aarondl/opt/omit"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -40,6 +42,22 @@ func (s *UserService) Create(ctx context.Context, name, surname, email, password
 }
 
 func (s *UserService) IssueAdmin(ctx context.Context, userID, accountID string) error {
-	//TODO implement me
-	panic("implement me")
+	exec := s.repo.GetExecutor(ctx)
+
+	permission := defaultPermission
+
+	permission = AddPermission(permission, accountAdminBitPosition)
+
+	_, err := schema.AccountPermissions.Insert(&schema.AccountPermissionSetter{
+		UserID:     omit.From(uuid.MustParse(userID)),
+		AccountID:  omit.From(uuid.MustParse(accountID)),
+		Permission: omit.From(permission),
+		UpdatedAt:  omit.From(time.Now()),
+	}).Exec(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
 }
