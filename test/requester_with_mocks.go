@@ -85,7 +85,7 @@ func (r *RequesterWithMocks) Run(response any) (status int) {
 	tx.EXPECT().Commit(gomock.Any()).Return(nil).AnyTimes()
 	repo.EXPECT().WithTx(gomock.Any()).Return(tx, nil).AnyTimes()
 
-	h := handler.NewHandler(service.NewSagaRunner(s.ToServices(), repo), r.localMailBox)
+	h := handler.NewHandler(service.NewSagaRunner(s.ToServices(), repo))
 	router := h.GetRouter()
 
 	recorder := httptest.NewRecorder()

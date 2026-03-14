@@ -1,6 +1,8 @@
 package config
 
 import (
+	"vilib-api/server"
+
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -15,6 +17,7 @@ type Config struct {
 type ServerConfig struct {
 	Origin string
 	Port   string
+	Mode   server.Mode
 }
 
 type DatabaseConfig struct {

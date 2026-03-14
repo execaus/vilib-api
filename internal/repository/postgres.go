@@ -11,7 +11,7 @@ import (
 	"github.com/stephenafamo/bob"
 )
 
-func NewPostgresDB(cfg *config.DatabaseConfig) (*bob.DB, *pgxpool.Pool, error) {
+func NewPostgresDB(ctx context.Context, cfg config.DatabaseConfig) (*bob.DB, *pgxpool.Pool, error) {
 	hostPort := net.JoinHostPort(cfg.Host, cfg.Port)
 
 	connStr := fmt.Sprintf(
@@ -23,7 +23,7 @@ func NewPostgresDB(cfg *config.DatabaseConfig) (*bob.DB, *pgxpool.Pool, error) {
 		cfg.Path,
 	)
 
-	pool, err := pgxpool.New(context.Background(), connStr)
+	pool, err := pgxpool.New(ctx, connStr)
 	if err != nil {
 		return nil, nil, err
 	}

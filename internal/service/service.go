@@ -38,12 +38,12 @@ type Service struct {
 	repo repository.Transactable
 }
 
-func NewService(cfg config.Config, r *repository.TransactionalRepository) *Service {
+func NewService(cfg config.Config, localMailBox chan string, r *repository.TransactionalRepository) *Service {
 	s := &Service{
 		Auth:    NewAuthService(cfg.Auth),
 		Account: NewAccountService(r),
 		User:    NewUserService(r),
-		Email:   nil,
+		Email:   NewEmailService(cfg.Email, cfg.Server.Mode, localMailBox),
 		repo:    r,
 	}
 

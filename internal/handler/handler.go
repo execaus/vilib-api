@@ -12,14 +12,12 @@ const (
 )
 
 type Handler struct {
-	saga         service.SagaRunner
-	localMailBox chan string
+	saga service.SagaRunner
 }
 
-func NewHandler(saga service.SagaRunner, localMailBox chan string) *Handler {
+func NewHandler(saga service.SagaRunner) *Handler {
 	h := &Handler{
-		saga:         saga,
-		localMailBox: localMailBox,
+		saga: saga,
 	}
 
 	return h
@@ -35,8 +33,4 @@ func (h *Handler) GetRouter() *gin.Engine {
 	v1.POST(RegisterURL, h.Register)
 
 	return engine
-}
-
-func (h *Handler) LocalMailBox() <-chan string {
-	return h.localMailBox
 }

@@ -14,7 +14,7 @@ type User struct {
 	CreatedAt    time.Time
 }
 
-func (u User) FromDB(db *schema.User) {
+func (u *User) FromDB(db *schema.User) {
 	u.ID = db.UserID.String()
 	u.Name = db.Name
 	u.Surname = db.Surname

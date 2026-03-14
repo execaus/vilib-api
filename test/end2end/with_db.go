@@ -1,20 +1,23 @@
 package end2end
 
 import (
-	"database/sql"
-	"fmt"
 	"testing"
+	"vilib-api/config"
+	"vilib-api/internal/repository"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/stephenafamo/bob"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-func WithDB(t *testing.T, migrationsPath []string, fn func(pool *pgxpool.Pool)) {
+func WithDB(t *testing.T, migrationsPath []string, fn func(bobDB *bob.DB)) {
 	dbName := "app"
 	dbUser := "user"
 	dbPassword := "pass"
+	schemaName := "app"
+	schemaMigrationsName := "public"
 
 	postgresContainer, err := postgres.Run(t.Context(),
 		"postgres:17",
@@ -36,32 +39,46 @@ func WithDB(t *testing.T, migrationsPath []string, fn func(pool *pgxpool.Pool)) 
 	host, _ := postgresContainer.Host(t.Context())
 	port, _ := postgresContainer.MappedPort(t.Context(), "5432")
 
-	dsn := fmt.Sprintf("postgres://user:pass@%s:%s/app?sslmode=disable", host, port.Port())
-
-	sqlDB, err := sql.Open("pgx", dsn)
-	if err != nil {
-		t.Fatal(err.Error())
+	dbConfig := config.DatabaseConfig{
+		Host:     host,
+		Port:     port.Port(),
+		User:     dbUser,
+		Password: dbPassword,
+		Name:     dbName,
+		Path:     schemaName,
 	}
-	defer func() {
-		if err := sqlDB.Close(); err != nil {
-			t.Fatalf("failed to close sqlDB: %v", err)
-		}
-	}()
+
+	dbConfigMigrations := dbConfig
+	dbConfigMigrations.Path = schemaMigrationsName
+
+	ctx := t.Context()
+	_, stdlibDBConn, err := repository.NewPostgresDB(ctx, dbConfigMigrations)
+	if err != nil {
+		t.Fatalf("failed to connect to postgres for migrations: %v", err)
+	}
+	defer stdlibDBConn.Close()
+
+	if err = stdlibDBConn.Ping(ctx); err != nil {
+		t.Fatalf("failed to ping postgres for migrations: %v", err)
+	}
+
+	stdlibDB := stdlib.OpenDBFromPool(stdlibDBConn)
 
 	for _, path := range migrationsPath {
-		if err := goose.Up(sqlDB, path); err != nil {
+		if err := goose.Up(stdlibDB, path); err != nil {
 			t.Fatalf("failed to apply migrations: %v", err)
 		}
 	}
 
-	dbConn, err := pgxpool.New(t.Context(), dsn)
+	bobDB, dbConn, err := repository.NewPostgresDB(ctx, dbConfig)
 	if err != nil {
 		t.Fatalf("failed to connect to postgres: %v", err)
 	}
+	defer dbConn.Close()
 
-	if err = dbConn.Ping(t.Context()); err != nil {
+	if err = dbConn.Ping(ctx); err != nil {
 		t.Fatalf("failed to ping postgres: %v", err)
 	}
 
-	fn(dbConn)
+	fn(bobDB)
 }

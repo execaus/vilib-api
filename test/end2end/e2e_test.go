@@ -3,16 +3,16 @@ package end2end_test
 import (
 	"net/http"
 	"testing"
+	"vilib-api/config"
 	"vilib-api/internal/dto"
 	"vilib-api/internal/handler"
 	"vilib-api/internal/repository"
 	"vilib-api/internal/service"
+	"vilib-api/server"
 	"vilib-api/test/end2end"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/stephenafamo/bob"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -29,12 +29,21 @@ func TestEnd2End(t *testing.T) {
 }
 
 func mainScenario(t *testing.T, localMailBox chan string) {
-	end2end.WithDB(t, migrationsPath, func(pool *pgxpool.Pool) {
-		sqlDB := stdlib.OpenDBFromPool(pool)
-		db := bob.NewDB(sqlDB)
-		r := repository.NewTransactionalRepository(&db)
-		s := service.NewService(r)
-		h := handler.NewHandler(service.NewSagaRunner(s, r), localMailBox)
+	cfg := config.Config{
+		Auth: config.AuthConfig{
+			Key: "key",
+		},
+		Server: config.ServerConfig{
+			Origin: "",
+			Port:   "",
+			Mode:   server.DevelopmentMode,
+		},
+	}
+
+	end2end.WithDB(t, migrationsPath, func(bobDB *bob.DB) {
+		r := repository.NewTransactionalRepository(bobDB)
+		s := service.NewService(cfg, localMailBox, r)
+		h := handler.NewHandler(service.NewSagaRunner(s, r))
 		router := h.GetRouter()
 
 		t.Run("admin_registration", func(t *testing.T) {
@@ -47,12 +56,12 @@ func mainScenario(t *testing.T, localMailBox chan string) {
 					Email:   adminEmail,
 				}).Run(nil)
 
-			assert.Equal(t, http.StatusCreated, code)
+			require.Equal(t, http.StatusCreated, code)
 		})
 
 		adminPassword := <-localMailBox
 
-		assert.NotEmpty(t, adminPassword, "admin password is not created")
+		require.NotEmpty(t, adminPassword, "admin password is not created")
 
 		t.Run("account_name_exists_error", func(t *testing.T) {
 			// TODO
