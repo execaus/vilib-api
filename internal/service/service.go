@@ -8,7 +8,7 @@ import (
 )
 
 type Auth interface {
-	GenerateToken(ctx context.Context, userID, accountID string) (string, error)
+	GenerateToken(ctx context.Context, accounts []string, userID, currentAccountID string) (string, error)
 	GetClaimsFromToken(ctx context.Context, token string) (*models.AuthClaims, error)
 	ComparePassword(ctx context.Context, hashedPassword string, password string) bool
 	HashPassword(ctx context.Context, password string) (string, error)
@@ -17,11 +17,13 @@ type Auth interface {
 
 type Account interface {
 	Create(ctx context.Context, ownerID, email string) (models.Account, error)
+	GetByUserID(ctx context.Context, id string) ([]models.Account, error)
 }
 
 type User interface {
 	Create(ctx context.Context, name, surname, email, passwordHash string) (models.User, error)
 	IssueAdmin(ctx context.Context, userID, accountID string) error
+	GetByEmail(ctx context.Context, email string) (models.User, error)
 }
 
 type Email interface {

@@ -28,10 +28,11 @@ func NewAuthService(cfg config.AuthConfig) *AuthService {
 	return &AuthService{secretKey: cfg.Key}
 }
 
-func (s *AuthService) GenerateToken(ctx context.Context, userID, accountID string) (string, error) {
+func (s *AuthService) GenerateToken(ctx context.Context, accounts []string, userID, currentAccountID string) (string, error) {
 	claims := models.AuthClaims{
-		AccountID: accountID,
-		UserID:    userID,
+		UserID:           userID,
+		Accounts:         accounts,
+		CurrentAccountID: currentAccountID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(DefaultJWTExpireDuration)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

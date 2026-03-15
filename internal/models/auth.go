@@ -7,6 +7,7 @@ import (
 type AuthClaims struct {
 	jwt.RegisteredClaims
 
-	AccountID string
-	UserID    string
+	UserID           string   `json:"user_id"`
+	CurrentAccountID string   `json:"current_account_id"`
+	Accounts         []string `json:"accounts"`
 }

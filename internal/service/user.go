@@ -9,6 +9,8 @@ import (
 
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
+	"github.com/stephenafamo/bob/dialect/psql"
+	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"go.uber.org/zap"
 )
 
@@ -60,4 +62,22 @@ func (s *UserService) IssueAdmin(ctx context.Context, userID, accountID string) 
 	}
 
 	return nil
+}
+
+func (s *UserService) GetByEmail(ctx context.Context, email string) (models.User, error) {
+	exec := s.repo.GetExecutor(ctx)
+
+	dbUser, err := schema.Users.Query(sm.Where(schema.Users.Columns.UserID.EQ(psql.S(email)))).One(ctx, exec)
+	if err != nil {
+		if dbUser == nil {
+			return models.User{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return models.User{}, err
+	}
+
+	user := models.User{}
+	user.FromDB(dbUser)
+
+	return user, nil
 }

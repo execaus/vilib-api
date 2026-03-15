@@ -51,7 +51,8 @@ func TestRegister_Success_Registered(t *testing.T) {
 				CreatedAt: time.Now(),
 			}, nil)
 			service.User.EXPECT().IssueAdmin(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-			service.Auth.EXPECT().GenerateToken(gomock.Any(), gomock.Any(), gomock.Any()).Return("token", nil)
+			service.Account.EXPECT().GetByUserID(gomock.Any(), gomock.Any()).Return([]models.Account{}, nil)
+			service.Auth.EXPECT().GenerateToken(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("token", nil)
 			service.Email.EXPECT().
 				SendRegisteredMail(gomock.Any(), gomock.Any(), gomock.Any()).
 				DoAndReturn(func(ctx context.Context, email string, pass string) error {

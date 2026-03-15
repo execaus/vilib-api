@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	RegisterURL = "auth/register"
 	APIVersion1 = "v1"
+	RegisterURL = "auth/register"
+	LoginURL    = "auth/login"
 )
 
 type Handler struct {
@@ -31,6 +32,7 @@ func (h *Handler) GetRouter() *gin.Engine {
 	v1 := api.Group(APIVersion1)
 
 	v1.POST(RegisterURL, h.Register)
+	v1.POST(LoginURL, h.Login)
 
 	return engine
 }

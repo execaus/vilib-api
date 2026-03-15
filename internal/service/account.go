@@ -11,6 +11,8 @@ import (
 
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
+	"github.com/stephenafamo/bob/dialect/psql"
+	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"go.uber.org/zap"
 )
 
@@ -51,4 +53,24 @@ func (s *AccountService) Create(ctx context.Context, ownerID, email string) (mod
 	account.FromDB(accountDB)
 
 	return account, nil
+}
+
+func (s *AccountService) GetByUserID(ctx context.Context, id string) ([]models.Account, error) {
+	exec := s.repo.GetExecutor(ctx)
+
+	dbAccounts, err := schema.Accounts.Query(
+		sm.Where(schema.Accounts.Columns.OwnerID.EQ(psql.S(id))),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return []models.Account{}, err
+	}
+
+	accounts := make([]models.Account, len(dbAccounts))
+	for i := 0; i < len(dbAccounts); i++ {
+		accounts[i] = models.Account{}
+		accounts[i].FromDB(dbAccounts[i])
+	}
+
+	return accounts, nil
 }
