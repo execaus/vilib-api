@@ -9,6 +9,17 @@ import (
 	"go.uber.org/zap"
 )
 
+// Register godoc
+// @Summary Регистрация нового пользователя
+// @Description Создаёт пользователя, аккаунт, назначает роль администратора и возвращает токен авторизации
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body dto.RegisterRequest true "Тело запроса для регистрации"
+// @Success 201 {object} dto.RegisterResponse
+// @Failure 400 {object} dto.ErrorMessage
+// @Failure 500 {object} dto.ErrorMessage
+// @Router /api/v1/auth/register [post]
 func (h *Handler) Register(c *gin.Context) {
 	var req dto.RegisterRequest
 

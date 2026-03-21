@@ -4,6 +4,10 @@ import (
 	"vilib-api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "vilib-api/docs"
 )
 
 const (
@@ -24,10 +28,17 @@ func NewHandler(saga service.SagaRunner) *Handler {
 	return h
 }
 
+// @title Vilib API
+// @version 1.0
+// @description API для управления внутренней видео документацией Vilib.
+// @host localhost:8080
+// @BasePath /api/v1
 func (h *Handler) GetRouter() *gin.Engine {
 	engine := gin.Default()
 
 	api := engine.Group("api")
+
+	api.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := api.Group(APIVersion1)
 

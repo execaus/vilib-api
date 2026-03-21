@@ -3,15 +3,12 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"vilib-api/internal/dto"
 	"vilib-api/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
-
-type ErrorMessage struct {
-	Message string `json:"message"`
-}
 
 func sendServiceError(c *gin.Context, err error) {
 	var serviceError *service.ConflictError
@@ -25,7 +22,7 @@ func sendServiceError(c *gin.Context, err error) {
 }
 
 func sendBadRequest(c *gin.Context, err error) {
-	c.AbortWithStatusJSON(http.StatusBadRequest, err.Error())
+	c.AbortWithStatusJSON(http.StatusBadRequest, &dto.ErrorMessage{Message: err.Error()})
 }
 
 func sendInternalError(c *gin.Context, err error) {
@@ -34,7 +31,7 @@ func sendInternalError(c *gin.Context, err error) {
 }
 
 func sendConflict(c *gin.Context, message string) {
-	c.AbortWithStatusJSON(http.StatusConflict, &ErrorMessage{Message: message})
+	c.AbortWithStatusJSON(http.StatusConflict, &dto.ErrorMessage{Message: message})
 }
 
 func sendCreated(c *gin.Context, body any) {
