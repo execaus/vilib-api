@@ -8,7 +8,7 @@ import (
 	"vilib-api/internal/handler"
 	"vilib-api/testutil"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -29,17 +29,24 @@ func TestLogin_Success(t *testing.T) {
 			Email:    email,
 		}).
 		PrepareService(func(t *testing.T, service *testutil.ServiceMock) {
-			service.User.EXPECT().GetByEmail(gomock.Any(), email).Return(domain.User{}, nil)
-			service.Auth.EXPECT().ComparePassword(gomock.Any(), gomock.Any(), password).Return(true)
+			service.User.EXPECT().
+				GetByEmail(gomock.Any(), email).
+				Return(domain.User{}, nil)
+
+			service.Auth.EXPECT().
+				ComparePassword(gomock.Any(), gomock.Any(), password).
+				Return(true)
+
 			service.Account.EXPECT().
-				GetByUserID(gomock.Any(), gomock.Any()).
+				GetByUserEmail(gomock.Any(), gomock.Any()).
 				Return([]domain.Account{domain.Account{}}, nil)
+
 			service.Auth.EXPECT().
 				GenerateToken(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 				Return(token, nil)
 		}).
 		Run(&response)
 
-	assert.Equal(t, http.StatusOK, code)
-	assert.Equal(t, response.Token, token)
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, response.Token, token)
 }

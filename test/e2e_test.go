@@ -86,5 +86,24 @@ func mainScenario(t *testing.T, localMailBox chan string) {
 
 			_ = adminToken
 		})
+
+		// TODO получение данных об текущем аккаунте
+
+		t.Run("admin_create_user", func(t *testing.T) {
+			var response dto.CreateUserResponse
+
+			code := testutil.RequestWithRouter(t, handler.APIVersion1, router).
+				Method(http.MethodPost).
+				Target(handler.CreateUserURL.WithValues(accountID)).
+				Body(dto.LoginRequest{
+					Email:    adminEmail,
+					Password: adminPassword,
+				}).Run(&response)
+
+			require.Equal(t, http.StatusCreated, code)
+			// проверить отправку пароля новому пользователю
+			// проверить права нового пользователя - только user
+			// попробовать авторизоваться под новым пользователем
+		})
 	})
 }

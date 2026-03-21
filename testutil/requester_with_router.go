@@ -17,6 +17,7 @@ type Requester struct {
 	body         any
 	localMailBox chan string
 	version      string
+	authToken    string
 	router       *gin.Engine
 	t            *testing.T
 }
@@ -56,6 +57,11 @@ func (r *Requester) Version(version string) *Requester {
 	return r
 }
 
+func (r *Requester) Authorization(token string) *Requester {
+	r.authToken = token
+	return r
+}
+
 func (r *Requester) Run(response any) (status int) {
 	gin.SetMode(gin.TestMode)
 
@@ -78,6 +84,9 @@ func (r *Requester) Run(response any) (status int) {
 
 	req := httptest.NewRequest(r.method, FullURI(r.version, r.target), bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
+	if r.authToken != "" {
+		req.Header.Set("Authorization", r.authToken)
+	}
 
 	r.router.ServeHTTP(recorder, req)
 

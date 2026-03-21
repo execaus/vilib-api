@@ -32,6 +32,11 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	if err := c.BindJSON(&req); err != nil {
+		sendBadRequest(c, err)
+		return
+	}
+
 	var (
 		user domain.User
 	)

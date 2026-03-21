@@ -17,7 +17,7 @@ type Auth interface {
 
 type Account interface {
 	Create(ctx context.Context, email string) (domain.Account, error)
-	GetByUserEmail(ctx context.Context, id string) ([]domain.Account, error)
+	GetByUserEmail(ctx context.Context, email string) ([]domain.Account, error)
 }
 
 type User interface {
