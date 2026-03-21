@@ -4,18 +4,18 @@ import (
 	"context"
 	"net/http"
 	"time"
-	"vilib-api/internal/models"
+	"vilib-api/internal/domain"
+	"vilib-api/testutil"
 
 	"testing"
 	"vilib-api/internal/dto"
 	"vilib-api/internal/handler"
-	"vilib-api/test"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
 
-func TestRegister_Success_Registered(t *testing.T) {
+func TestRegister_Success(t *testing.T) {
 	var response dto.RegisterResponse
 
 	var (
@@ -23,7 +23,7 @@ func TestRegister_Success_Registered(t *testing.T) {
 		password     string
 	)
 
-	code := test.RequestWithMocks(t, handler.APIVersion1).
+	code := testutil.RequestWithMocks(t, handler.APIVersion1).
 		Method(http.MethodPost).
 		Target(handler.RegisterURL).
 		Body(dto.RegisterRequest{
@@ -32,18 +32,18 @@ func TestRegister_Success_Registered(t *testing.T) {
 			Email:   "test@mail.ru",
 		}).
 		LocalMailBox(localMailBox).
-		PrepareService(func(t *testing.T, service *test.ServiceMock) {
+		PrepareService(func(t *testing.T, service *testutil.ServiceMock) {
 			service.Auth.EXPECT().GeneratePassword().Return("generatedPassword", nil)
 			service.Auth.EXPECT().HashPassword(gomock.Any(), "generatedPassword").Return("hashedPassword", nil)
 			service.User.EXPECT().
-				Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(models.User{
+				Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(domain.User{
 				ID:        "userID",
 				Name:      "userName",
 				Surname:   "userSurname",
 				Email:     "userEmail",
 				CreatedAt: time.Now(),
 			}, nil)
-			service.Account.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(models.Account{
+			service.Account.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(domain.Account{
 				ID:        "accountID",
 				Name:      "accountName",
 				OwnerID:   "accountOwner",
@@ -51,8 +51,9 @@ func TestRegister_Success_Registered(t *testing.T) {
 				CreatedAt: time.Now(),
 			}, nil)
 			service.User.EXPECT().IssueAdmin(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-			service.Account.EXPECT().GetByUserID(gomock.Any(), gomock.Any()).Return([]models.Account{}, nil)
-			service.Auth.EXPECT().GenerateToken(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return("token", nil)
+			service.Account.EXPECT().GetByUserID(gomock.Any(), gomock.Any()).Return([]domain.Account{}, nil)
+			service.Auth.EXPECT().GenerateToken(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				Return("token", nil)
 			service.Email.EXPECT().
 				SendRegisteredMail(gomock.Any(), gomock.Any(), gomock.Any()).
 				DoAndReturn(func(ctx context.Context, email string, pass string) error {

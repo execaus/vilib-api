@@ -11,7 +11,7 @@ type RegisterResponse struct {
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email,max=64"`
+	Email    string `json:"email"    binding:"required,email,max=64"`
 	Password string `json:"password" binding:"required"`
 }
 

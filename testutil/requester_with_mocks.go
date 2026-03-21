@@ -1,4 +1,4 @@
-package test
+package testutil
 
 import (
 	"bytes"
@@ -25,6 +25,8 @@ type RequesterWithMocks struct {
 	t              *testing.T
 }
 
+// RequestWithMocks инициализирует RequesterWithMocks с заданной версией API.
+// Используется в тестах для выполнения HTTP-запросов с подменёнными сервисами (моками).
 func RequestWithMocks(t *testing.T, apiVersion string) *RequesterWithMocks {
 	return &RequesterWithMocks{
 		version: apiVersion,
@@ -52,7 +54,9 @@ func (r *RequesterWithMocks) LocalMailBox(localMailBox chan string) *RequesterWi
 	return r
 }
 
-func (r *RequesterWithMocks) PrepareService(prepareService func(t *testing.T, service *ServiceMock)) *RequesterWithMocks {
+func (r *RequesterWithMocks) PrepareService(
+	prepareService func(t *testing.T, service *ServiceMock),
+) *RequesterWithMocks {
 	r.prepareService = prepareService
 	return r
 }

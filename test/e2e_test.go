@@ -1,4 +1,4 @@
-package end2end_test
+package test_test
 
 import (
 	"net/http"
@@ -9,7 +9,7 @@ import (
 	"vilib-api/internal/repository"
 	"vilib-api/internal/service"
 	"vilib-api/server"
-	"vilib-api/test/end2end"
+	"vilib-api/testutil"
 
 	"github.com/stephenafamo/bob"
 	"github.com/stretchr/testify/require"
@@ -40,14 +40,14 @@ func mainScenario(t *testing.T, localMailBox chan string) {
 		},
 	}
 
-	end2end.WithDB(t, migrationsPath, func(bobDB *bob.DB) {
+	testutil.WithDB(t, migrationsPath, func(bobDB *bob.DB) {
 		r := repository.NewTransactionalRepository(bobDB)
 		s := service.NewService(cfg, localMailBox, r)
 		h := handler.NewHandler(service.NewSagaRunner(s, r))
 		router := h.GetRouter()
 
 		t.Run("admin_registration", func(t *testing.T) {
-			code := end2end.RequestWithRouter(t, handler.APIVersion1, router).
+			code := testutil.RequestWithRouter(t, handler.APIVersion1, router).
 				Method(http.MethodPost).
 				Target(handler.RegisterURL).
 				Body(dto.RegisterRequest{
@@ -62,9 +62,5 @@ func mainScenario(t *testing.T, localMailBox chan string) {
 		adminPassword := <-localMailBox
 
 		require.NotEmpty(t, adminPassword, "admin password is not created")
-
-		t.Run("account_name_exists_error", func(t *testing.T) {
-			// TODO
-		})
 	})
 }

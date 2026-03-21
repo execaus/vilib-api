@@ -1,4 +1,4 @@
-package end2end
+package testutil
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"vilib-api/test"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/mock/gomock"
@@ -22,6 +21,8 @@ type Requester struct {
 	t            *testing.T
 }
 
+// RequestWithRouter инициализирует Requester с заданным Gin-роутером и версией API.
+// Используется в тестах для формирования и выполнения HTTP-запросов к переданному роутеру.
 func RequestWithRouter(t *testing.T, apiVersion string, router *gin.Engine) *Requester {
 	return &Requester{
 		t:       t,
@@ -75,7 +76,7 @@ func (r *Requester) Run(response any) (status int) {
 		}
 	}
 
-	req := httptest.NewRequest(r.method, test.FullURI(r.version, r.target), bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequest(r.method, FullURI(r.version, r.target), bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 
 	r.router.ServeHTTP(recorder, req)

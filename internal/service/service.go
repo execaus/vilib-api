@@ -3,27 +3,27 @@ package service
 import (
 	"context"
 	"vilib-api/config"
-	"vilib-api/internal/models"
+	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
 )
 
 type Auth interface {
 	GenerateToken(ctx context.Context, accounts []string, userID, currentAccountID string) (string, error)
-	GetClaimsFromToken(ctx context.Context, token string) (*models.AuthClaims, error)
+	GetClaimsFromToken(ctx context.Context, token string) (*domain.AuthClaims, error)
 	ComparePassword(ctx context.Context, hashedPassword string, password string) bool
 	HashPassword(ctx context.Context, password string) (string, error)
 	GeneratePassword() (string, error)
 }
 
 type Account interface {
-	Create(ctx context.Context, ownerID, email string) (models.Account, error)
-	GetByUserID(ctx context.Context, id string) ([]models.Account, error)
+	Create(ctx context.Context, ownerID, email string) (domain.Account, error)
+	GetByUserID(ctx context.Context, id string) ([]domain.Account, error)
 }
 
 type User interface {
-	Create(ctx context.Context, name, surname, email, passwordHash string) (models.User, error)
+	Create(ctx context.Context, name, surname, email, passwordHash string) (domain.User, error)
 	IssueAdmin(ctx context.Context, userID, accountID string) error
-	GetByEmail(ctx context.Context, email string) (models.User, error)
+	GetByEmail(ctx context.Context, email string) (domain.User, error)
 }
 
 type Email interface {

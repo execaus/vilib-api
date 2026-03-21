@@ -1,4 +1,4 @@
-package end2end
+package testutil
 
 import (
 	"testing"
@@ -12,6 +12,9 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
+// WithDB поднимает временный экземпляр PostgreSQL в контейнере, применяет миграции
+// и передаёт инициализированное подключение bob.DB в тестовую функцию.
+// Используется для интеграционных тестов с реальной базой данных.
 func WithDB(t *testing.T, migrationsPath []string, fn func(bobDB *bob.DB)) {
 	dbName := "app"
 	dbUser := "user"

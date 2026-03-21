@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"vilib-api/internal/dto"
 	"vilib-api/internal/service"
 
@@ -80,62 +79,4 @@ func (h *Handler) Register(c *gin.Context) {
 	}
 
 	sendCreated(c, dto.RegisterResponse{Token: token})
-}
-
-func (h *Handler) Login(c *gin.Context) {
-	var req dto.LoginRequest
-
-	if err := c.BindJSON(&req); err != nil {
-		sendBadRequest(c, err)
-		return
-	}
-
-	var (
-		token string
-	)
-	if err := h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		user, err := services.User.GetByEmail(ctx, req.Email)
-		if err != nil {
-			if errors.Is(err, service.ErrNotFound) {
-				zap.L().Warn(ErrInvalidCredentials.Error())
-				return ErrInvalidCredentials
-			}
-			zap.L().Error(err.Error())
-			return err
-		}
-
-		if ok := services.Auth.ComparePassword(ctx, user.PasswordHash, req.Password); !ok {
-			zap.L().Warn(ErrInvalidCredentials.Error())
-			return ErrInvalidCredentials
-		}
-
-		accounts, err := services.Account.GetByUserID(ctx, user.ID)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
-		}
-
-		if len(accounts) == 0 {
-			zap.L().Error("accounts not found")
-			return errors.New("accounts not found")
-		}
-
-		accountIDs := make([]string, len(accounts))
-		for i := 0; i < len(accounts); i++ {
-			accountIDs[i] = accounts[i].ID
-		}
-
-		token, err = services.Auth.GenerateToken(ctx, accountIDs, user.ID, accountIDs[0])
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
-		}
-
-		return nil
-	}); err != nil {
-		sendServiceError(c, err)
-		return
-	}
-
-	sendOK(c, dto.LoginResponse{Token: token})
 }

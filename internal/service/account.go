@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/gen/schema"
-	"vilib-api/internal/models"
 	"vilib-api/internal/repository"
 
 	"github.com/aarondl/opt/omit"
@@ -24,10 +24,10 @@ func NewAccountService(repo *repository.TransactionalRepository) *AccountService
 	return &AccountService{repo: repo}
 }
 
-func (s *AccountService) Create(ctx context.Context, ownerID, email string) (models.Account, error) {
+func (s *AccountService) Create(ctx context.Context, ownerID, email string) (domain.Account, error) {
 	exec := s.repo.GetExecutor(ctx)
 
-	var account models.Account
+	var account domain.Account
 
 	var accountName string
 	if i := strings.Index(email, "@"); i != -1 {
@@ -55,7 +55,7 @@ func (s *AccountService) Create(ctx context.Context, ownerID, email string) (mod
 	return account, nil
 }
 
-func (s *AccountService) GetByUserID(ctx context.Context, id string) ([]models.Account, error) {
+func (s *AccountService) GetByUserID(ctx context.Context, id string) ([]domain.Account, error) {
 	exec := s.repo.GetExecutor(ctx)
 
 	dbAccounts, err := schema.Accounts.Query(
@@ -63,12 +63,12 @@ func (s *AccountService) GetByUserID(ctx context.Context, id string) ([]models.A
 	).All(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return []models.Account{}, err
+		return []domain.Account{}, err
 	}
 
-	accounts := make([]models.Account, len(dbAccounts))
+	accounts := make([]domain.Account, len(dbAccounts))
 	for i := 0; i < len(dbAccounts); i++ {
-		accounts[i] = models.Account{}
+		accounts[i] = domain.Account{}
 		accounts[i].FromDB(dbAccounts[i])
 	}
 

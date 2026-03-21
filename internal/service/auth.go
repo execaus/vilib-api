@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"time"
 	"vilib-api/config"
-	"vilib-api/internal/models"
+	"vilib-api/internal/domain"
 
 	"github.com/golang-jwt/jwt/v5"
 	"go.uber.org/zap"
@@ -28,8 +28,12 @@ func NewAuthService(cfg config.AuthConfig) *AuthService {
 	return &AuthService{secretKey: cfg.Key}
 }
 
-func (s *AuthService) GenerateToken(ctx context.Context, accounts []string, userID, currentAccountID string) (string, error) {
-	claims := models.AuthClaims{
+func (s *AuthService) GenerateToken(
+	ctx context.Context,
+	accounts []string,
+	userID, currentAccountID string,
+) (string, error) {
+	claims := domain.AuthClaims{
 		UserID:           userID,
 		Accounts:         accounts,
 		CurrentAccountID: currentAccountID,
@@ -49,8 +53,8 @@ func (s *AuthService) GenerateToken(ctx context.Context, accounts []string, user
 	return signedToken, nil
 }
 
-func (s *AuthService) GetClaimsFromToken(ctx context.Context, tokenString string) (*models.AuthClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &models.AuthClaims{}, func(token *jwt.Token) (interface{}, error) {
+func (s *AuthService) GetClaimsFromToken(ctx context.Context, tokenString string) (*domain.AuthClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &domain.AuthClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			zap.L().Error(jwt.ErrTokenSignatureInvalid.Error())
 			return nil, jwt.ErrTokenSignatureInvalid
@@ -66,7 +70,7 @@ func (s *AuthService) GetClaimsFromToken(ctx context.Context, tokenString string
 		return nil, err
 	}
 
-	if claims, ok := token.Claims.(*models.AuthClaims); ok && token.Valid {
+	if claims, ok := token.Claims.(*domain.AuthClaims); ok && token.Valid {
 		return claims, nil
 	}
 
