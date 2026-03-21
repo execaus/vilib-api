@@ -25,6 +25,11 @@ func (s *EmailService) SendRegisteredMail(ctx context.Context, email, password s
 	return s.send(ctx, []string{email}, subject, password)
 }
 
+func (s *EmailService) SendCreateUserEmail(ctx context.Context, email, password string) error {
+	subject := "Welcome to ViLib!"
+	return s.send(ctx, []string{email}, subject, password)
+}
+
 func (s *EmailService) send(ctx context.Context, to []string, subject string, body string) error {
 	switch s.serverMode {
 	case server.HybridMode:

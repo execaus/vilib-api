@@ -16,18 +16,20 @@ type Auth interface {
 }
 
 type Account interface {
-	Create(ctx context.Context, ownerID, email string) (domain.Account, error)
-	GetByUserID(ctx context.Context, id string) ([]domain.Account, error)
+	Create(ctx context.Context, email string) (domain.Account, error)
+	GetByUserEmail(ctx context.Context, id string) ([]domain.Account, error)
 }
 
 type User interface {
 	Create(ctx context.Context, name, surname, email, passwordHash string) (domain.User, error)
 	IssueAdmin(ctx context.Context, userID, accountID string) error
 	GetByEmail(ctx context.Context, email string) (domain.User, error)
+	IssueUser(ctx context.Context, userID, accountID string) error
 }
 
 type Email interface {
 	SendRegisteredMail(ctx context.Context, email, password string) error
+	SendCreateUserEmail(ctx context.Context, email, password string) error
 }
 
 //go:generate mockgen -source=./service.go -destination=./mocks/service.go -package=mock_service

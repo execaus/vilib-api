@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"vilib-api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -11,9 +12,14 @@ import (
 )
 
 const (
-	APIVersion1 = "v1"
-	RegisterURL = "auth/register"
-	LoginURL    = "auth/login"
+	pathKeyAccountID = iota
+)
+
+var (
+	APIVersion1   = "v1"
+	RegisterURL   = "auth/register"
+	LoginURL      = "auth/login"
+	CreateUserURL = fmt.Sprintf("accounts/{%s}/users", pathKeyAccountID)
 )
 
 type Handler struct {
@@ -44,6 +50,10 @@ func (h *Handler) GetRouter() *gin.Engine {
 
 	v1.POST(RegisterURL, h.Register)
 	v1.POST(LoginURL, h.Login)
+	v1.POST(CreateUserURL, h.CreateUser)
+
+	// Добавление пользователей к аккаунту
+	// Назначение ролей
 
 	return engine
 }

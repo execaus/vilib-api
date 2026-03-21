@@ -1,5 +1,28 @@
 basePath: /api/v1
 definitions:
+  dto.CreateUserRequest:
+    properties:
+      email:
+        maxLength: 64
+        type: string
+      name:
+        maxLength: 64
+        minLength: 2
+        type: string
+      surname:
+        maxLength: 64
+        minLength: 2
+        type: string
+    required:
+    - email
+    - name
+    - surname
+    type: object
+  dto.CreateUserResponse:
+    properties:
+      user:
+        $ref: '#/definitions/dto.User'
+    type: object
   dto.ErrorMessage:
     properties:
       message:
@@ -44,6 +67,17 @@ definitions:
       token:
         type: string
     type: object
+  dto.User:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      surname:
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -51,6 +85,42 @@ info:
   title: Vilib API
   version: "1.0"
 paths:
+  /api/v1/accounts/{accountId}/users:
+    post:
+      consumes:
+      - application/json
+      description: Создает нового пользователя с указанными данными, привязывает его
+        к аккаунту и отправляет email с паролем
+      parameters:
+      - description: ID аккаунта, к которому привязывается пользователь
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: Тело запроса для создания пользователя
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.CreateUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Создание пользователя
+      tags:
+      - users
   /api/v1/auth/login:
     post:
       consumes:

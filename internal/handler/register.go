@@ -50,7 +50,7 @@ func (h *Handler) Register(c *gin.Context) {
 			return err
 		}
 
-		account, err := services.Account.Create(ctx, user.ID, user.Email)
+		account, err := services.Account.Create(ctx, user.Email)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err
@@ -61,18 +61,18 @@ func (h *Handler) Register(c *gin.Context) {
 			return err
 		}
 
-		accounts, err := services.Account.GetByUserID(ctx, user.ID)
+		accounts, err := services.Account.GetByUserEmail(ctx, user.Email)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err
 		}
 
-		accountIDs := make([]string, len(accounts))
+		accountsID := make([]string, len(accounts))
 		for i := 0; i < len(accounts); i++ {
-			accountIDs[i] = accounts[i].ID
+			accountsID[i] = accounts[i].ID
 		}
 
-		token, err = services.Auth.GenerateToken(ctx, accountIDs, user.ID, account.ID)
+		token, err = services.Auth.GenerateToken(ctx, accountsID, user.ID, account.ID)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err

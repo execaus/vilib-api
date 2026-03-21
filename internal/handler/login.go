@@ -49,7 +49,7 @@ func (h *Handler) Login(c *gin.Context) {
 			return ErrInvalidCredentials
 		}
 
-		accounts, err := services.Account.GetByUserID(ctx, user.ID)
+		accounts, err := services.Account.GetByUserEmail(ctx, user.Email)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err

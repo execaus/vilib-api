@@ -24,7 +24,7 @@ func NewAccountService(repo *repository.TransactionalRepository) *AccountService
 	return &AccountService{repo: repo}
 }
 
-func (s *AccountService) Create(ctx context.Context, ownerID, email string) (domain.Account, error) {
+func (s *AccountService) Create(ctx context.Context, email string) (domain.Account, error) {
 	exec := s.repo.GetExecutor(ctx)
 
 	var account domain.Account
@@ -37,9 +37,8 @@ func (s *AccountService) Create(ctx context.Context, ownerID, email string) (dom
 	}
 
 	accountDB, err := schema.Accounts.Insert(&schema.AccountSetter{
-		Name:    omit.From(accountName),
-		OwnerID: omit.From(uuid.MustParse(ownerID)),
-		Email:   omit.From(email),
+		Name:  omit.From(accountName),
+		Email: omit.From(email),
 	}).One(ctx, exec)
 	if err != nil {
 		if errors.Is(err, dberrors.AccountErrors.ErrUniqueAccountsNameKey) {
@@ -55,21 +54,47 @@ func (s *AccountService) Create(ctx context.Context, ownerID, email string) (dom
 	return account, nil
 }
 
-func (s *AccountService) GetByUserID(ctx context.Context, id string) ([]domain.Account, error) {
+func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]domain.Account, error) {
 	exec := s.repo.GetExecutor(ctx)
 
-	dbAccounts, err := schema.Accounts.Query(
-		sm.Where(schema.Accounts.Columns.OwnerID.EQ(psql.S(id))),
+	usersDB, err := schema.Users.Query(
+		sm.Where(schema.Users.Columns.Email.EQ(psql.S(email))),
 	).All(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return []domain.Account{}, err
+		return []domain.Account{}, nil
 	}
 
-	accounts := make([]domain.Account, len(dbAccounts))
-	for i := 0; i < len(dbAccounts); i++ {
+	if len(usersDB) == 0 {
+		return []domain.Account{}, nil
+	}
+
+	accountsID := make([]uuid.UUID, len(usersDB))
+
+	for i, user := range usersDB {
+		permissionDB, err := schema.AccountPermissions.Query(
+			sm.Where(schema.AccountPermissions.Columns.UserID.EQ(psql.Arg(user.UserID))),
+		).One(ctx, exec)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return []domain.Account{}, nil
+		}
+
+		accountsID[i] = permissionDB.AccountID
+	}
+
+	accounts := make([]domain.Account, len(accountsID))
+	for i, accountID := range accountsID {
+		accountDB, err := schema.Accounts.Query(
+			sm.Where(schema.Accounts.Columns.AccountID.EQ(psql.Arg(accountID))),
+		).One(ctx, exec)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return []domain.Account{}, err
+		}
+
 		accounts[i] = domain.Account{}
-		accounts[i].FromDB(dbAccounts[i])
+		accounts[i].FromDB(accountDB)
 	}
 
 	return accounts, nil

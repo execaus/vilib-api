@@ -14,6 +14,7 @@ COMMENT ON TABLE app.users IS 'Пользователи';
 COMMENT ON COLUMN app.users.user_id IS 'Идентификатор пользователя';
 COMMENT ON COLUMN app.users.name IS 'Отображаемое имя пользователя';
 COMMENT ON COLUMN app.users.surname IS 'Отображаемая фамилия пользователя';
+COMMENT ON COLUMN app.users.password_hash IS 'Хеш пароля пользователя';
 COMMENT ON COLUMN app.users.email IS 'Контактный email, связанный с пользователем';
 COMMENT ON COLUMN app.users.created_at IS 'Время создания записи пользователя';
 -- +goose StatementEnd
