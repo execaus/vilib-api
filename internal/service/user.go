@@ -67,7 +67,7 @@ func (s *UserService) IssueAdmin(ctx context.Context, userID, accountID string) 
 func (s *UserService) GetByEmail(ctx context.Context, email string) (domain.User, error) {
 	exec := s.repo.GetExecutor(ctx)
 
-	dbUser, err := schema.Users.Query(sm.Where(schema.Users.Columns.UserID.EQ(psql.S(email)))).One(ctx, exec)
+	dbUser, err := schema.Users.Query(sm.Where(schema.Users.Columns.Email.EQ(psql.S(email)))).One(ctx, exec)
 	if err != nil {
 		if dbUser == nil {
 			return domain.User{}, ErrNotFound

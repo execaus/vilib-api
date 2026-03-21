@@ -20,7 +20,7 @@ const (
 )
 
 var (
-	migrationsPath = []string{"../../migrations"}
+	migrationsPath = []string{"../migrations"}
 )
 
 func TestEnd2End(t *testing.T) {
@@ -46,6 +46,11 @@ func mainScenario(t *testing.T, localMailBox chan string) {
 		h := handler.NewHandler(service.NewSagaRunner(s, r))
 		router := h.GetRouter()
 
+		var (
+			adminPassword string
+			adminToken    string
+		)
+
 		t.Run("admin_registration", func(t *testing.T) {
 			code := testutil.RequestWithRouter(t, handler.APIVersion1, router).
 				Method(http.MethodPost).
@@ -59,8 +64,27 @@ func mainScenario(t *testing.T, localMailBox chan string) {
 			require.Equal(t, http.StatusCreated, code)
 		})
 
-		adminPassword := <-localMailBox
+		adminPassword = <-localMailBox
 
 		require.NotEmpty(t, adminPassword, "admin password is not created")
+
+		t.Run("admin_authorization", func(t *testing.T) {
+			var response dto.LoginResponse
+
+			code := testutil.RequestWithRouter(t, handler.APIVersion1, router).
+				Method(http.MethodPost).
+				Target(handler.LoginURL).
+				Body(dto.LoginRequest{
+					Email:    adminEmail,
+					Password: adminPassword,
+				}).Run(&response)
+
+			require.Equal(t, http.StatusOK, code)
+			require.NotEmpty(t, response.Token)
+
+			adminToken = response.Token
+
+			_ = adminToken
+		})
 	})
 }
