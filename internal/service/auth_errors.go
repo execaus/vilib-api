@@ -3,7 +3,7 @@ package service
 import "errors"
 
 var (
-	ErrTokenInvalid = NewServiceError("invalid token")
+	ErrTokenInvalid = NewConflictError("invalid token")
 )
 
 var (

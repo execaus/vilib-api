@@ -3,7 +3,6 @@ package handler_test
 import (
 	"net/http"
 	"testing"
-	"vilib-api/internal/domain"
 	"vilib-api/internal/dto"
 	"vilib-api/internal/handler"
 	"vilib-api/testutil"
@@ -29,24 +28,12 @@ func TestLogin_Success(t *testing.T) {
 			Email:    email,
 		}).
 		PrepareService(func(t *testing.T, service *testutil.ServiceMock) {
-			service.User.EXPECT().
-				GetByEmail(gomock.Any(), email).
-				Return(domain.User{}, nil)
-
 			service.Auth.EXPECT().
-				ComparePassword(gomock.Any(), gomock.Any(), password).
-				Return(true)
-
-			service.Account.EXPECT().
-				GetByUserEmail(gomock.Any(), gomock.Any()).
-				Return([]domain.Account{domain.Account{}}, nil)
-
-			service.Auth.EXPECT().
-				GenerateToken(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				Login(gomock.Any(), email, password).
 				Return(token, nil)
 		}).
 		Run(&response)
 
 	require.Equal(t, http.StatusOK, code)
-	require.Equal(t, response.Token, token)
+	require.Equal(t, token, response.Token)
 }

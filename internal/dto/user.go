@@ -14,16 +14,26 @@ type CreateUserResponse struct {
 	User User `json:"user"`
 }
 
-type User struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Surname string `json:"surname"`
-	Email   string `json:"email"`
+type UpdateUserRequest struct {
+	StatusPosition *domain.BitPosition `json:"status_position"`
 }
 
-func (u *User) FromDomain(user domain.User) {
+type UpdateUserResponse struct {
+	User User
+}
+
+type User struct {
+	ID      string             `json:"id"`
+	Name    string             `json:"name"`
+	Surname string             `json:"surname"`
+	Email   string             `json:"email"`
+	Status  domain.BitmapValue `json:"status"`
+}
+
+func (u *User) FromDomain(user domain.User, status domain.BitmapValue) {
 	u.ID = user.ID
 	u.Name = user.Name
 	u.Email = user.Email
 	u.Surname = user.Surname
+	u.Status = status
 }

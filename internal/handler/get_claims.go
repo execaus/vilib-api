@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func getClaims(c *gin.Context, services *service.Service) (*domain.AuthClaims, error) {
+func (h *Handler) getClaims(c *gin.Context, services *service.Service) (*domain.AuthClaims, error) {
 	token, ok := c.Get(authorizationCtxKey)
 	if !ok {
 		zap.L().Error(ErrAuthorizationContextEmpty.Error())
@@ -21,7 +21,7 @@ func getClaims(c *gin.Context, services *service.Service) (*domain.AuthClaims, e
 		return nil, ErrInvalidCredentials
 	}
 
-	claims, err := services.Auth.GetClaimsFromToken(c, strToken)
+	claims, err := services.Auth.GetClaimsFromToken(strToken)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return nil, err

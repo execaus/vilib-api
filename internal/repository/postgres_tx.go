@@ -7,13 +7,11 @@ import (
 	"github.com/stephenafamo/bob"
 )
 
-//go:generate mockgen -source=./postgres_tx.go -destination=./mocks/postgres_tx.go -package=mock_postgres
-
 type ExecutorProvider struct {
 	db *bob.DB
 }
 
-func NewTransactionalRepository(db *bob.DB) *ExecutorProvider {
+func NewExecutorProvider(db *bob.DB) *ExecutorProvider {
 	return &ExecutorProvider{db: db}
 }
 

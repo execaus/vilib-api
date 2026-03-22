@@ -19,6 +19,7 @@ type Auth interface {
 type Account interface {
 	IsExistsUserByEmail(ctx context.Context, accountID, email string) (bool, error)
 	GetByUserEmail(ctx context.Context, email string) ([]domain.Account, error)
+	GetByID(ctx context.Context, accountsID ...string) ([]domain.Account, error)
 	Create(ctx context.Context, userName, userSurname, email string) (domain.Account, error)
 	CreateUser(ctx context.Context, accountID, name, surname, email string) (domain.User, error)
 }
@@ -26,10 +27,12 @@ type Account interface {
 type User interface {
 	Create(ctx context.Context, name, surname, email, password string) (domain.User, error)
 	GetByEmail(ctx context.Context, email string) ([]domain.User, error)
+	Update(ctx context.Context, initiatorID, targetUserID string, status *domain.BitPosition) (domain.User, error)
 }
 
 type AccountStatus interface {
-	Issue(ctx context.Context, userID, accountID string, status domain.BitPosition) (domain.BitmapValue, error)
+	Issue(ctx context.Context, userID string, status domain.BitPosition) (domain.AccountStatus, error)
+	GetByUsersID(ctx context.Context, usersID ...string) ([]domain.AccountStatus, error)
 }
 
 type Email interface {
@@ -50,9 +53,9 @@ func NewService(cfg config.Config, localMailBox chan string, r *repository.Repos
 	s := &Service{}
 
 	s.Auth = NewAuthService(cfg.Auth, s)
-	s.Account = NewAccountService(r, s)
-	s.User = NewUserService(r, s)
-	s.AccountStatus = NewAccountStatusService(r)
+	s.Account = NewAccountService(r.Account, s)
+	s.User = NewUserService(r.User, s)
+	s.AccountStatus = NewAccountStatusService(r.AccountStatus, s)
 	s.Email = NewEmailService(cfg.Email, cfg.Server.Mode, localMailBox)
 
 	return s

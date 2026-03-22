@@ -11,10 +11,16 @@ import (
 )
 
 func sendServiceError(c *gin.Context, err error) {
-	var serviceError *service.ConflictError
+	var conflictError *service.ConflictError
+	var forbiddenError *service.ForbiddenError
 
-	if errors.As(err, &serviceError) {
-		sendConflict(c, serviceError.Error())
+	if errors.As(err, &conflictError) {
+		sendConflict(c, err.Error())
+		return
+	}
+
+	if errors.As(err, &forbiddenError) {
+		sendForbidden(c, err.Error())
 		return
 	}
 
@@ -44,4 +50,8 @@ func sendOK(c *gin.Context, body any) {
 
 func sendUnauthorized(c *gin.Context) {
 	c.AbortWithStatus(http.StatusUnauthorized)
+}
+
+func sendForbidden(c *gin.Context, message string) {
+	c.AbortWithStatusJSON(http.StatusForbidden, &dto.ErrorMessage{Message: message})
 }

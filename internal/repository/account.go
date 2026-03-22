@@ -16,21 +16,25 @@ type AccountRepository struct {
 	provider *ExecutorProvider
 }
 
+func NewAccountRepository(provider *ExecutorProvider) *AccountRepository {
+	return &AccountRepository{provider: provider}
+}
+
 func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...string) ([]domain.Account, error) {
 	exec := r.provider.GetExecutor(ctx)
 
 	accountsID := make([]uuid.UUID, len(usersID))
 
 	for i, id := range usersID {
-		permissionDB, err := schema.AccountPermissions.Query(
-			sm.Where(schema.AccountPermissions.Columns.UserID.EQ(psql.S(id))),
+		accountStatusesDB, err := schema.AccountStatuses.Query(
+			sm.Where(schema.AccountStatuses.Columns.UserID.EQ(psql.S(id))),
 		).One(ctx, exec)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return []domain.Account{}, nil
 		}
 
-		accountsID[i] = permissionDB.AccountID
+		accountsID[i] = accountStatusesDB.AccountID
 	}
 
 	accounts := make([]domain.Account, len(accountsID))
@@ -69,6 +73,29 @@ func (r *AccountRepository) Insert(ctx context.Context, name, email string) (dom
 	return account, nil
 }
 
-func NewAccountRepository(provider *ExecutorProvider) *AccountRepository {
-	return &AccountRepository{provider: provider}
+func (r *AccountRepository) SelectByID(ctx context.Context, accountsID ...string) ([]domain.Account, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	accounts := make([]domain.Account, len(accountsID))
+
+	for i, id := range accountsID {
+		accounts[i] = domain.Account{}
+
+		accountDB, err := schema.Accounts.Query(
+			sm.Where(schema.Accounts.Columns.AccountID.EQ(psql.S(id))),
+		).One(ctx, exec)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return nil, err
+		}
+
+		if accountDB == nil {
+			zap.L().Warn("account not found: " + id)
+			return nil, nil
+		}
+
+		accounts[i].FromDB(accountDB)
+	}
+
+	return accounts, nil
 }

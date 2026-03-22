@@ -8,17 +8,21 @@ import (
 type Account interface {
 	Insert(ctx context.Context, name, email string) (domain.Account, error)
 	SelectByUsersID(ctx context.Context, id ...string) ([]domain.Account, error)
+	SelectByID(ctx context.Context, accountsID ...string) ([]domain.Account, error)
 }
 
 type User interface {
 	SelectByEmail(ctx context.Context, email string) ([]domain.User, error)
 	Insert(ctx context.Context, name, surname, hash, email string) (domain.User, error)
+	GetByID(ctx context.Context, usersID ...string) ([]domain.User, error)
 }
 
 type AccountStatus interface {
-	Upsert(ctx context.Context, userID, accountID string, value domain.BitmapValue) error
+	Upsert(ctx context.Context, userID, accountID string, value domain.BitmapValue) (domain.AccountStatus, error)
+	SelectByUsersID(ctx context.Context, usersID ...string) ([]domain.AccountStatus, error)
 }
 
+//go:generate mockgen -source=./repository.go -destination=./mocks/repository.go -package=mock_repository
 type Repository struct {
 	Account
 	User

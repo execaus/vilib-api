@@ -14,6 +14,7 @@ import (
 
 const (
 	pathKeyAccountID = iota
+	pathKeyUserID
 )
 
 var (
@@ -21,6 +22,7 @@ var (
 	RegisterURL   = "auth/register"
 	LoginURL      = "auth/login"
 	CreateUserURL = pkg.NewURLSupplier("accounts/%s/users")
+	UpdateUserURL = pkg.NewURLSupplier("users/%s")
 )
 
 type Handler struct {
@@ -52,9 +54,7 @@ func (h *Handler) GetRouter() *gin.Engine {
 	v1.POST(RegisterURL, h.Register)
 	v1.POST(LoginURL, h.Login)
 	v1.POST(CreateUserURL.WithTemplateParams(pathKeyAccountID), h.CreateUser)
-
-	// Добавление пользователей к аккаунту
-	// Назначение ролей
+	v1.PUT(UpdateUserURL.WithTemplateParams(pathKeyUserID), h.RequireAuthMiddleware, h.UpdateUser)
 
 	return engine
 }

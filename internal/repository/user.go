@@ -30,6 +30,10 @@ func (r *UserRepository) SelectByEmail(ctx context.Context, email string) ([]dom
 		return nil, nil
 	}
 
+	if usersDB == nil {
+		return nil, nil
+	}
+
 	users := make([]domain.User, len(usersDB))
 	for i, user := range usersDB {
 		users[i] = domain.User{}
@@ -58,4 +62,30 @@ func (r *UserRepository) Insert(ctx context.Context, name, surname, hash, email 
 	user.FromDB(userDB)
 
 	return user, nil
+}
+
+func (r *UserRepository) GetByID(ctx context.Context, usersID ...string) ([]domain.User, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	users := make([]domain.User, len(usersID))
+
+	for i, id := range usersID {
+		users[i] = domain.User{}
+
+		userDB, err := schema.Users.Query(
+			sm.Where(schema.Users.Columns.UserID.EQ(psql.S(id))),
+		).One(ctx, exec)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return nil, nil
+		}
+		if userDB == nil {
+			zap.L().Warn("not found: " + id)
+			return nil, nil
+		}
+
+		users[i].FromDB(userDB)
+	}
+
+	return users, nil
 }

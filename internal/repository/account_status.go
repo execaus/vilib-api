@@ -26,7 +26,7 @@ func (r *AccountStatusRepository) Upsert(
 	ctx context.Context,
 	userID, accountID string,
 	status domain.BitmapValue,
-) error {
+) (domain.AccountStatus, error) {
 	exec := r.provider.GetExecutor(ctx)
 
 	accountStatusDB, err := schema.AccountStatuses.Query(
@@ -35,32 +35,61 @@ func (r *AccountStatusRepository) Upsert(
 	).One(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return err
+		return domain.AccountStatus{}, err
 	}
 
 	if accountStatusDB == nil {
-		_, err = schema.AccountStatuses.Insert(&schema.AccountStatusSetter{
+		accountStatusDB, err = schema.AccountStatuses.Insert(&schema.AccountStatusSetter{
 			UserID:    omit.From(uuid.MustParse(userID)),
 			AccountID: omit.From(uuid.MustParse(accountID)),
 			Status:    omit.From(status),
 			UpdatedAt: omit.From(time.Now()),
-		}).Exec(ctx, exec)
+		}).One(ctx, exec)
 		if err != nil {
 			zap.L().Error(err.Error())
-			return err
+			return domain.AccountStatus{}, err
 		}
 	} else {
-		_, err = schema.AccountStatuses.Update(
+		accountStatusDB, err = schema.AccountStatuses.Update(
 			um.SetCol(schema.AccountStatuses.Columns.Status.String()).ToArg(status),
 			um.SetCol(schema.AccountStatuses.Columns.UpdatedAt.String()).ToArg(time.Now()),
 			um.Where(schema.AccountStatuses.Columns.UserID.EQ(psql.Arg(userID))),
 			um.Where(schema.AccountStatuses.Columns.AccountID.EQ(psql.Arg(accountID))),
-		).Exec(ctx, exec)
+		).One(ctx, exec)
 		if err != nil {
 			zap.L().Error(err.Error())
-			return err
+			return domain.AccountStatus{}, err
 		}
 	}
 
-	return nil
+	return domain.AccountStatus{
+		AccountID: accountStatusDB.AccountID.String(),
+		UserID:    accountStatusDB.UserID.String(),
+		Status:    accountStatusDB.Status,
+	}, nil
+}
+
+func (r *AccountStatusRepository) SelectByUsersID(
+	ctx context.Context,
+	usersID ...string,
+) ([]domain.AccountStatus, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	accountStatuses := make([]domain.AccountStatus, len(usersID))
+
+	for i, id := range usersID {
+		accountStatuses[i] = domain.AccountStatus{}
+
+		accountStatusDB, err := schema.AccountStatuses.Query(
+			sm.Where(schema.AccountStatuses.Columns.UserID.EQ(psql.S(id))),
+		).One(ctx, exec)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return nil, err
+		}
+
+		accountStatuses[i].FromDB(accountStatusDB)
+	}
+
+	return accountStatuses, nil
 }

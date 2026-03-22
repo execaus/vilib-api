@@ -12,11 +12,11 @@ import (
 )
 
 type AccountService struct {
-	repo *repository.Repository
+	repo repository.Account
 	srv  *Service
 }
 
-func NewAccountService(repo *repository.Repository, srv *Service) *AccountService {
+func NewAccountService(repo repository.Account, srv *Service) *AccountService {
 	return &AccountService{repo: repo, srv: srv}
 }
 
@@ -29,7 +29,7 @@ func (s *AccountService) Create(ctx context.Context, userName, userSurname, emai
 	}
 
 	// Создание аккаунта
-	account, err := s.repo.Account.Insert(ctx, accountName, email)
+	account, err := s.repo.Insert(ctx, accountName, email)
 	if err != nil {
 		if errors.Is(err, dberrors.AccountErrors.ErrUniqueAccountsNameKey) {
 			zap.L().Warn(err.Error())
@@ -61,7 +61,7 @@ func (s *AccountService) Create(ctx context.Context, userName, userSurname, emai
 	}
 
 	// Назначение пользователю статус супер администратора аккаунта
-	if _, err = s.srv.AccountStatus.Issue(ctx, user.ID, account.ID, domain.AccountSuperAdminBitPosition); err != nil {
+	if _, err = s.srv.AccountStatus.Issue(ctx, user.ID, domain.AccountSuperAdminBitPosition); err != nil {
 		zap.L().Error(err.Error())
 		return domain.Account{}, err
 	}
@@ -97,7 +97,7 @@ func (s *AccountService) CreateUser(ctx context.Context, accountID, name, surnam
 	}
 
 	// Связывание пользователя с аккаунтом с правами обычного пользователя
-	if _, err = s.srv.AccountStatus.Issue(ctx, user.ID, accountID, domain.AccountUserBitPosition); err != nil {
+	if _, err = s.srv.AccountStatus.Issue(ctx, user.ID, domain.AccountUserBitPosition); err != nil {
 		zap.L().Error(err.Error())
 		return domain.User{}, err
 	}
@@ -112,7 +112,7 @@ func (s *AccountService) CreateUser(ctx context.Context, accountID, name, surnam
 }
 
 func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]domain.Account, error) {
-	users, err := s.repo.User.SelectByEmail(ctx, email)
+	users, err := s.srv.User.GetByEmail(ctx, email)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return nil, err
@@ -122,12 +122,23 @@ func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]do
 		return nil, nil
 	}
 
-	accountsID := make([]string, len(users))
+	usersID := make([]string, len(users))
 	for i, user := range users {
-		accountsID[i] = user.ID
+		usersID[i] = user.ID
 	}
 
-	accounts, err := s.repo.Account.SelectByUsersID(ctx, accountsID...)
+	accountStatusesID, err := s.srv.AccountStatus.GetByUsersID(ctx, usersID...)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	accountsID := make([]string, len(accountStatusesID))
+	for i, status := range accountStatusesID {
+		accountsID[i] = status.AccountID
+	}
+
+	accounts, err := s.GetByID(ctx, accountsID...)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return nil, err
@@ -146,4 +157,14 @@ func (s *AccountService) IsExistsUserByEmail(ctx context.Context, accountID, ema
 	return slices.ContainsFunc(accounts, func(account domain.Account) bool {
 		return account.ID == accountID
 	}), nil
+}
+
+func (s *AccountService) GetByID(ctx context.Context, accountsID ...string) ([]domain.Account, error) {
+	accounts, err := s.repo.SelectByID(ctx, accountsID...)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return accounts, nil
 }

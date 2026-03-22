@@ -9,25 +9,45 @@ import (
 )
 
 type AccountStatusService struct {
-	repo *repository.Repository
+	repo repository.AccountStatus
+	srv  *Service
 }
 
-func NewAccountStatusService(repo *repository.Repository) *AccountStatusService {
-	return &AccountStatusService{repo: repo}
+func NewAccountStatusService(repo repository.AccountStatus, srv *Service) *AccountStatusService {
+	return &AccountStatusService{repo: repo, srv: srv}
 }
 
 func (s *AccountStatusService) Issue(
 	ctx context.Context,
-	userID, accountID string,
+	userID string,
 	status domain.BitPosition,
-) (domain.BitmapValue, error) {
-	value := domain.SetBitsUpTo(domain.DefaultBitmap, status)
-
-	err := s.repo.AccountStatus.Upsert(ctx, userID, accountID, value)
+) (domain.AccountStatus, error) {
+	users, err := s.repo.SelectByUsersID(ctx, userID)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return 0, err
+		return domain.AccountStatus{}, err
+	}
+	if users == nil {
+		return domain.AccountStatus{}, ErrNotFound
 	}
 
-	return value, nil
+	value := domain.SetBitsUpTo(domain.DefaultBitmap, status)
+
+	accountStatus, err := s.repo.Upsert(ctx, userID, users[0].AccountID, value)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.AccountStatus{}, err
+	}
+
+	return accountStatus, nil
+}
+
+func (s *AccountStatusService) GetByUsersID(ctx context.Context, usersID ...string) ([]domain.AccountStatus, error) {
+	accountStatuses, err := s.repo.SelectByUsersID(ctx, usersID...)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return accountStatuses, nil
 }

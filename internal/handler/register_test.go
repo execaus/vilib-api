@@ -1,9 +1,7 @@
 package handler_test
 
 import (
-	"context"
 	"net/http"
-	"time"
 	"vilib-api/internal/domain"
 	"vilib-api/testutil"
 
@@ -15,25 +13,27 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestRegister_Success(t *testing.T) {
-	var (
-		localMailBox = make(chan string, 1)
-		password     string
-	)
+const (
+	testName    = "Name"
+	testSurname = "Surname"
+	testEmail   = "test@mail.ru"
+)
 
+func TestRegister_Success(t *testing.T) {
 	code := testutil.RequestWithMocks(t, handler.APIVersion1).
 		Method(http.MethodPost).
 		Target(handler.RegisterURL).
 		Body(dto.RegisterRequest{
-			Name:    "Name",
-			Surname: "Surname",
-			Email:   "test@mail.ru",
+			Name:    testName,
+			Surname: testSurname,
+			Email:   testEmail,
 		}).
-		LocalMailBox(localMailBox).
 		PrepareService(func(t *testing.T, service *testutil.ServiceMock) {
-			service.
+			service.Account.EXPECT().
+				Create(gomock.Any(), testName, testSurname, testEmail).
+				Return(domain.Account{}, nil)
 		}).
+		Run(nil)
 
 	require.Equal(t, http.StatusCreated, code)
-	require.NotEmpty(t, response.Token)
 }

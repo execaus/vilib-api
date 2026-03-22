@@ -3,6 +3,7 @@ package handler_test
 import (
 	"net/http"
 	"testing"
+	"time"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/dto"
 	"vilib-api/internal/handler"
@@ -14,46 +15,51 @@ import (
 
 func TestCreateUser_Success(t *testing.T) {
 	const (
-		name     = "name"
-		surname  = "surname"
-		email    = "test@mail.ru"
-		password = "password"
-		userID   = "userID"
+		name      = "name"
+		surname   = "surname"
+		email     = "test@mail.ru"
+		password  = "password"
+		userID    = "userID"
+		accountID = "123"
+		status    = domain.BitmapValue(1)
 	)
 
 	var response dto.CreateUserResponse
 
 	code := testutil.RequestWithMocks(t, handler.APIVersion1).
 		Method(http.MethodPost).
-		Target(handler.CreateUserURL.WithValues("123")).
+		Target(handler.CreateUserURL.WithValues(accountID)).
 		Body(dto.CreateUserRequest{
 			Name:    name,
 			Surname: surname,
 			Email:   email,
 		}).
 		PrepareService(func(t *testing.T, service *testutil.ServiceMock) {
-			service.Auth.EXPECT().
-				GeneratePassword().
-				Return(password, nil)
-
 			service.Account.EXPECT().
-				GetByUserEmail(gomock.Any(), email).
-				Return([]domain.Account{}, nil)
-
-			service.User.EXPECT().
-				Create(gomock.Any(), name, surname, email, password).
-				Return(domain.User{ID: userID}, nil)
-
-			service.User.EXPECT().
-				IssueUser(gomock.Any(), userID, gomock.Any()).
-				Return(nil)
-
-			service.Email.EXPECT().
-				SendCreateUserEmail(gomock.Any(), email, password).
-				Return(nil)
+				CreateUser(gomock.Any(), accountID, name, surname, email).
+				Return(domain.User{
+					ID:           userID,
+					Name:         name,
+					Surname:      surname,
+					PasswordHash: password,
+					Email:        email,
+					CreatedAt:    time.Now(),
+				}, nil)
+			service.AccountStatus.EXPECT().
+				GetByUsersID(gomock.Any(), userID).
+				Return([]domain.AccountStatus{
+					{
+						AccountID: accountID,
+						UserID:    userID,
+						Status:    status,
+					},
+				}, nil)
 		}).
 		Run(&response)
 
 	require.Equal(t, http.StatusCreated, code)
-	require.Equal(t, response.User.ID, userID)
+	require.Equal(t, userID, response.User.ID)
+	require.Equal(t, name, response.User.Name)
+	require.Equal(t, surname, response.User.Surname)
+	require.Equal(t, status, response.User.Status)
 }

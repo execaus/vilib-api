@@ -60,3 +60,18 @@ func ClearBitsFrom(mask BitmapValue, bitPosition BitPosition) BitmapValue {
 	}
 	return mask
 }
+
+// HighestBitPosition возвращает позицию самого старшего установленного бита (самого левого).
+// Если ни один бит не установлен, возвращает false.
+func HighestBitPosition(mask BitmapValue) (BitPosition, bool) {
+	if mask == 0 {
+		return 0, false
+	}
+
+	for i := maxBitPosition; i >= minBitPosition; i-- {
+		if mask&(1<<i) != 0 {
+			return BitPosition(i), true
+		}
+	}
+	return 0, false
+}

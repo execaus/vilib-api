@@ -37,10 +37,19 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	}
 
 	var (
-		user domain.User
+		user          domain.User
+		accountStatus domain.AccountStatus
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
 		user, err = services.Account.CreateUser(ctx, accountID, req.Name, req.Surname, req.Email)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		accountStatus, err = sliceItemsToSingle(func() ([]domain.AccountStatus, error) {
+			return services.AccountStatus.GetByUsersID(ctx, user.ID)
+		})
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err
@@ -53,7 +62,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	}
 
 	dtoUser := dto.User{}
-	dtoUser.FromDomain(user)
+	dtoUser.FromDomain(user, accountStatus.Status)
 
 	sendCreated(c, dto.CreateUserResponse{
 		User: dtoUser,

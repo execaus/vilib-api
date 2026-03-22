@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"vilib-api/internal/handler"
-	mock_postgres "vilib-api/internal/repository/mocks"
 	"vilib-api/internal/saga"
+	mock_saga "vilib-api/internal/saga/mocks"
 	mock_service "vilib-api/internal/service/mocks"
 
 	"github.com/gin-gonic/gin"
@@ -19,6 +19,7 @@ type RequesterWithMocks struct {
 	method         string
 	target         string
 	body           any
+	authToken      string
 	localMailBox   chan string
 	prepareService func(t *testing.T, service *ServiceMock)
 	version        string
@@ -49,6 +50,11 @@ func (r *RequesterWithMocks) Body(body any) *RequesterWithMocks {
 	return r
 }
 
+func (r *RequesterWithMocks) Authorization(token string) *RequesterWithMocks {
+	r.authToken = token
+	return r
+}
+
 func (r *RequesterWithMocks) LocalMailBox(localMailBox chan string) *RequesterWithMocks {
 	r.localMailBox = localMailBox
 	return r
@@ -73,18 +79,19 @@ func (r *RequesterWithMocks) Run(response any) (status int) {
 	defer ctrl.Finish()
 
 	s := &ServiceMock{
-		Auth:    mock_service.NewMockAuth(ctrl),
-		Account: mock_service.NewMockAccount(ctrl),
-		User:    mock_service.NewMockUser(ctrl),
-		Email:   mock_service.NewMockEmail(ctrl),
+		Auth:          mock_service.NewMockAuth(ctrl),
+		Account:       mock_service.NewMockAccount(ctrl),
+		User:          mock_service.NewMockUser(ctrl),
+		Email:         mock_service.NewMockEmail(ctrl),
+		AccountStatus: mock_service.NewMockAccountStatus(ctrl),
 	}
 
 	if r.prepareService != nil {
 		r.prepareService(r.t, s)
 	}
 
-	repo := mock_postgres.NewMockTransactable(ctrl)
-	tx := mock_postgres.NewMockBobTransaction(ctrl)
+	repo := mock_saga.NewMockTransactable(ctrl)
+	tx := mock_saga.NewMockBobTransaction(ctrl)
 
 	tx.EXPECT().Commit(gomock.Any()).Return(nil).AnyTimes()
 	repo.EXPECT().WithTx(gomock.Any()).Return(tx, nil).AnyTimes()
@@ -108,6 +115,9 @@ func (r *RequesterWithMocks) Run(response any) (status int) {
 
 	req := httptest.NewRequest(r.method, FullURI(r.version, r.target), bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
+	if r.authToken != "" {
+		req.Header.Set("Authorization", r.authToken)
+	}
 
 	router.ServeHTTP(recorder, req)
 
