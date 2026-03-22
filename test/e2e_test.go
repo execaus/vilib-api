@@ -7,6 +7,7 @@ import (
 	"vilib-api/internal/dto"
 	"vilib-api/internal/handler"
 	"vilib-api/internal/repository"
+	"vilib-api/internal/saga"
 	"vilib-api/internal/service"
 	"vilib-api/server"
 	"vilib-api/testutil"
@@ -43,7 +44,7 @@ func mainScenario(t *testing.T, localMailBox chan string) {
 	testutil.WithDB(t, migrationsPath, func(bobDB *bob.DB) {
 		r := repository.NewTransactionalRepository(bobDB)
 		s := service.NewService(cfg, localMailBox, r)
-		h := handler.NewHandler(service.NewSagaRunner(s, r))
+		h := handler.NewHandler(saga.NewSagaRunner(s, r))
 		router := h.GetRouter()
 
 		var (
@@ -87,7 +88,7 @@ func mainScenario(t *testing.T, localMailBox chan string) {
 			_ = adminToken
 		})
 
-		// TODO получение данных об текущем аккаунте
+		// TODO получение данных о текущем аккаунте
 
 		t.Run("admin_create_user", func(t *testing.T) {
 			var response dto.CreateUserResponse

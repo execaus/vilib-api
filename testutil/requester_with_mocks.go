@@ -8,7 +8,7 @@ import (
 	"testing"
 	"vilib-api/internal/handler"
 	mock_postgres "vilib-api/internal/repository/mocks"
-	"vilib-api/internal/service"
+	"vilib-api/internal/saga"
 	mock_service "vilib-api/internal/service/mocks"
 
 	"github.com/gin-gonic/gin"
@@ -89,7 +89,7 @@ func (r *RequesterWithMocks) Run(response any) (status int) {
 	tx.EXPECT().Commit(gomock.Any()).Return(nil).AnyTimes()
 	repo.EXPECT().WithTx(gomock.Any()).Return(tx, nil).AnyTimes()
 
-	h := handler.NewHandler(service.NewSagaRunner(s.ToServices(), repo))
+	h := handler.NewHandler(saga.NewSagaRunner(s.ToServices(), repo))
 	router := h.GetRouter()
 
 	recorder := httptest.NewRecorder()

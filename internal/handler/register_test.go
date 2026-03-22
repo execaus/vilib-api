@@ -16,8 +16,6 @@ import (
 )
 
 func TestRegister_Success(t *testing.T) {
-	var response dto.RegisterResponse
-
 	var (
 		localMailBox = make(chan string, 1)
 		password     string
@@ -33,58 +31,9 @@ func TestRegister_Success(t *testing.T) {
 		}).
 		LocalMailBox(localMailBox).
 		PrepareService(func(t *testing.T, service *testutil.ServiceMock) {
-			service.Auth.EXPECT().
-				GeneratePassword().
-				Return("generatedPassword", nil)
-
-			service.Auth.EXPECT().
-				HashPassword(gomock.Any(), "generatedPassword").
-				Return("hashedPassword", nil)
-
-			service.User.EXPECT().
-				Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-				Return(domain.User{
-					ID:        "userID",
-					Name:      "userName",
-					Surname:   "userSurname",
-					Email:     "userEmail",
-					CreatedAt: time.Now(),
-				}, nil)
-
-			service.Account.EXPECT().
-				Create(gomock.Any(), gomock.Any()).
-				Return(domain.Account{
-					ID:        "accountID",
-					Name:      "accountName",
-					Email:     "accountEmail",
-					CreatedAt: time.Now(),
-				}, nil)
-
-			service.User.EXPECT().
-				IssueAdmin(gomock.Any(), gomock.Any(), gomock.Any()).
-				Return(nil)
-
-			service.Account.EXPECT().
-				GetByUserEmail(gomock.Any(), gomock.Any()).
-				Return([]domain.Account{}, nil)
-
-			service.Auth.EXPECT().
-				GenerateToken(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-				Return("token", nil)
-
-			service.Email.EXPECT().
-				SendRegisteredMail(gomock.Any(), gomock.Any(), gomock.Any()).
-				DoAndReturn(func(ctx context.Context, email string, pass string) error {
-					password = pass
-					localMailBox <- pass
-					return nil
-				})
+			service.
 		}).
-		Run(&response)
 
-	sentMail := <-localMailBox
-
-	require.Equal(t, password, sentMail)
 	require.Equal(t, http.StatusCreated, code)
 	require.NotEmpty(t, response.Token)
 }

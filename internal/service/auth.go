@@ -22,38 +22,65 @@ const (
 
 type AuthService struct {
 	secretKey string
+	srv       *Service
 }
 
-func NewAuthService(cfg config.AuthConfig) *AuthService {
-	return &AuthService{secretKey: cfg.Key}
+func NewAuthService(cfg config.AuthConfig, srv *Service) *AuthService {
+	return &AuthService{secretKey: cfg.Key, srv: srv}
 }
 
-func (s *AuthService) GenerateToken(
-	ctx context.Context,
-	accounts []string,
-	userID, currentAccountID string,
-) (string, error) {
-	claims := domain.AuthClaims{
-		UserID:           userID,
-		Accounts:         accounts,
-		CurrentAccountID: currentAccountID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(DefaultJWTExpireDuration)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(s.secretKey))
+func (s *AuthService) Login(ctx context.Context, email, password string) (string, error) {
+	// Получение всех пользователей с таким email
+	users, err := s.srv.User.GetByEmail(ctx, email)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return "", err
 	}
 
-	return signedToken, nil
+	// Поиск совпадений пароля хотя бы в одном
+	isValid := false
+	userID := ""
+	for _, user := range users {
+		if ok := s.srv.Auth.ComparePassword(user.PasswordHash, password); ok {
+			isValid = true
+			userID = user.ID
+			break
+		}
+	}
+	if !isValid {
+		zap.L().Warn(ErrNotFound.Error())
+		return "", ErrNotFound
+	}
+
+	// Получение всех организаций пользователя
+	accounts, err := s.srv.Account.GetByUserEmail(ctx, email)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", nil
+	}
+
+	if len(accounts) == 0 {
+		zap.L().Error(ErrAccountsNotFound.Error())
+		return "", ErrAccountsNotFound
+	}
+
+	// Сбор всех идентификаторов организаций
+	accountsID := make([]string, len(accounts))
+	for i := 0; i < len(accounts); i++ {
+		accountsID[i] = accounts[i].ID
+	}
+
+	// Генерация токена для авторизации пользователя
+	token, err := s.srv.Auth.GenerateToken(userID, accountsID, accountsID[0])
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
+
+	return token, nil
 }
 
-func (s *AuthService) GetClaimsFromToken(ctx context.Context, tokenString string) (*domain.AuthClaims, error) {
+func (s *AuthService) GetClaimsFromToken(tokenString string) (*domain.AuthClaims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &domain.AuthClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			zap.L().Error(jwt.ErrTokenSignatureInvalid.Error())
@@ -78,7 +105,32 @@ func (s *AuthService) GetClaimsFromToken(ctx context.Context, tokenString string
 	return nil, ErrTokenInvalid
 }
 
-func (s *AuthService) ComparePassword(ctx context.Context, hashedPassword string, password string) bool {
+func (s *AuthService) GenerateToken(
+	userID string,
+	accounts []string,
+	currentAccountID string,
+) (string, error) {
+	claims := domain.AuthClaims{
+		UserID:           userID,
+		Accounts:         accounts,
+		CurrentAccountID: currentAccountID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(DefaultJWTExpireDuration)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString([]byte(s.secretKey))
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
+
+	return signedToken, nil
+}
+
+func (s *AuthService) ComparePassword(hashedPassword string, password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -88,7 +140,7 @@ func (s *AuthService) ComparePassword(ctx context.Context, hashedPassword string
 	return true
 }
 
-func (s *AuthService) HashPassword(ctx context.Context, password string) (string, error) {
+func (s *AuthService) HashPassword(password string) (string, error) {
 	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		zap.L().Error(err.Error())

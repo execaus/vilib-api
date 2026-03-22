@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"vilib-api/internal/pkg"
+	"vilib-api/internal/saga"
 	"vilib-api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -18,14 +20,14 @@ var (
 	APIVersion1   = "v1"
 	RegisterURL   = "auth/register"
 	LoginURL      = "auth/login"
-	CreateUserURL = NewURLSupplier("accounts/%s/users")
+	CreateUserURL = pkg.NewURLSupplier("accounts/%s/users")
 )
 
 type Handler struct {
-	saga service.SagaRunner
+	saga saga.Runner[*service.Service]
 }
 
-func NewHandler(saga service.SagaRunner) *Handler {
+func NewHandler(saga saga.Runner[*service.Service]) *Handler {
 	h := &Handler{
 		saga: saga,
 	}

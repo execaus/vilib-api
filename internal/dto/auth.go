@@ -6,9 +6,7 @@ type RegisterRequest struct {
 	Email   string `json:"email"   binding:"required,email,max=64"`
 }
 
-type RegisterResponse struct {
-	Token string `json:"token"`
-}
+type RegisterResponse struct{}
 
 type LoginRequest struct {
 	Email    string `json:"email"    binding:"required,email,max=64"`

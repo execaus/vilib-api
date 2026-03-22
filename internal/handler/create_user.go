@@ -8,7 +8,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 )
 
 // CreateUser godoc
@@ -26,7 +25,7 @@ import (
 func (h *Handler) CreateUser(c *gin.Context) {
 	var req dto.CreateUserRequest
 
-	reqAccountID, err := h.GetPathStringValue(c, pathKeyAccountID)
+	accountID, err := h.GetPathStringValue(c, pathKeyAccountID)
 	if err != nil {
 		sendBadRequest(c, err)
 		return
@@ -41,34 +40,8 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		user domain.User
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		password, err := services.Auth.GeneratePassword()
+		user, err = services.Account.CreateUser(ctx, accountID, req.Name, req.Surname, req.Email)
 		if err != nil {
-			zap.L().Error(err.Error())
-			return err
-		}
-
-		accounts, err := services.Account.GetByUserEmail(ctx, req.Email)
-		if slices.IndexFunc(accounts, func(account domain.Account) bool {
-			return account.ID == reqAccountID
-		}) != -1 {
-			// TODO перенести логику в сервисы
-			e := service.NewServiceError("user exists in the account")
-			zap.L().Error(e.Error())
-			return e
-		}
-
-		user, err = services.User.Create(ctx, req.Name, req.Surname, req.Email, password)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
-		}
-
-		if err = services.User.IssueUser(ctx, user.ID, reqAccountID); err != nil {
-			zap.L().Error(err.Error())
-			return err
-		}
-
-		if err = services.Email.SendCreateUserEmail(ctx, req.Email, password); err != nil {
 			zap.L().Error(err.Error())
 			return err
 		}

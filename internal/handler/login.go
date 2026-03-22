@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"vilib-api/internal/dto"
 	"vilib-api/internal/service"
 
@@ -31,41 +30,11 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	var (
+		err   error
 		token string
 	)
-	if err := h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		user, err := services.User.GetByEmail(ctx, req.Email)
-		if err != nil {
-			if errors.Is(err, service.ErrNotFound) {
-				zap.L().Warn(ErrInvalidCredentials.Error())
-				return ErrInvalidCredentials
-			}
-			zap.L().Error(err.Error())
-			return err
-		}
-
-		if ok := services.Auth.ComparePassword(ctx, user.PasswordHash, req.Password); !ok {
-			zap.L().Warn(ErrInvalidCredentials.Error())
-			return ErrInvalidCredentials
-		}
-
-		accounts, err := services.Account.GetByUserEmail(ctx, user.Email)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
-		}
-
-		if len(accounts) == 0 {
-			zap.L().Error("accounts not found")
-			return errors.New("accounts not found")
-		}
-
-		accountsID := make([]string, len(accounts))
-		for i := 0; i < len(accounts); i++ {
-			accountsID[i] = accounts[i].ID
-		}
-
-		token, err = services.Auth.GenerateToken(ctx, accountsID, user.ID, accountsID[0])
+	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
+		token, err = services.Auth.Login(ctx, req.Email, req.Password)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err
