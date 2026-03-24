@@ -18,11 +18,12 @@ const (
 )
 
 var (
-	APIVersion1   = "v1"
-	RegisterURL   = "auth/register"
-	LoginURL      = "auth/login"
-	CreateUserURL = pkg.NewURLSupplier("accounts/%s/users")
-	UpdateUserURL = pkg.NewURLSupplier("users/%s")
+	APIVersion1       = "v1"
+	RegisterURL       = "auth/register"
+	LoginURL          = "auth/login"
+	CreateUserURL     = pkg.NewURLSupplier("accounts/%s/users")
+	CreateRoleAccount = pkg.NewURLSupplier("accounts/%s/roles")
+	UpdateUserURL     = pkg.NewURLSupplier("users/%s")
 )
 
 type Handler struct {
@@ -54,6 +55,7 @@ func (h *Handler) GetRouter() *gin.Engine {
 	v1.POST(RegisterURL, h.Register)
 	v1.POST(LoginURL, h.Login)
 	v1.POST(CreateUserURL.WithTemplateParams(pathKeyAccountID), h.CreateUser)
+	v1.POST(CreateRoleAccount.WithTemplateParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateAccountRole)
 	v1.PUT(UpdateUserURL.WithTemplateParams(pathKeyUserID), h.RequireAuthMiddleware, h.UpdateUser)
 
 	return engine

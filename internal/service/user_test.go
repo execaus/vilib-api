@@ -20,17 +20,17 @@ func TestUserService_Update_AccessMatrix(t *testing.T) {
 	)
 
 	var (
-		superAdminStatus = domain.SetBitsUpTo(domain.DefaultBitmap, domain.AccountSuperAdminBitPosition)
-		adminStatus      = domain.SetBitsUpTo(domain.DefaultBitmap, domain.AccountAdminBitPosition)
-		moderatorStatus  = domain.SetBitsUpTo(domain.DefaultBitmap, domain.AccountModeratorBitPosition)
-		userStatus       = domain.SetBitsUpTo(domain.DefaultBitmap, domain.AccountUserBitPosition)
+		superAdminStatus = domain.SetBitsUpTo(domain.DefaultPermissionMask, domain.AccountSuperAdminBitPosition)
+		adminStatus      = domain.SetBitsUpTo(domain.DefaultPermissionMask, domain.AccountAdminBitPosition)
+		moderatorStatus  = domain.SetBitsUpTo(domain.DefaultPermissionMask, domain.AccountModeratorBitPosition)
+		userStatus       = domain.SetBitsUpTo(domain.DefaultPermissionMask, domain.AccountUserBitPosition)
 	)
 
 	tests := []struct {
 		name               string
 		initiatorStatus    domain.BitmapValue
 		targetStatus       domain.BitmapValue
-		toStatus           domain.BitPosition
+		toStatus           domain.PermissionFlag
 		initiatorID        string
 		targetID           string
 		initiatorAccountID string

@@ -64,7 +64,7 @@ func (r *UserRepository) Insert(ctx context.Context, name, surname, hash, email 
 	return user, nil
 }
 
-func (r *UserRepository) GetByID(ctx context.Context, usersID ...string) ([]domain.User, error) {
+func (r *UserRepository) SelectByID(ctx context.Context, usersID ...string) ([]domain.User, error) {
 	exec := r.provider.GetExecutor(ctx)
 
 	users := make([]domain.User, len(usersID))

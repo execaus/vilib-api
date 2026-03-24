@@ -24,15 +24,20 @@ type Account interface {
 	CreateUser(ctx context.Context, accountID, name, surname, email string) (domain.User, error)
 }
 
+type AccountRole interface {
+	Create(
+		ctx context.Context,
+		accountID, name string,
+		parentID *string,
+		permission domain.PermissionMask,
+		isDefault bool,
+	) ([]domain.AccountRole, error)
+}
+
 type User interface {
 	Create(ctx context.Context, name, surname, email, password string) (domain.User, error)
 	GetByEmail(ctx context.Context, email string) ([]domain.User, error)
-	Update(ctx context.Context, initiatorID, targetUserID string, status *domain.BitPosition) (domain.User, error)
-}
-
-type AccountStatus interface {
-	Issue(ctx context.Context, userID string, status domain.BitPosition) (domain.AccountStatus, error)
-	GetByUsersID(ctx context.Context, usersID ...string) ([]domain.AccountStatus, error)
+	Update(ctx context.Context, initiatorID, targetUserID string, status *domain.PermissionFlag) (domain.User, error)
 }
 
 type Email interface {
@@ -46,7 +51,7 @@ type Service struct {
 	Account
 	User
 	Email
-	AccountStatus
+	AccountRole
 }
 
 func NewService(cfg config.Config, localMailBox chan string, r *repository.Repository) *Service {
@@ -55,8 +60,8 @@ func NewService(cfg config.Config, localMailBox chan string, r *repository.Repos
 	s.Auth = NewAuthService(cfg.Auth, s)
 	s.Account = NewAccountService(r.Account, s)
 	s.User = NewUserService(r.User, s)
-	s.AccountStatus = NewAccountStatusService(r.AccountStatus, s)
 	s.Email = NewEmailService(cfg.Email, cfg.Server.Mode, localMailBox)
+	s.AccountRole = NewAccountRoleService(r.AccountRole, s)
 
 	return s
 }

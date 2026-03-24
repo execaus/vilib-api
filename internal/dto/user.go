@@ -15,7 +15,7 @@ type CreateUserResponse struct {
 }
 
 type UpdateUserRequest struct {
-	StatusPosition *domain.BitPosition `json:"status_position"`
+	StatusPosition *domain.PermissionFlag `json:"status_position"`
 }
 
 type UpdateUserResponse struct {

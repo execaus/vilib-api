@@ -10,7 +10,7 @@ import (
 
 const (
 	// AccountUserBitPosition Обычный пользователь системы.
-	AccountUserBitPosition BitPosition = iota
+	AccountUserBitPosition PermissionFlag = iota
 
 	// AccountModeratorBitPosition Модератор аккаунта. Имеет следующие возможности:
 	// - добавлять новых пользователей в аккаунт.

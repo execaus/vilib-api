@@ -14,25 +14,31 @@ type Account interface {
 type User interface {
 	SelectByEmail(ctx context.Context, email string) ([]domain.User, error)
 	Insert(ctx context.Context, name, surname, hash, email string) (domain.User, error)
-	GetByID(ctx context.Context, usersID ...string) ([]domain.User, error)
+	SelectByID(ctx context.Context, usersID ...string) ([]domain.User, error)
 }
 
-type AccountStatus interface {
-	Upsert(ctx context.Context, userID, accountID string, value domain.BitmapValue) (domain.AccountStatus, error)
-	SelectByUsersID(ctx context.Context, usersID ...string) ([]domain.AccountStatus, error)
+type AccountRole interface {
+	Insert(
+		ctx context.Context,
+		accountID, name string,
+		parentID *string,
+		permission domain.PermissionMask,
+		isDefault bool,
+	) (domain.AccountRole, error)
+	SelectByAccountID(ctx context.Context, accountID string) ([]domain.AccountRole, error)
 }
 
 //go:generate mockgen -source=./repository.go -destination=./mocks/repository.go -package=mock_repository
 type Repository struct {
 	Account
 	User
-	AccountStatus
+	AccountRole
 }
 
 func NewRepository(provider *ExecutorProvider) *Repository {
 	return &Repository{
-		Account:       NewAccountRepository(provider),
-		User:          NewUserRepository(provider),
-		AccountStatus: NewAccountStatusRepository(provider),
+		Account:     NewAccountRepository(provider),
+		User:        NewUserRepository(provider),
+		AccountRole: NewAccountRoleRepository(provider),
 	}
 }
