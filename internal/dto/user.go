@@ -2,6 +2,8 @@ package dto
 
 import (
 	"vilib-api/internal/domain"
+
+	"github.com/google/uuid"
 )
 
 type CreateUserRequest struct {
@@ -15,7 +17,7 @@ type CreateUserResponse struct {
 }
 
 type UpdateUserRequest struct {
-	StatusPosition *domain.PermissionFlag `json:"status_position"`
+	RoleID *uuid.UUID `json:"role_id"`
 }
 
 type UpdateUserResponse struct {
@@ -23,17 +25,17 @@ type UpdateUserResponse struct {
 }
 
 type User struct {
-	ID      string             `json:"id"`
-	Name    string             `json:"name"`
-	Surname string             `json:"surname"`
-	Email   string             `json:"email"`
-	Status  domain.BitmapValue `json:"status"`
+	ID      uuid.UUID `json:"id"`
+	Name    string    `json:"name"`
+	Surname string    `json:"surname"`
+	Email   string    `json:"email"`
+	RoleID  uuid.UUID `json:"role_id"`
 }
 
-func (u *User) FromDomain(user domain.User, status domain.BitmapValue) {
+func (u *User) FromDomain(user domain.User) {
 	u.ID = user.ID
 	u.Name = user.Name
 	u.Email = user.Email
 	u.Surname = user.Surname
-	u.Status = status
+	u.RoleID = user.RoleID
 }

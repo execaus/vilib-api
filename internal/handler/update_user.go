@@ -25,7 +25,7 @@ import (
 func (h *Handler) UpdateUser(c *gin.Context) {
 	var req dto.UpdateUserRequest
 
-	targetUserID, err := h.GetPathStringValue(c, pathKeyUserID)
+	targetUserID, err := h.GetPathUUIDValue(c, pathKeyUserID)
 	if err != nil {
 		sendBadRequest(c, err)
 		return
@@ -37,8 +37,7 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	}
 
 	var (
-		user          domain.User
-		accountStatus domain.AccountStatus
+		user domain.User
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
 		claims, err := h.getClaims(c, services)
@@ -47,15 +46,11 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 			return err
 		}
 
-		user, err = services.User.Update(ctx, claims.UserID, targetUserID, req.StatusPosition)
+		user, err = services.User.Update(ctx, claims.UserID, targetUserID, req.RoleID)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err
 		}
-
-		accountStatus, err = sliceItemsToSingle(func() ([]domain.AccountStatus, error) {
-			return services.AccountStatus.GetByUsersID(ctx, user.ID)
-		})
 
 		return nil
 	}); err != nil {
@@ -64,7 +59,7 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	}
 
 	dtoUser := dto.User{}
-	dtoUser.FromDomain(user, accountStatus.Status)
+	dtoUser.FromDomain(user)
 
 	sendOK(c, dto.UpdateUserResponse{
 		User: dtoUser,

@@ -7,17 +7,24 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
-func (h *Handler) GetPathStringValue(c *gin.Context, key int) (string, error) {
-	value := c.Param(strconv.Itoa(key))
+func (h *Handler) GetPathUUIDValue(c *gin.Context, key PathKey) (uuid.UUID, error) {
+	value := c.Param(strconv.FormatUint(uint64(key), 10))
 	if value == "" {
 		zap.L().Error(fmt.Sprintf("parameter not found: %v", key))
-		return "", errors.New(fmt.Sprintf("parameter not found: %v", key))
+		return uuid.New(), errors.New(fmt.Sprintf("parameter not found: %v", key))
 	}
 
-	return value, nil
+	parsedValue, err := uuid.Parse(value)
+	if err != nil {
+		zap.L().Error(fmt.Sprintf("invalid parameter uuid: %s", parsedValue))
+		return uuid.New(), fmt.Errorf("invalid parameter uuid: %s", err)
+	}
+
+	return parsedValue, nil
 }
 
 func sliceItemsToSingle[T1 any](fn func() ([]T1, error)) (T1, error) {

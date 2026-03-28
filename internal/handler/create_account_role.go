@@ -13,7 +13,7 @@ import (
 func (h *Handler) CreateAccountRole(c *gin.Context) {
 	var req dto.CreateAccountRoleRequest
 
-	accountID, err := h.GetPathStringValue(c, pathKeyAccountID)
+	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
 	if err != nil {
 		sendBadRequest(c, err)
 		return

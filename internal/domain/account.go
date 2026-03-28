@@ -6,36 +6,19 @@ import (
 	"strings"
 	"time"
 	"vilib-api/internal/gen/schema"
-)
 
-const (
-	// AccountUserBitPosition Обычный пользователь системы.
-	AccountUserBitPosition PermissionFlag = iota
-
-	// AccountModeratorBitPosition Модератор аккаунта. Имеет следующие возможности:
-	// - добавлять новых пользователей в аккаунт.
-	AccountModeratorBitPosition
-
-	// AccountAdminBitPosition Администратор аккаунта. Имеет следующие возможности:
-	// - добавлять новых пользователей в аккаунт.
-	AccountAdminBitPosition
-
-	// AccountSuperAdminBitPosition Супер администратор аккаунта, является владельцем аккаунта.
-	// Имеет следующие возможности:
-	// Повышать до администратора.
-	// Отдать роль супер администратора обычному администратору.
-	AccountSuperAdminBitPosition
+	"github.com/google/uuid"
 )
 
 type Account struct {
-	ID        string
+	ID        uuid.UUID
 	Name      string
 	Email     string
 	CreatedAt time.Time
 }
 
 func (a *Account) FromDB(db *schema.Account) {
-	a.ID = db.AccountID.String()
+	a.ID = db.AccountID
 	a.Name = db.Name
 	a.Email = db.Email
 	a.CreatedAt = db.CreatedAt

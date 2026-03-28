@@ -29,9 +29,83 @@
 - [ ] Привязка видео к группам пользователей
 - [ ] Просмотр видео пользователями с доступом
 
+### Диаграммы последовательности 
+
+## Загрузка видео
+
+```mermaid
+sequenceDiagram
+  participant Client
+  participant Backend
+  participant S3
+  participant Kafka
+  participant Worker as Compression Worker Pool
+  participant Postgres as DB
+
+%% Клиент получает presigned URL
+  Client->>Backend: Запрос на загрузку видео
+  Backend->>S3: Запрос presigned URL (действует ограниченное время)
+  Backend->>Postgres: Создает video со статусом uploading
+  S3-->>Backend: Возвращает presigned URL
+  Backend-->>Client: Отдаёт presigned URL
+
+%% Клиент загружает видео, S3 отправляет событие в Kafka
+  Client->>S3: Загружает видео по URL
+  S3-->>Kafka: Событие "UploadCompleted" (оригинал)
+
+%% Backend получает событие завершения первой загрузки
+  Kafka-->>Backend: Видео загружено
+  Backend->>Postgres: Создаёт asset видео с тегом original
+  Backend->>Kafka: Событие "OriginalUploaded"
+
+%% Worker скачивает и сжимает видео
+  Note over Worker: Масштабируемый пул воркеров
+  Kafka-->>Worker: Событие "OriginalUploaded"
+  Worker->>Worker: Скачивает и начинает сжатие
+  Worker->>Kafka: Событие "CompressionStarted"
+  Kafka-->>Backend: Событие "CompressionStarted"
+  Backend->>Postgres: Обновляет запись video.status = compressing
+  Worker->>Worker: Сжимает видео
+  Worker->>S3: Загружает сжатое видео
+  Worker->>Kafka: Событие "CompressionCompleted"
+  Kafka-->>Backend: Событие "CompressionCompleted"
+  Backend->>Postgres: Создаёт asset для сжатой версии, обновляет status = ready
+```
+
+## Получение видео
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Backend
+    participant Postgres as DB
+    participant S3
+
+    %% Клиент запрашивает ссылку на видео
+    Client->>Backend: GET /video?video_id=123&prefer_original=false
+    Backend->>Postgres: Проверить статус видео (есть ли сжатое)
+    Postgres-->>Backend: Видео: original_uploaded, compressed_ready
+
+    %% Backend решает, какой URL отдавать
+    alt Сжатое видео готово и prefer_original=false
+        Backend->>S3: Сгенерировать presigned URL для сжатого видео (время жизни ограничено)
+        S3-->>Backend: Возвращает presigned URL
+        Backend-->>Client: Отдаёт URL на сжатое видео
+    else Сжатое видео не готово или prefer_original=true
+        Backend->>S3: Сгенерировать presigned URL для оригинала (время жизни ограничено)
+        S3-->>Backend: Возвращает presigned URL
+        Backend-->>Client: Отдаёт URL на оригинал
+    end
+
+    %% Клиент напрямую загружает видео с S3
+    Client->>S3: GET presigned URL
+    S3-->>Client: Отдаёт видео
+```
+
 ### Заметки
 
 * добавить тесты на работы с uint64 в postgres
+* добавить везде проверку на выбранный account id в claims и фактический в url
 
 ### Возможности по статусам
 

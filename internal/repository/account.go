@@ -20,25 +20,39 @@ func NewAccountRepository(provider *ExecutorProvider) *AccountRepository {
 	return &AccountRepository{provider: provider}
 }
 
-func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...string) ([]domain.Account, error) {
+func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...uuid.UUID) ([]domain.Account, error) {
 	exec := r.provider.GetExecutor(ctx)
 
-	accountsID := make([]uuid.UUID, len(usersID))
+	rolesID := make(map[uuid.UUID]struct{}, len(usersID))
 
-	for i, id := range usersID {
-		accountStatusesDB, err := schema.AccountStatuses.Query(
-			sm.Where(schema.AccountStatuses.Columns.UserID.EQ(psql.S(id))),
+	// Получение уникальных значений ролей
+	for _, id := range usersID {
+		userDB, err := schema.Users.Query(
+			sm.Where(schema.Users.Columns.UserID.EQ(psql.Arg(id))),
 		).One(ctx, exec)
 		if err != nil {
 			zap.L().Error(err.Error())
-			return []domain.Account{}, nil
+			return nil, err
 		}
 
-		accountsID[i] = accountStatusesDB.AccountID
+		rolesID[userDB.RoleID] = struct{}{}
+	}
+
+	// Получение уникальных значений аккаунтов
+	accountsID := make(map[uuid.UUID]struct{}, len(rolesID))
+	for v, _ := range rolesID {
+		accountRole, err := schema.AccountRoles.Query(
+			sm.Where(schema.AccountRoles.Columns.AccountRoleID.EQ(psql.Arg(v))),
+		).One(ctx, exec)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return nil, err
+		}
+		accountsID[accountRole.AccountID] = struct{}{}
 	}
 
 	accounts := make([]domain.Account, len(accountsID))
-	for i, accountID := range accountsID {
+	for accountID, _ := range accountsID {
 		accountDB, err := schema.Accounts.Query(
 			sm.Where(schema.Accounts.Columns.AccountID.EQ(psql.Arg(accountID))),
 		).One(ctx, exec)
@@ -47,8 +61,10 @@ func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...stri
 			return []domain.Account{}, err
 		}
 
-		accounts[i] = domain.Account{}
-		accounts[i].FromDB(accountDB)
+		account := domain.Account{}
+		account.FromDB(accountDB)
+
+		accounts = append(accounts, account)
 	}
 
 	return accounts, nil

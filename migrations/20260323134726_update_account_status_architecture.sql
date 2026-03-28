@@ -18,7 +18,7 @@ COMMENT ON COLUMN app.account_roles.name IS 'Название роли';
 COMMENT ON COLUMN app.account_roles.permissions IS 'Битовая маска разрешений, связанная с ролью';
 COMMENT ON COLUMN app.account_roles.account_id IS 'Ссылка на аккаунт, которому принадлежит роль';
 
-ALTER TABLE app.users ADD COLUMN role_id uuid;
+ALTER TABLE app.users ADD COLUMN role_id uuid not null default gen_random_uuid();
 
 ALTER TABLE app.users
     ADD CONSTRAINT fk_role FOREIGN KEY (role_id) REFERENCES app.account_roles(account_role_id);

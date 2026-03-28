@@ -1,6 +1,8 @@
-package pkg
+package handler
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // URLSupplier формирует URL на основе шаблона с параметрами.
 // Шаблон должен содержать форматные спецификаторы (например, %s),
@@ -14,9 +16,9 @@ func NewURLSupplier(template string) *URLSupplier {
 	return &URLSupplier{template: template}
 }
 
-// WithTemplateParams подставляет в шаблон параметры в виде плейсхолдеров (например, :1, :2).
+// WithPathParams подставляет в шаблон параметры в виде плейсхолдеров (например, :1, :2).
 // Используется для генерации URL с именованными параметрами.
-func (s *URLSupplier) WithTemplateParams(params ...int) string {
+func (s *URLSupplier) WithPathParams(params ...PathKey) string {
 	templatedParams := make([]string, len(params))
 	for i, param := range params {
 		templatedParams[i] = fmt.Sprintf(":%v", param)

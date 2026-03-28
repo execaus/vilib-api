@@ -3,20 +3,22 @@ package domain
 import (
 	"vilib-api/internal/dbconv"
 	"vilib-api/internal/gen/schema"
+
+	"github.com/google/uuid"
 )
 
 type AccountRole struct {
-	ID             string
+	ID             uuid.UUID
 	Name           string
 	PermissionMask PermissionMask
 	IsDefault      bool
-	ParentID       *string
+	ParentID       *uuid.UUID
 }
 
 func (r *AccountRole) FromDB(db *schema.AccountRole) {
-	r.ID = db.AccountRoleID.String()
+	r.ID = db.AccountRoleID
 	r.Name = db.Name
 	r.PermissionMask = db.PermissionMask
-	r.ParentID = dbconv.NullUUIDToStrPtr(db.ParentRoleID)
+	r.ParentID = dbconv.NullValToPtr(db.ParentRoleID)
 	r.IsDefault = db.IsDefault
 }
