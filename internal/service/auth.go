@@ -10,6 +10,7 @@ import (
 	"vilib-api/internal/domain"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -38,8 +39,8 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	}
 
 	// Поиск совпадений пароля хотя бы в одном
+	var userID uuid.UUID
 	isValid := false
-	userID := ""
 	for _, user := range users {
 		if ok := s.srv.Auth.ComparePassword(user.PasswordHash, password); ok {
 			isValid = true
@@ -65,7 +66,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	}
 
 	// Сбор всех идентификаторов организаций
-	accountsID := make([]string, len(accounts))
+	accountsID := make([]uuid.UUID, len(accounts))
 	for i := 0; i < len(accounts); i++ {
 		accountsID[i] = accounts[i].ID
 	}
@@ -106,9 +107,9 @@ func (s *AuthService) GetClaimsFromToken(tokenString string) (*domain.AuthClaims
 }
 
 func (s *AuthService) GenerateToken(
-	userID string,
-	accounts []string,
-	currentAccountID string,
+	userID uuid.UUID,
+	accounts []uuid.UUID,
+	currentAccountID uuid.UUID,
 ) (string, error) {
 	claims := domain.AuthClaims{
 		UserID:           userID,

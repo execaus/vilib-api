@@ -6,6 +6,7 @@ import (
 	"vilib-api/internal/gen/schema"
 
 	"github.com/aarondl/opt/omit"
+	"github.com/google/uuid"
 	"github.com/stephenafamo/bob/dialect/psql"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"go.uber.org/zap"
@@ -43,7 +44,7 @@ func (r *UserRepository) SelectByEmail(ctx context.Context, email string) ([]dom
 	return users, nil
 }
 
-func (r *UserRepository) Insert(ctx context.Context, name, surname, hash, email string) (domain.User, error) {
+func (r *UserRepository) Insert(ctx context.Context, name, surname, hash, email string, roleID uuid.UUID) (domain.User, error) {
 	exec := r.provider.GetExecutor(ctx)
 
 	var user domain.User
@@ -53,6 +54,7 @@ func (r *UserRepository) Insert(ctx context.Context, name, surname, hash, email 
 		Surname:      omit.From(surname),
 		PasswordHash: omit.From(hash),
 		Email:        omit.From(email),
+		RoleID:       omit.From(roleID),
 	}).One(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -64,7 +66,7 @@ func (r *UserRepository) Insert(ctx context.Context, name, surname, hash, email 
 	return user, nil
 }
 
-func (r *UserRepository) SelectByID(ctx context.Context, usersID ...string) ([]domain.User, error) {
+func (r *UserRepository) SelectByID(ctx context.Context, usersID ...uuid.UUID) ([]domain.User, error) {
 	exec := r.provider.GetExecutor(ctx)
 
 	users := make([]domain.User, len(usersID))
@@ -73,14 +75,14 @@ func (r *UserRepository) SelectByID(ctx context.Context, usersID ...string) ([]d
 		users[i] = domain.User{}
 
 		userDB, err := schema.Users.Query(
-			sm.Where(schema.Users.Columns.UserID.EQ(psql.S(id))),
+			sm.Where(schema.Users.Columns.UserID.EQ(psql.Arg(id))),
 		).One(ctx, exec)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return nil, nil
 		}
 		if userDB == nil {
-			zap.L().Warn("not found: " + id)
+			zap.L().Warn("not found: " + id.String())
 			return nil, nil
 		}
 

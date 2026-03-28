@@ -5,6 +5,7 @@ import (
 	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -19,7 +20,9 @@ func NewAccountRoleService(repo repository.AccountRole, srv *Service) *AccountRo
 
 func (s *AccountRoleService) Create(
 	ctx context.Context,
-	accountID, name string, parentID *string,
+	accountID uuid.UUID,
+	name string,
+	parentID *uuid.UUID,
 	permission domain.PermissionMask,
 	isDefault bool,
 ) ([]domain.AccountRole, error) {

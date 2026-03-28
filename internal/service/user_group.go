@@ -10,8 +10,8 @@ import (
 )
 
 type UserGroupService struct {
-	srv  *Service
 	repo repository.UserGroup
+	srv  *Service
 }
 
 func (s *UserGroupService) Create(
@@ -35,6 +35,8 @@ func (s *UserGroupService) AddMembers(
 ) ([]domain.GroupMember, error) {
 	// TODO get default role id in account
 
+	roleID := uuid.New()
+
 	members, err := s.repo.InsertMembers(ctx, groupID, roleID, targetsID...)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -44,6 +46,6 @@ func (s *UserGroupService) AddMembers(
 	return members, nil
 }
 
-func NewUserGroupService(srv *Service, repo repository.UserGroup) *UserGroupService {
-	return &UserGroupService{srv: srv, repo: repo}
+func NewUserGroupService(repo repository.UserGroup, srv *Service) *UserGroupService {
+	return &UserGroupService{repo: repo, srv: srv}
 }

@@ -23,10 +23,10 @@ func NewAccountRepository(provider *ExecutorProvider) *AccountRepository {
 func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...uuid.UUID) ([]domain.Account, error) {
 	exec := r.provider.GetExecutor(ctx)
 
-	rolesID := make(map[uuid.UUID]struct{}, len(usersID))
+	rolesID := make([]uuid.UUID, len(usersID))
 
 	// Получение уникальных значений ролей
-	for _, id := range usersID {
+	for i, id := range usersID {
 		userDB, err := schema.Users.Query(
 			sm.Where(schema.Users.Columns.UserID.EQ(psql.Arg(id))),
 		).One(ctx, exec)
@@ -35,12 +35,12 @@ func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...uuid
 			return nil, err
 		}
 
-		rolesID[userDB.RoleID] = struct{}{}
+		rolesID[i] = userDB.RoleID
 	}
 
 	// Получение уникальных значений аккаунтов
 	accountsID := make(map[uuid.UUID]struct{}, len(rolesID))
-	for v, _ := range rolesID {
+	for _, v := range rolesID {
 		accountRole, err := schema.AccountRoles.Query(
 			sm.Where(schema.AccountRoles.Columns.AccountRoleID.EQ(psql.Arg(v))),
 		).One(ctx, exec)
@@ -51,7 +51,7 @@ func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...uuid
 		accountsID[accountRole.AccountID] = struct{}{}
 	}
 
-	accounts := make([]domain.Account, len(accountsID))
+	accounts := make([]domain.Account, 0, len(accountsID))
 	for accountID, _ := range accountsID {
 		accountDB, err := schema.Accounts.Query(
 			sm.Where(schema.Accounts.Columns.AccountID.EQ(psql.Arg(accountID))),
@@ -89,7 +89,7 @@ func (r *AccountRepository) Insert(ctx context.Context, name, email string) (dom
 	return account, nil
 }
 
-func (r *AccountRepository) SelectByID(ctx context.Context, accountsID ...string) ([]domain.Account, error) {
+func (r *AccountRepository) SelectByID(ctx context.Context, accountsID ...uuid.UUID) ([]domain.Account, error) {
 	exec := r.provider.GetExecutor(ctx)
 
 	accounts := make([]domain.Account, len(accountsID))
@@ -98,7 +98,7 @@ func (r *AccountRepository) SelectByID(ctx context.Context, accountsID ...string
 		accounts[i] = domain.Account{}
 
 		accountDB, err := schema.Accounts.Query(
-			sm.Where(schema.Accounts.Columns.AccountID.EQ(psql.S(id))),
+			sm.Where(schema.Accounts.Columns.AccountID.EQ(psql.Arg(id))),
 		).One(ctx, exec)
 		if err != nil {
 			zap.L().Error(err.Error())
@@ -106,7 +106,7 @@ func (r *AccountRepository) SelectByID(ctx context.Context, accountsID ...string
 		}
 
 		if accountDB == nil {
-			zap.L().Warn("account not found: " + id)
+			zap.L().Warn("account not found: " + id.String())
 			return nil, nil
 		}
 

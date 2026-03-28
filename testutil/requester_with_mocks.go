@@ -8,11 +8,11 @@ import (
 	"testing"
 	"vilib-api/internal/handler"
 	"vilib-api/internal/saga"
-	mock_saga "vilib-api/internal/saga/mocks"
-	mock_service "vilib-api/internal/service/mocks"
+	mock_saga "vilib-api/internal/saga/saga_mocks"
+	mock_service "vilib-api/internal/service/service_mocks"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/mock/gomock"
+	"github.com/gojuno/minimock/v3"
 )
 
 type RequesterWithMocks struct {
@@ -75,26 +75,29 @@ func (r *RequesterWithMocks) Version(version string) *RequesterWithMocks {
 func (r *RequesterWithMocks) Run(response any) (status int) {
 	gin.SetMode(gin.TestMode)
 
-	ctrl := gomock.NewController(r.t)
-	defer ctrl.Finish()
+	ctrl := minimock.NewController(r.t)
 
 	s := &ServiceMock{
-		Auth:          mock_service.NewMockAuth(ctrl),
-		Account:       mock_service.NewMockAccount(ctrl),
-		User:          mock_service.NewMockUser(ctrl),
-		Email:         mock_service.NewMockEmail(ctrl),
-		AccountStatus: mock_service.NewMockAccountStatus(ctrl),
+		Auth:        mock_service.NewAuthMock(ctrl),
+		User:        mock_service.NewUserMock(ctrl),
+		Account:     mock_service.NewAccountMock(ctrl),
+		Email:       mock_service.NewEmailMock(ctrl),
+		AccountRole: mock_service.NewAccountRoleMock(ctrl),
+		UserGroup:   mock_service.NewUserGroupMock(ctrl),
+		GroupRole:   mock_service.NewGroupRoleMock(ctrl),
+		Video:       mock_service.NewVideoMock(ctrl),
+		VideoAsset:  mock_service.NewVideoAssetMock(ctrl),
 	}
 
 	if r.prepareService != nil {
 		r.prepareService(r.t, s)
 	}
 
-	repo := mock_saga.NewMockTransactable(ctrl)
-	tx := mock_saga.NewMockBobTransaction(ctrl)
+	repo := mock_saga.NewTransactableMock(ctrl)
+	tx := mock_saga.NewBobTransactionMock(ctrl)
 
-	tx.EXPECT().Commit(gomock.Any()).Return(nil).AnyTimes()
-	repo.EXPECT().WithTx(gomock.Any()).Return(tx, nil).AnyTimes()
+	tx.CommitMock.Expect(minimock.AnyContext).Return(nil)
+	repo.WithTxMock.Expect(minimock.AnyContext).Return(tx, nil)
 
 	h := handler.NewHandler(saga.NewSagaRunner(s.ToServices(), repo))
 	router := h.GetRouter()

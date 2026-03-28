@@ -10,6 +10,16 @@ import (
 	"github.com/google/uuid"
 )
 
+//go:generate minimock -i Auth -o ./service_mocks/auth_mock.go
+//go:generate minimock -i Account -o ./service_mocks/account_mock.go
+//go:generate minimock -i AccountRole -o ./service_mocks/account_role_mock.go
+//go:generate minimock -i User -o ./service_mocks/user_mock.go
+//go:generate minimock -i Email -o ./service_mocks/email_mock.go
+//go:generate minimock -i UserGroup -o ./service_mocks/user_group_mock.go
+//go:generate minimock -i GroupRole -o ./service_mocks/group_role_mock.go
+//go:generate minimock -i Video -o ./service_mocks/video_mock.go
+//go:generate minimock -i VideoAsset -o ./service_mocks/video_asset_mock.go
+
 type Auth interface {
 	GenerateToken(userID uuid.UUID, accounts []uuid.UUID, currentAccountID uuid.UUID) (string, error)
 	ComparePassword(hashedPassword string, password string) bool
@@ -85,7 +95,6 @@ type VideoAsset interface {
 	Get(ctx context.Context, videoID uuid.UUID) ([]domain.VideoAsset, error)
 }
 
-//go:generate mockgen -source=./service.go -destination=./mocks/service.go -package=mock_service
 type Service struct {
 	Auth
 	Account

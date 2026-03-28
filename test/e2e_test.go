@@ -20,10 +20,6 @@ const (
 	adminEmail = "admin@mail.ru"
 )
 
-var (
-	migrationsPath = []string{"../migrations"}
-)
-
 func TestEnd2End(t *testing.T) {
 	localMailBox := make(chan string, 1)
 	mainScenario(t, localMailBox)
@@ -41,7 +37,7 @@ func mainScenario(t *testing.T, localMailBox chan string) {
 		},
 	}
 
-	testutil.WithDB(t, migrationsPath, func(bobDB *bob.DB) {
+	testutil.WithDB(t, testutil.MigrationsPath, func(bobDB *bob.DB) {
 		provider := repository.NewExecutorProvider(bobDB)
 		r := repository.NewRepository(provider)
 		s := service.NewService(cfg, localMailBox, r)

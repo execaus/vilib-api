@@ -7,6 +7,14 @@ import (
 	"github.com/google/uuid"
 )
 
+//go:generate minimock -i Account -o ./repository_mocks/account_mock.go
+//go:generate minimock -i User -o ./repository_mocks/user_mock.go
+//go:generate minimock -i AccountRole -o ./repository_mocks/account_role_mock.go
+//go:generate minimock -i UserGroup -o ./repository_mocks/user_group_mock.go
+//go:generate minimock -i GroupRole -o ./repository_mocks/group_role_mock.go
+//go:generate minimock -i Video -o ./repository_mocks/video_mock.go
+//go:generate minimock -i VideoAsset -o ./repository_mocks/video_asset_mock.go
+
 type Account interface {
 	Insert(ctx context.Context, name, email string) (domain.Account, error)
 	SelectByUsersID(ctx context.Context, usersID ...uuid.UUID) ([]domain.Account, error)
@@ -15,7 +23,7 @@ type Account interface {
 
 type User interface {
 	SelectByEmail(ctx context.Context, email string) ([]domain.User, error)
-	Insert(ctx context.Context, name, surname, hash, email string) (domain.User, error)
+	Insert(ctx context.Context, name, surname, hash, email string, roleID uuid.UUID) (domain.User, error)
 	SelectByID(ctx context.Context, usersID ...uuid.UUID) ([]domain.User, error)
 }
 
@@ -50,10 +58,15 @@ type Video interface {
 
 type VideoAsset interface {
 	Select(ctx context.Context, videoID uuid.UUID) ([]domain.VideoAsset, error)
-	Create(ctx context.Context, videoID uuid.UUID, tag domain.VideoAssetTag, bucketName, contentType string, bytes int) (domain.VideoAsset, error)
+	Create(
+		ctx context.Context,
+		videoID uuid.UUID,
+		tag domain.VideoAssetTag,
+		bucketName, contentType string,
+		bytes int,
+	) (domain.VideoAsset, error)
 }
 
-//go:generate mockgen -source=./repository.go -destination=./mocks/repository.go -package=mock_repository
 type Repository struct {
 	Account
 	User

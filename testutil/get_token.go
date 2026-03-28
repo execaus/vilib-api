@@ -3,12 +3,14 @@ package testutil
 import (
 	"vilib-api/config"
 	"vilib-api/internal/service"
+
+	"github.com/google/uuid"
 )
 
 func GetToken(
-	userID string,
-	accounts []string,
-	currentAccountID string,
+	userID uuid.UUID,
+	accounts []uuid.UUID,
+	currentAccountID uuid.UUID,
 ) (string, error) {
 	srv := service.NewAuthService(config.AuthConfig{}, nil)
 

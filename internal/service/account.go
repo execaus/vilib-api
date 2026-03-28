@@ -7,6 +7,7 @@ import (
 	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 )
@@ -61,10 +62,10 @@ func (s *AccountService) Create(ctx context.Context, userName, userSurname, emai
 	}
 
 	// Назначение пользователю статус супер администратора аккаунта
-	if _, err = s.srv.AccountStatus.Issue(ctx, user.ID, domain.AccountSuperAdminBitPosition); err != nil {
-		zap.L().Error(err.Error())
-		return domain.Account{}, err
-	}
+	//if _, err = s.srv.AccountStatus.Issue(ctx, user.ID, domain.AccountSuperAdminBitPosition); err != nil {
+	//	zap.L().Error(err.Error())
+	//	return domain.Account{}, err
+	//}
 
 	if err = s.srv.Email.SendRegisteredMail(ctx, user.Email, password); err != nil {
 		zap.L().Error(err.Error())
@@ -74,7 +75,7 @@ func (s *AccountService) Create(ctx context.Context, userName, userSurname, emai
 	return account, nil
 }
 
-func (s *AccountService) CreateUser(ctx context.Context, accountID, name, surname, email string) (domain.User, error) {
+func (s *AccountService) CreateUser(ctx context.Context, accountID uuid.UUID, name, surname, email string) (domain.User, error) {
 	// Существует ли пользователь в аккаунте
 	exists, err := s.srv.Account.IsExistsUserByEmail(ctx, accountID, email)
 	if exists {
@@ -97,10 +98,10 @@ func (s *AccountService) CreateUser(ctx context.Context, accountID, name, surnam
 	}
 
 	// Связывание пользователя с аккаунтом с правами обычного пользователя
-	if _, err = s.srv.AccountStatus.Issue(ctx, user.ID, domain.AccountUserBitPosition); err != nil {
-		zap.L().Error(err.Error())
-		return domain.User{}, err
-	}
+	//if _, err = s.srv.AccountStatus.Issue(ctx, user.ID, domain.AccountUserBitPosition); err != nil {
+	//	zap.L().Error(err.Error())
+	//	return domain.User{}, err
+	//}
 
 	// Отправка пароля новому пользователю на почту
 	if err = s.srv.Email.SendCreateUserEmail(ctx, email, password); err != nil {
@@ -122,21 +123,18 @@ func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]do
 		return nil, nil
 	}
 
-	usersID := make([]string, len(users))
+	usersID := make([]uuid.UUID, len(users))
 	for i, user := range users {
 		usersID[i] = user.ID
 	}
 
-	accountStatusesID, err := s.srv.AccountStatus.GetByUsersID(ctx, usersID...)
-	if err != nil {
-		zap.L().Error(err.Error())
-		return nil, err
-	}
-
-	accountsID := make([]string, len(accountStatusesID))
-	for i, status := range accountStatusesID {
-		accountsID[i] = status.AccountID
-	}
+	//accountStatusesID, err := s.srv.AccountStatus.GetByUsersID(ctx, usersID...)
+	//if err != nil {
+	//	zap.L().Error(err.Error())
+	//	return nil, err
+	//}
+	accountStatusesID := make([]uuid.UUID, 0)
+	accountsID := make([]uuid.UUID, len(accountStatusesID))
 
 	accounts, err := s.GetByID(ctx, accountsID...)
 	if err != nil {
@@ -147,7 +145,7 @@ func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]do
 	return accounts, nil
 }
 
-func (s *AccountService) IsExistsUserByEmail(ctx context.Context, accountID, email string) (bool, error) {
+func (s *AccountService) IsExistsUserByEmail(ctx context.Context, accountID uuid.UUID, email string) (bool, error) {
 	accounts, err := s.srv.Account.GetByUserEmail(ctx, email)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -159,7 +157,7 @@ func (s *AccountService) IsExistsUserByEmail(ctx context.Context, accountID, ema
 	}), nil
 }
 
-func (s *AccountService) GetByID(ctx context.Context, accountsID ...string) ([]domain.Account, error) {
+func (s *AccountService) GetByID(ctx context.Context, accountsID ...uuid.UUID) ([]domain.Account, error) {
 	accounts, err := s.repo.SelectByID(ctx, accountsID...)
 	if err != nil {
 		zap.L().Error(err.Error())

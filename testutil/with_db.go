@@ -16,6 +16,8 @@ import (
 // и передаёт инициализированное подключение bob.DB в тестовую функцию.
 // Используется для интеграционных тестов с реальной базой данных.
 func WithDB(t *testing.T, migrationsPath []string, fn func(bobDB *bob.DB)) {
+	t.Helper()
+
 	dbName := "app"
 	dbUser := "user"
 	dbPassword := "pass"

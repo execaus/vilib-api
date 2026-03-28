@@ -30,7 +30,11 @@ func (s *VideoService) Get(
 
 	s.srv.VideoAsset.Get(ctx, videoID)
 
-	preflightURL, err := s.s3.GetPreflightURL(ctx, bucketName, assetID, domain.VideoStreamURLTTL)
+	var (
+		bucketName domain.VideoBucket
+		assetID    uuid.UUID
+	)
+	preflightURL, _ := s.s3.GetPreflightURL(ctx, bucketName, assetID, domain.VideoStreamURLTTL)
 
 	return preflightURL, nil
 }
@@ -39,9 +43,9 @@ func (s *VideoService) GetPreflightUploadURL(
 	ctx context.Context,
 	accountID, groupID, userID uuid.UUID,
 ) (domain.PreflightURL, error) {
-	video, err := s.repo.Insert(ctx, domain.DefaultVideoName, groupID, userID, domain.VideoStatusUploading)
+	video, _ := s.repo.Insert(ctx, domain.DefaultVideoName, groupID, userID, domain.VideoStatusUploading)
 
-	url, err := s.s3.GetPreflightUploadURL(ctx, domain.VideoBucketOriginal, video.ID, domain.VideoUploadURLTTL)
+	url, _ := s.s3.GetPreflightUploadURL(ctx, domain.VideoBucketOriginal, video.ID, domain.VideoUploadURLTTL)
 
 	return url, nil
 }
