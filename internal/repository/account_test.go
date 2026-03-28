@@ -59,6 +59,16 @@ func TestRepository_AccountSelectByID_Success(t *testing.T) {
 	})
 }
 
+func TestRepository_AccountSelectByID_NilNotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		accounts, err := r.Account.SelectByID(t.Context(), uuid.New())
+		require.Nil(t, accounts)
+		require.ErrorIs(t, repository.ErrNotFound, err)
+	})
+}
+
 func TestRepository_AccountSelectByUsersID_Success(t *testing.T) {
 	t.Parallel()
 
@@ -128,5 +138,15 @@ func TestRepository_AccountSelectByUsersID_Success(t *testing.T) {
 		for _, id := range expectedIDs {
 			require.Contains(t, actualIDs, id)
 		}
+	})
+}
+
+func TestRepository_AccountSelectByUsersID_NilNotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		accounts, err := r.Account.SelectByUsersID(t.Context(), uuid.New())
+		require.Nil(t, accounts)
+		require.ErrorIs(t, repository.ErrNotFound, err)
 	})
 }

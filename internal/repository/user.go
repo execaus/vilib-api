@@ -2,11 +2,13 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/schema"
 
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stephenafamo/bob/dialect/psql"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"go.uber.org/zap"
@@ -32,7 +34,7 @@ func (r *UserRepository) SelectByEmail(ctx context.Context, email string) ([]dom
 	}
 
 	if usersDB == nil {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 
 	users := make([]domain.User, len(usersDB))
@@ -44,7 +46,11 @@ func (r *UserRepository) SelectByEmail(ctx context.Context, email string) ([]dom
 	return users, nil
 }
 
-func (r *UserRepository) Insert(ctx context.Context, name, surname, hash, email string, roleID uuid.UUID) (domain.User, error) {
+func (r *UserRepository) Insert(
+	ctx context.Context,
+	name, surname, hash, email string,
+	roleID uuid.UUID,
+) (domain.User, error) {
 	exec := r.provider.GetExecutor(ctx)
 
 	var user domain.User
@@ -78,11 +84,10 @@ func (r *UserRepository) SelectByID(ctx context.Context, usersID ...uuid.UUID) (
 			sm.Where(schema.Users.Columns.UserID.EQ(psql.Arg(id))),
 		).One(ctx, exec)
 		if err != nil {
+			if errors.Is(pgx.ErrNoRows, err) {
+				return nil, ErrNotFound
+			}
 			zap.L().Error(err.Error())
-			return nil, nil
-		}
-		if userDB == nil {
-			zap.L().Warn("not found: " + id.String())
 			return nil, nil
 		}
 

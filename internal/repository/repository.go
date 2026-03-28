@@ -36,8 +36,11 @@ type AccountRole interface {
 }
 
 type UserGroup interface {
-	InsertGroup(ctx context.Context, accountID uuid.UUID, name string) (domain.UserGroup, error)
-	InsertMembers(ctx context.Context, groupID, roleID uuid.UUID, usersID ...uuid.UUID) ([]domain.GroupMember, error)
+	Insert(ctx context.Context, accountID uuid.UUID, name string) (domain.UserGroup, error)
+}
+
+type GroupMember interface {
+	Insert(ctx context.Context, groupID, roleID uuid.UUID, usersID ...uuid.UUID) ([]domain.GroupMember, error)
 }
 
 type GroupRole interface {
@@ -48,6 +51,7 @@ type GroupRole interface {
 		permission domain.PermissionMask,
 		isDefault bool,
 	) (domain.GroupRole, error)
+	SelectByAccount(ctx context.Context, accountID uuid.UUID) ([]domain.GroupRole, error)
 }
 
 type Video interface {
@@ -72,6 +76,7 @@ type Repository struct {
 	User
 	AccountRole
 	UserGroup
+	GroupMember
 	GroupRole
 	Video
 	VideoAsset
@@ -83,6 +88,7 @@ func NewRepository(provider *ExecutorProvider) *Repository {
 		User:        NewUserRepository(provider),
 		AccountRole: NewAccountRoleRepository(provider),
 		UserGroup:   NewUserGroupRepository(provider),
+		GroupMember: NewGroupMemberRepository(provider),
 		GroupRole:   NewGroupRoleRepository(provider),
 	}
 }

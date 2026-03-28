@@ -63,6 +63,10 @@ func (r *AccountRoleRepository) SelectByAccountID(
 		return nil, err
 	}
 
+	if accountRolesDB == nil {
+		return nil, ErrNotFound
+	}
+
 	accountRoles := make([]domain.AccountRole, len(accountRolesDB))
 	for i, role := range accountRolesDB {
 		accountRoles[i] = domain.AccountRole{}

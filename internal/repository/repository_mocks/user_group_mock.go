@@ -20,19 +20,12 @@ type UserGroupMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
-	funcInsertGroup          func(ctx context.Context, accountID uuid.UUID, name string) (u1 domain.UserGroup, err error)
-	funcInsertGroupOrigin    string
-	inspectFuncInsertGroup   func(ctx context.Context, accountID uuid.UUID, name string)
-	afterInsertGroupCounter  uint64
-	beforeInsertGroupCounter uint64
-	InsertGroupMock          mUserGroupMockInsertGroup
-
-	funcInsertMembers          func(ctx context.Context, groupID uuid.UUID, roleID uuid.UUID, usersID ...uuid.UUID) (ga1 []domain.GroupMember, err error)
-	funcInsertMembersOrigin    string
-	inspectFuncInsertMembers   func(ctx context.Context, groupID uuid.UUID, roleID uuid.UUID, usersID ...uuid.UUID)
-	afterInsertMembersCounter  uint64
-	beforeInsertMembersCounter uint64
-	InsertMembersMock          mUserGroupMockInsertMembers
+	funcInsert          func(ctx context.Context, accountID uuid.UUID, name string) (u1 domain.UserGroup, err error)
+	funcInsertOrigin    string
+	inspectFuncInsert   func(ctx context.Context, accountID uuid.UUID, name string)
+	afterInsertCounter  uint64
+	beforeInsertCounter uint64
+	InsertMock          mUserGroupMockInsert
 }
 
 // NewUserGroupMock returns a mock for mm_repository.UserGroup
@@ -43,63 +36,60 @@ func NewUserGroupMock(t minimock.Tester) *UserGroupMock {
 		controller.RegisterMocker(m)
 	}
 
-	m.InsertGroupMock = mUserGroupMockInsertGroup{mock: m}
-	m.InsertGroupMock.callArgs = []*UserGroupMockInsertGroupParams{}
-
-	m.InsertMembersMock = mUserGroupMockInsertMembers{mock: m}
-	m.InsertMembersMock.callArgs = []*UserGroupMockInsertMembersParams{}
+	m.InsertMock = mUserGroupMockInsert{mock: m}
+	m.InsertMock.callArgs = []*UserGroupMockInsertParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
 	return m
 }
 
-type mUserGroupMockInsertGroup struct {
+type mUserGroupMockInsert struct {
 	optional           bool
 	mock               *UserGroupMock
-	defaultExpectation *UserGroupMockInsertGroupExpectation
-	expectations       []*UserGroupMockInsertGroupExpectation
+	defaultExpectation *UserGroupMockInsertExpectation
+	expectations       []*UserGroupMockInsertExpectation
 
-	callArgs []*UserGroupMockInsertGroupParams
+	callArgs []*UserGroupMockInsertParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// UserGroupMockInsertGroupExpectation specifies expectation struct of the UserGroup.InsertGroup
-type UserGroupMockInsertGroupExpectation struct {
+// UserGroupMockInsertExpectation specifies expectation struct of the UserGroup.Insert
+type UserGroupMockInsertExpectation struct {
 	mock               *UserGroupMock
-	params             *UserGroupMockInsertGroupParams
-	paramPtrs          *UserGroupMockInsertGroupParamPtrs
-	expectationOrigins UserGroupMockInsertGroupExpectationOrigins
-	results            *UserGroupMockInsertGroupResults
+	params             *UserGroupMockInsertParams
+	paramPtrs          *UserGroupMockInsertParamPtrs
+	expectationOrigins UserGroupMockInsertExpectationOrigins
+	results            *UserGroupMockInsertResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// UserGroupMockInsertGroupParams contains parameters of the UserGroup.InsertGroup
-type UserGroupMockInsertGroupParams struct {
+// UserGroupMockInsertParams contains parameters of the UserGroup.Insert
+type UserGroupMockInsertParams struct {
 	ctx       context.Context
 	accountID uuid.UUID
 	name      string
 }
 
-// UserGroupMockInsertGroupParamPtrs contains pointers to parameters of the UserGroup.InsertGroup
-type UserGroupMockInsertGroupParamPtrs struct {
+// UserGroupMockInsertParamPtrs contains pointers to parameters of the UserGroup.Insert
+type UserGroupMockInsertParamPtrs struct {
 	ctx       *context.Context
 	accountID *uuid.UUID
 	name      *string
 }
 
-// UserGroupMockInsertGroupResults contains results of the UserGroup.InsertGroup
-type UserGroupMockInsertGroupResults struct {
+// UserGroupMockInsertResults contains results of the UserGroup.Insert
+type UserGroupMockInsertResults struct {
 	u1  domain.UserGroup
 	err error
 }
 
-// UserGroupMockInsertGroupOrigins contains origins of expectations of the UserGroup.InsertGroup
-type UserGroupMockInsertGroupExpectationOrigins struct {
+// UserGroupMockInsertOrigins contains origins of expectations of the UserGroup.Insert
+type UserGroupMockInsertExpectationOrigins struct {
 	origin          string
 	originCtx       string
 	originAccountID string
@@ -111,725 +101,320 @@ type UserGroupMockInsertGroupExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmInsertGroup *mUserGroupMockInsertGroup) Optional() *mUserGroupMockInsertGroup {
-	mmInsertGroup.optional = true
-	return mmInsertGroup
+func (mmInsert *mUserGroupMockInsert) Optional() *mUserGroupMockInsert {
+	mmInsert.optional = true
+	return mmInsert
 }
 
-// Expect sets up expected params for UserGroup.InsertGroup
-func (mmInsertGroup *mUserGroupMockInsertGroup) Expect(ctx context.Context, accountID uuid.UUID, name string) *mUserGroupMockInsertGroup {
-	if mmInsertGroup.mock.funcInsertGroup != nil {
-		mmInsertGroup.mock.t.Fatalf("UserGroupMock.InsertGroup mock is already set by Set")
+// Expect sets up expected params for UserGroup.Insert
+func (mmInsert *mUserGroupMockInsert) Expect(ctx context.Context, accountID uuid.UUID, name string) *mUserGroupMockInsert {
+	if mmInsert.mock.funcInsert != nil {
+		mmInsert.mock.t.Fatalf("UserGroupMock.Insert mock is already set by Set")
 	}
 
-	if mmInsertGroup.defaultExpectation == nil {
-		mmInsertGroup.defaultExpectation = &UserGroupMockInsertGroupExpectation{}
+	if mmInsert.defaultExpectation == nil {
+		mmInsert.defaultExpectation = &UserGroupMockInsertExpectation{}
 	}
 
-	if mmInsertGroup.defaultExpectation.paramPtrs != nil {
-		mmInsertGroup.mock.t.Fatalf("UserGroupMock.InsertGroup mock is already set by ExpectParams functions")
+	if mmInsert.defaultExpectation.paramPtrs != nil {
+		mmInsert.mock.t.Fatalf("UserGroupMock.Insert mock is already set by ExpectParams functions")
 	}
 
-	mmInsertGroup.defaultExpectation.params = &UserGroupMockInsertGroupParams{ctx, accountID, name}
-	mmInsertGroup.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmInsertGroup.expectations {
-		if minimock.Equal(e.params, mmInsertGroup.defaultExpectation.params) {
-			mmInsertGroup.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmInsertGroup.defaultExpectation.params)
+	mmInsert.defaultExpectation.params = &UserGroupMockInsertParams{ctx, accountID, name}
+	mmInsert.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmInsert.expectations {
+		if minimock.Equal(e.params, mmInsert.defaultExpectation.params) {
+			mmInsert.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmInsert.defaultExpectation.params)
 		}
 	}
 
-	return mmInsertGroup
+	return mmInsert
 }
 
-// ExpectCtxParam1 sets up expected param ctx for UserGroup.InsertGroup
-func (mmInsertGroup *mUserGroupMockInsertGroup) ExpectCtxParam1(ctx context.Context) *mUserGroupMockInsertGroup {
-	if mmInsertGroup.mock.funcInsertGroup != nil {
-		mmInsertGroup.mock.t.Fatalf("UserGroupMock.InsertGroup mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for UserGroup.Insert
+func (mmInsert *mUserGroupMockInsert) ExpectCtxParam1(ctx context.Context) *mUserGroupMockInsert {
+	if mmInsert.mock.funcInsert != nil {
+		mmInsert.mock.t.Fatalf("UserGroupMock.Insert mock is already set by Set")
 	}
 
-	if mmInsertGroup.defaultExpectation == nil {
-		mmInsertGroup.defaultExpectation = &UserGroupMockInsertGroupExpectation{}
+	if mmInsert.defaultExpectation == nil {
+		mmInsert.defaultExpectation = &UserGroupMockInsertExpectation{}
 	}
 
-	if mmInsertGroup.defaultExpectation.params != nil {
-		mmInsertGroup.mock.t.Fatalf("UserGroupMock.InsertGroup mock is already set by Expect")
+	if mmInsert.defaultExpectation.params != nil {
+		mmInsert.mock.t.Fatalf("UserGroupMock.Insert mock is already set by Expect")
 	}
 
-	if mmInsertGroup.defaultExpectation.paramPtrs == nil {
-		mmInsertGroup.defaultExpectation.paramPtrs = &UserGroupMockInsertGroupParamPtrs{}
+	if mmInsert.defaultExpectation.paramPtrs == nil {
+		mmInsert.defaultExpectation.paramPtrs = &UserGroupMockInsertParamPtrs{}
 	}
-	mmInsertGroup.defaultExpectation.paramPtrs.ctx = &ctx
-	mmInsertGroup.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmInsert.defaultExpectation.paramPtrs.ctx = &ctx
+	mmInsert.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmInsertGroup
+	return mmInsert
 }
 
-// ExpectAccountIDParam2 sets up expected param accountID for UserGroup.InsertGroup
-func (mmInsertGroup *mUserGroupMockInsertGroup) ExpectAccountIDParam2(accountID uuid.UUID) *mUserGroupMockInsertGroup {
-	if mmInsertGroup.mock.funcInsertGroup != nil {
-		mmInsertGroup.mock.t.Fatalf("UserGroupMock.InsertGroup mock is already set by Set")
+// ExpectAccountIDParam2 sets up expected param accountID for UserGroup.Insert
+func (mmInsert *mUserGroupMockInsert) ExpectAccountIDParam2(accountID uuid.UUID) *mUserGroupMockInsert {
+	if mmInsert.mock.funcInsert != nil {
+		mmInsert.mock.t.Fatalf("UserGroupMock.Insert mock is already set by Set")
 	}
 
-	if mmInsertGroup.defaultExpectation == nil {
-		mmInsertGroup.defaultExpectation = &UserGroupMockInsertGroupExpectation{}
+	if mmInsert.defaultExpectation == nil {
+		mmInsert.defaultExpectation = &UserGroupMockInsertExpectation{}
 	}
 
-	if mmInsertGroup.defaultExpectation.params != nil {
-		mmInsertGroup.mock.t.Fatalf("UserGroupMock.InsertGroup mock is already set by Expect")
+	if mmInsert.defaultExpectation.params != nil {
+		mmInsert.mock.t.Fatalf("UserGroupMock.Insert mock is already set by Expect")
 	}
 
-	if mmInsertGroup.defaultExpectation.paramPtrs == nil {
-		mmInsertGroup.defaultExpectation.paramPtrs = &UserGroupMockInsertGroupParamPtrs{}
+	if mmInsert.defaultExpectation.paramPtrs == nil {
+		mmInsert.defaultExpectation.paramPtrs = &UserGroupMockInsertParamPtrs{}
 	}
-	mmInsertGroup.defaultExpectation.paramPtrs.accountID = &accountID
-	mmInsertGroup.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+	mmInsert.defaultExpectation.paramPtrs.accountID = &accountID
+	mmInsert.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
 
-	return mmInsertGroup
+	return mmInsert
 }
 
-// ExpectNameParam3 sets up expected param name for UserGroup.InsertGroup
-func (mmInsertGroup *mUserGroupMockInsertGroup) ExpectNameParam3(name string) *mUserGroupMockInsertGroup {
-	if mmInsertGroup.mock.funcInsertGroup != nil {
-		mmInsertGroup.mock.t.Fatalf("UserGroupMock.InsertGroup mock is already set by Set")
+// ExpectNameParam3 sets up expected param name for UserGroup.Insert
+func (mmInsert *mUserGroupMockInsert) ExpectNameParam3(name string) *mUserGroupMockInsert {
+	if mmInsert.mock.funcInsert != nil {
+		mmInsert.mock.t.Fatalf("UserGroupMock.Insert mock is already set by Set")
 	}
 
-	if mmInsertGroup.defaultExpectation == nil {
-		mmInsertGroup.defaultExpectation = &UserGroupMockInsertGroupExpectation{}
+	if mmInsert.defaultExpectation == nil {
+		mmInsert.defaultExpectation = &UserGroupMockInsertExpectation{}
 	}
 
-	if mmInsertGroup.defaultExpectation.params != nil {
-		mmInsertGroup.mock.t.Fatalf("UserGroupMock.InsertGroup mock is already set by Expect")
+	if mmInsert.defaultExpectation.params != nil {
+		mmInsert.mock.t.Fatalf("UserGroupMock.Insert mock is already set by Expect")
 	}
 
-	if mmInsertGroup.defaultExpectation.paramPtrs == nil {
-		mmInsertGroup.defaultExpectation.paramPtrs = &UserGroupMockInsertGroupParamPtrs{}
+	if mmInsert.defaultExpectation.paramPtrs == nil {
+		mmInsert.defaultExpectation.paramPtrs = &UserGroupMockInsertParamPtrs{}
 	}
-	mmInsertGroup.defaultExpectation.paramPtrs.name = &name
-	mmInsertGroup.defaultExpectation.expectationOrigins.originName = minimock.CallerInfo(1)
+	mmInsert.defaultExpectation.paramPtrs.name = &name
+	mmInsert.defaultExpectation.expectationOrigins.originName = minimock.CallerInfo(1)
 
-	return mmInsertGroup
+	return mmInsert
 }
 
-// Inspect accepts an inspector function that has same arguments as the UserGroup.InsertGroup
-func (mmInsertGroup *mUserGroupMockInsertGroup) Inspect(f func(ctx context.Context, accountID uuid.UUID, name string)) *mUserGroupMockInsertGroup {
-	if mmInsertGroup.mock.inspectFuncInsertGroup != nil {
-		mmInsertGroup.mock.t.Fatalf("Inspect function is already set for UserGroupMock.InsertGroup")
+// Inspect accepts an inspector function that has same arguments as the UserGroup.Insert
+func (mmInsert *mUserGroupMockInsert) Inspect(f func(ctx context.Context, accountID uuid.UUID, name string)) *mUserGroupMockInsert {
+	if mmInsert.mock.inspectFuncInsert != nil {
+		mmInsert.mock.t.Fatalf("Inspect function is already set for UserGroupMock.Insert")
 	}
 
-	mmInsertGroup.mock.inspectFuncInsertGroup = f
+	mmInsert.mock.inspectFuncInsert = f
 
-	return mmInsertGroup
+	return mmInsert
 }
 
-// Return sets up results that will be returned by UserGroup.InsertGroup
-func (mmInsertGroup *mUserGroupMockInsertGroup) Return(u1 domain.UserGroup, err error) *UserGroupMock {
-	if mmInsertGroup.mock.funcInsertGroup != nil {
-		mmInsertGroup.mock.t.Fatalf("UserGroupMock.InsertGroup mock is already set by Set")
+// Return sets up results that will be returned by UserGroup.Insert
+func (mmInsert *mUserGroupMockInsert) Return(u1 domain.UserGroup, err error) *UserGroupMock {
+	if mmInsert.mock.funcInsert != nil {
+		mmInsert.mock.t.Fatalf("UserGroupMock.Insert mock is already set by Set")
 	}
 
-	if mmInsertGroup.defaultExpectation == nil {
-		mmInsertGroup.defaultExpectation = &UserGroupMockInsertGroupExpectation{mock: mmInsertGroup.mock}
+	if mmInsert.defaultExpectation == nil {
+		mmInsert.defaultExpectation = &UserGroupMockInsertExpectation{mock: mmInsert.mock}
 	}
-	mmInsertGroup.defaultExpectation.results = &UserGroupMockInsertGroupResults{u1, err}
-	mmInsertGroup.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmInsertGroup.mock
+	mmInsert.defaultExpectation.results = &UserGroupMockInsertResults{u1, err}
+	mmInsert.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmInsert.mock
 }
 
-// Set uses given function f to mock the UserGroup.InsertGroup method
-func (mmInsertGroup *mUserGroupMockInsertGroup) Set(f func(ctx context.Context, accountID uuid.UUID, name string) (u1 domain.UserGroup, err error)) *UserGroupMock {
-	if mmInsertGroup.defaultExpectation != nil {
-		mmInsertGroup.mock.t.Fatalf("Default expectation is already set for the UserGroup.InsertGroup method")
+// Set uses given function f to mock the UserGroup.Insert method
+func (mmInsert *mUserGroupMockInsert) Set(f func(ctx context.Context, accountID uuid.UUID, name string) (u1 domain.UserGroup, err error)) *UserGroupMock {
+	if mmInsert.defaultExpectation != nil {
+		mmInsert.mock.t.Fatalf("Default expectation is already set for the UserGroup.Insert method")
 	}
 
-	if len(mmInsertGroup.expectations) > 0 {
-		mmInsertGroup.mock.t.Fatalf("Some expectations are already set for the UserGroup.InsertGroup method")
+	if len(mmInsert.expectations) > 0 {
+		mmInsert.mock.t.Fatalf("Some expectations are already set for the UserGroup.Insert method")
 	}
 
-	mmInsertGroup.mock.funcInsertGroup = f
-	mmInsertGroup.mock.funcInsertGroupOrigin = minimock.CallerInfo(1)
-	return mmInsertGroup.mock
+	mmInsert.mock.funcInsert = f
+	mmInsert.mock.funcInsertOrigin = minimock.CallerInfo(1)
+	return mmInsert.mock
 }
 
-// When sets expectation for the UserGroup.InsertGroup which will trigger the result defined by the following
+// When sets expectation for the UserGroup.Insert which will trigger the result defined by the following
 // Then helper
-func (mmInsertGroup *mUserGroupMockInsertGroup) When(ctx context.Context, accountID uuid.UUID, name string) *UserGroupMockInsertGroupExpectation {
-	if mmInsertGroup.mock.funcInsertGroup != nil {
-		mmInsertGroup.mock.t.Fatalf("UserGroupMock.InsertGroup mock is already set by Set")
+func (mmInsert *mUserGroupMockInsert) When(ctx context.Context, accountID uuid.UUID, name string) *UserGroupMockInsertExpectation {
+	if mmInsert.mock.funcInsert != nil {
+		mmInsert.mock.t.Fatalf("UserGroupMock.Insert mock is already set by Set")
 	}
 
-	expectation := &UserGroupMockInsertGroupExpectation{
-		mock:               mmInsertGroup.mock,
-		params:             &UserGroupMockInsertGroupParams{ctx, accountID, name},
-		expectationOrigins: UserGroupMockInsertGroupExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &UserGroupMockInsertExpectation{
+		mock:               mmInsert.mock,
+		params:             &UserGroupMockInsertParams{ctx, accountID, name},
+		expectationOrigins: UserGroupMockInsertExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmInsertGroup.expectations = append(mmInsertGroup.expectations, expectation)
+	mmInsert.expectations = append(mmInsert.expectations, expectation)
 	return expectation
 }
 
-// Then sets up UserGroup.InsertGroup return parameters for the expectation previously defined by the When method
-func (e *UserGroupMockInsertGroupExpectation) Then(u1 domain.UserGroup, err error) *UserGroupMock {
-	e.results = &UserGroupMockInsertGroupResults{u1, err}
+// Then sets up UserGroup.Insert return parameters for the expectation previously defined by the When method
+func (e *UserGroupMockInsertExpectation) Then(u1 domain.UserGroup, err error) *UserGroupMock {
+	e.results = &UserGroupMockInsertResults{u1, err}
 	return e.mock
 }
 
-// Times sets number of times UserGroup.InsertGroup should be invoked
-func (mmInsertGroup *mUserGroupMockInsertGroup) Times(n uint64) *mUserGroupMockInsertGroup {
+// Times sets number of times UserGroup.Insert should be invoked
+func (mmInsert *mUserGroupMockInsert) Times(n uint64) *mUserGroupMockInsert {
 	if n == 0 {
-		mmInsertGroup.mock.t.Fatalf("Times of UserGroupMock.InsertGroup mock can not be zero")
+		mmInsert.mock.t.Fatalf("Times of UserGroupMock.Insert mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmInsertGroup.expectedInvocations, n)
-	mmInsertGroup.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmInsertGroup
+	mm_atomic.StoreUint64(&mmInsert.expectedInvocations, n)
+	mmInsert.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmInsert
 }
 
-func (mmInsertGroup *mUserGroupMockInsertGroup) invocationsDone() bool {
-	if len(mmInsertGroup.expectations) == 0 && mmInsertGroup.defaultExpectation == nil && mmInsertGroup.mock.funcInsertGroup == nil {
+func (mmInsert *mUserGroupMockInsert) invocationsDone() bool {
+	if len(mmInsert.expectations) == 0 && mmInsert.defaultExpectation == nil && mmInsert.mock.funcInsert == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmInsertGroup.mock.afterInsertGroupCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmInsertGroup.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmInsert.mock.afterInsertCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmInsert.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// InsertGroup implements mm_repository.UserGroup
-func (mmInsertGroup *UserGroupMock) InsertGroup(ctx context.Context, accountID uuid.UUID, name string) (u1 domain.UserGroup, err error) {
-	mm_atomic.AddUint64(&mmInsertGroup.beforeInsertGroupCounter, 1)
-	defer mm_atomic.AddUint64(&mmInsertGroup.afterInsertGroupCounter, 1)
+// Insert implements mm_repository.UserGroup
+func (mmInsert *UserGroupMock) Insert(ctx context.Context, accountID uuid.UUID, name string) (u1 domain.UserGroup, err error) {
+	mm_atomic.AddUint64(&mmInsert.beforeInsertCounter, 1)
+	defer mm_atomic.AddUint64(&mmInsert.afterInsertCounter, 1)
 
-	mmInsertGroup.t.Helper()
+	mmInsert.t.Helper()
 
-	if mmInsertGroup.inspectFuncInsertGroup != nil {
-		mmInsertGroup.inspectFuncInsertGroup(ctx, accountID, name)
+	if mmInsert.inspectFuncInsert != nil {
+		mmInsert.inspectFuncInsert(ctx, accountID, name)
 	}
 
-	mm_params := UserGroupMockInsertGroupParams{ctx, accountID, name}
+	mm_params := UserGroupMockInsertParams{ctx, accountID, name}
 
 	// Record call args
-	mmInsertGroup.InsertGroupMock.mutex.Lock()
-	mmInsertGroup.InsertGroupMock.callArgs = append(mmInsertGroup.InsertGroupMock.callArgs, &mm_params)
-	mmInsertGroup.InsertGroupMock.mutex.Unlock()
+	mmInsert.InsertMock.mutex.Lock()
+	mmInsert.InsertMock.callArgs = append(mmInsert.InsertMock.callArgs, &mm_params)
+	mmInsert.InsertMock.mutex.Unlock()
 
-	for _, e := range mmInsertGroup.InsertGroupMock.expectations {
+	for _, e := range mmInsert.InsertMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.u1, e.results.err
 		}
 	}
 
-	if mmInsertGroup.InsertGroupMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmInsertGroup.InsertGroupMock.defaultExpectation.Counter, 1)
-		mm_want := mmInsertGroup.InsertGroupMock.defaultExpectation.params
-		mm_want_ptrs := mmInsertGroup.InsertGroupMock.defaultExpectation.paramPtrs
+	if mmInsert.InsertMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmInsert.InsertMock.defaultExpectation.Counter, 1)
+		mm_want := mmInsert.InsertMock.defaultExpectation.params
+		mm_want_ptrs := mmInsert.InsertMock.defaultExpectation.paramPtrs
 
-		mm_got := UserGroupMockInsertGroupParams{ctx, accountID, name}
+		mm_got := UserGroupMockInsertParams{ctx, accountID, name}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmInsertGroup.t.Errorf("UserGroupMock.InsertGroup got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmInsertGroup.InsertGroupMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmInsert.t.Errorf("UserGroupMock.Insert got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmInsert.InsertMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
 			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
-				mmInsertGroup.t.Errorf("UserGroupMock.InsertGroup got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmInsertGroup.InsertGroupMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+				mmInsert.t.Errorf("UserGroupMock.Insert got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmInsert.InsertMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
 			}
 
 			if mm_want_ptrs.name != nil && !minimock.Equal(*mm_want_ptrs.name, mm_got.name) {
-				mmInsertGroup.t.Errorf("UserGroupMock.InsertGroup got unexpected parameter name, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmInsertGroup.InsertGroupMock.defaultExpectation.expectationOrigins.originName, *mm_want_ptrs.name, mm_got.name, minimock.Diff(*mm_want_ptrs.name, mm_got.name))
+				mmInsert.t.Errorf("UserGroupMock.Insert got unexpected parameter name, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmInsert.InsertMock.defaultExpectation.expectationOrigins.originName, *mm_want_ptrs.name, mm_got.name, minimock.Diff(*mm_want_ptrs.name, mm_got.name))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmInsertGroup.t.Errorf("UserGroupMock.InsertGroup got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmInsertGroup.InsertGroupMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmInsert.t.Errorf("UserGroupMock.Insert got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmInsert.InsertMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmInsertGroup.InsertGroupMock.defaultExpectation.results
+		mm_results := mmInsert.InsertMock.defaultExpectation.results
 		if mm_results == nil {
-			mmInsertGroup.t.Fatal("No results are set for the UserGroupMock.InsertGroup")
+			mmInsert.t.Fatal("No results are set for the UserGroupMock.Insert")
 		}
 		return (*mm_results).u1, (*mm_results).err
 	}
-	if mmInsertGroup.funcInsertGroup != nil {
-		return mmInsertGroup.funcInsertGroup(ctx, accountID, name)
+	if mmInsert.funcInsert != nil {
+		return mmInsert.funcInsert(ctx, accountID, name)
 	}
-	mmInsertGroup.t.Fatalf("Unexpected call to UserGroupMock.InsertGroup. %v %v %v", ctx, accountID, name)
+	mmInsert.t.Fatalf("Unexpected call to UserGroupMock.Insert. %v %v %v", ctx, accountID, name)
 	return
 }
 
-// InsertGroupAfterCounter returns a count of finished UserGroupMock.InsertGroup invocations
-func (mmInsertGroup *UserGroupMock) InsertGroupAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmInsertGroup.afterInsertGroupCounter)
+// InsertAfterCounter returns a count of finished UserGroupMock.Insert invocations
+func (mmInsert *UserGroupMock) InsertAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmInsert.afterInsertCounter)
 }
 
-// InsertGroupBeforeCounter returns a count of UserGroupMock.InsertGroup invocations
-func (mmInsertGroup *UserGroupMock) InsertGroupBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmInsertGroup.beforeInsertGroupCounter)
+// InsertBeforeCounter returns a count of UserGroupMock.Insert invocations
+func (mmInsert *UserGroupMock) InsertBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmInsert.beforeInsertCounter)
 }
 
-// Calls returns a list of arguments used in each call to UserGroupMock.InsertGroup.
+// Calls returns a list of arguments used in each call to UserGroupMock.Insert.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmInsertGroup *mUserGroupMockInsertGroup) Calls() []*UserGroupMockInsertGroupParams {
-	mmInsertGroup.mutex.RLock()
+func (mmInsert *mUserGroupMockInsert) Calls() []*UserGroupMockInsertParams {
+	mmInsert.mutex.RLock()
 
-	argCopy := make([]*UserGroupMockInsertGroupParams, len(mmInsertGroup.callArgs))
-	copy(argCopy, mmInsertGroup.callArgs)
+	argCopy := make([]*UserGroupMockInsertParams, len(mmInsert.callArgs))
+	copy(argCopy, mmInsert.callArgs)
 
-	mmInsertGroup.mutex.RUnlock()
+	mmInsert.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockInsertGroupDone returns true if the count of the InsertGroup invocations corresponds
+// MinimockInsertDone returns true if the count of the Insert invocations corresponds
 // the number of defined expectations
-func (m *UserGroupMock) MinimockInsertGroupDone() bool {
-	if m.InsertGroupMock.optional {
+func (m *UserGroupMock) MinimockInsertDone() bool {
+	if m.InsertMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.InsertGroupMock.expectations {
+	for _, e := range m.InsertMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.InsertGroupMock.invocationsDone()
+	return m.InsertMock.invocationsDone()
 }
 
-// MinimockInsertGroupInspect logs each unmet expectation
-func (m *UserGroupMock) MinimockInsertGroupInspect() {
-	for _, e := range m.InsertGroupMock.expectations {
+// MinimockInsertInspect logs each unmet expectation
+func (m *UserGroupMock) MinimockInsertInspect() {
+	for _, e := range m.InsertMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to UserGroupMock.InsertGroup at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to UserGroupMock.Insert at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterInsertGroupCounter := mm_atomic.LoadUint64(&m.afterInsertGroupCounter)
+	afterInsertCounter := mm_atomic.LoadUint64(&m.afterInsertCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.InsertGroupMock.defaultExpectation != nil && afterInsertGroupCounter < 1 {
-		if m.InsertGroupMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to UserGroupMock.InsertGroup at\n%s", m.InsertGroupMock.defaultExpectation.returnOrigin)
+	if m.InsertMock.defaultExpectation != nil && afterInsertCounter < 1 {
+		if m.InsertMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to UserGroupMock.Insert at\n%s", m.InsertMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to UserGroupMock.InsertGroup at\n%s with params: %#v", m.InsertGroupMock.defaultExpectation.expectationOrigins.origin, *m.InsertGroupMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to UserGroupMock.Insert at\n%s with params: %#v", m.InsertMock.defaultExpectation.expectationOrigins.origin, *m.InsertMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcInsertGroup != nil && afterInsertGroupCounter < 1 {
-		m.t.Errorf("Expected call to UserGroupMock.InsertGroup at\n%s", m.funcInsertGroupOrigin)
+	if m.funcInsert != nil && afterInsertCounter < 1 {
+		m.t.Errorf("Expected call to UserGroupMock.Insert at\n%s", m.funcInsertOrigin)
 	}
 
-	if !m.InsertGroupMock.invocationsDone() && afterInsertGroupCounter > 0 {
-		m.t.Errorf("Expected %d calls to UserGroupMock.InsertGroup at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.InsertGroupMock.expectedInvocations), m.InsertGroupMock.expectedInvocationsOrigin, afterInsertGroupCounter)
-	}
-}
-
-type mUserGroupMockInsertMembers struct {
-	optional           bool
-	mock               *UserGroupMock
-	defaultExpectation *UserGroupMockInsertMembersExpectation
-	expectations       []*UserGroupMockInsertMembersExpectation
-
-	callArgs []*UserGroupMockInsertMembersParams
-	mutex    sync.RWMutex
-
-	expectedInvocations       uint64
-	expectedInvocationsOrigin string
-}
-
-// UserGroupMockInsertMembersExpectation specifies expectation struct of the UserGroup.InsertMembers
-type UserGroupMockInsertMembersExpectation struct {
-	mock               *UserGroupMock
-	params             *UserGroupMockInsertMembersParams
-	paramPtrs          *UserGroupMockInsertMembersParamPtrs
-	expectationOrigins UserGroupMockInsertMembersExpectationOrigins
-	results            *UserGroupMockInsertMembersResults
-	returnOrigin       string
-	Counter            uint64
-}
-
-// UserGroupMockInsertMembersParams contains parameters of the UserGroup.InsertMembers
-type UserGroupMockInsertMembersParams struct {
-	ctx     context.Context
-	groupID uuid.UUID
-	roleID  uuid.UUID
-	usersID []uuid.UUID
-}
-
-// UserGroupMockInsertMembersParamPtrs contains pointers to parameters of the UserGroup.InsertMembers
-type UserGroupMockInsertMembersParamPtrs struct {
-	ctx     *context.Context
-	groupID *uuid.UUID
-	roleID  *uuid.UUID
-	usersID *[]uuid.UUID
-}
-
-// UserGroupMockInsertMembersResults contains results of the UserGroup.InsertMembers
-type UserGroupMockInsertMembersResults struct {
-	ga1 []domain.GroupMember
-	err error
-}
-
-// UserGroupMockInsertMembersOrigins contains origins of expectations of the UserGroup.InsertMembers
-type UserGroupMockInsertMembersExpectationOrigins struct {
-	origin        string
-	originCtx     string
-	originGroupID string
-	originRoleID  string
-	originUsersID string
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmInsertMembers *mUserGroupMockInsertMembers) Optional() *mUserGroupMockInsertMembers {
-	mmInsertMembers.optional = true
-	return mmInsertMembers
-}
-
-// Expect sets up expected params for UserGroup.InsertMembers
-func (mmInsertMembers *mUserGroupMockInsertMembers) Expect(ctx context.Context, groupID uuid.UUID, roleID uuid.UUID, usersID ...uuid.UUID) *mUserGroupMockInsertMembers {
-	if mmInsertMembers.mock.funcInsertMembers != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Set")
-	}
-
-	if mmInsertMembers.defaultExpectation == nil {
-		mmInsertMembers.defaultExpectation = &UserGroupMockInsertMembersExpectation{}
-	}
-
-	if mmInsertMembers.defaultExpectation.paramPtrs != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by ExpectParams functions")
-	}
-
-	mmInsertMembers.defaultExpectation.params = &UserGroupMockInsertMembersParams{ctx, groupID, roleID, usersID}
-	mmInsertMembers.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmInsertMembers.expectations {
-		if minimock.Equal(e.params, mmInsertMembers.defaultExpectation.params) {
-			mmInsertMembers.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmInsertMembers.defaultExpectation.params)
-		}
-	}
-
-	return mmInsertMembers
-}
-
-// ExpectCtxParam1 sets up expected param ctx for UserGroup.InsertMembers
-func (mmInsertMembers *mUserGroupMockInsertMembers) ExpectCtxParam1(ctx context.Context) *mUserGroupMockInsertMembers {
-	if mmInsertMembers.mock.funcInsertMembers != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Set")
-	}
-
-	if mmInsertMembers.defaultExpectation == nil {
-		mmInsertMembers.defaultExpectation = &UserGroupMockInsertMembersExpectation{}
-	}
-
-	if mmInsertMembers.defaultExpectation.params != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Expect")
-	}
-
-	if mmInsertMembers.defaultExpectation.paramPtrs == nil {
-		mmInsertMembers.defaultExpectation.paramPtrs = &UserGroupMockInsertMembersParamPtrs{}
-	}
-	mmInsertMembers.defaultExpectation.paramPtrs.ctx = &ctx
-	mmInsertMembers.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
-
-	return mmInsertMembers
-}
-
-// ExpectGroupIDParam2 sets up expected param groupID for UserGroup.InsertMembers
-func (mmInsertMembers *mUserGroupMockInsertMembers) ExpectGroupIDParam2(groupID uuid.UUID) *mUserGroupMockInsertMembers {
-	if mmInsertMembers.mock.funcInsertMembers != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Set")
-	}
-
-	if mmInsertMembers.defaultExpectation == nil {
-		mmInsertMembers.defaultExpectation = &UserGroupMockInsertMembersExpectation{}
-	}
-
-	if mmInsertMembers.defaultExpectation.params != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Expect")
-	}
-
-	if mmInsertMembers.defaultExpectation.paramPtrs == nil {
-		mmInsertMembers.defaultExpectation.paramPtrs = &UserGroupMockInsertMembersParamPtrs{}
-	}
-	mmInsertMembers.defaultExpectation.paramPtrs.groupID = &groupID
-	mmInsertMembers.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
-
-	return mmInsertMembers
-}
-
-// ExpectRoleIDParam3 sets up expected param roleID for UserGroup.InsertMembers
-func (mmInsertMembers *mUserGroupMockInsertMembers) ExpectRoleIDParam3(roleID uuid.UUID) *mUserGroupMockInsertMembers {
-	if mmInsertMembers.mock.funcInsertMembers != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Set")
-	}
-
-	if mmInsertMembers.defaultExpectation == nil {
-		mmInsertMembers.defaultExpectation = &UserGroupMockInsertMembersExpectation{}
-	}
-
-	if mmInsertMembers.defaultExpectation.params != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Expect")
-	}
-
-	if mmInsertMembers.defaultExpectation.paramPtrs == nil {
-		mmInsertMembers.defaultExpectation.paramPtrs = &UserGroupMockInsertMembersParamPtrs{}
-	}
-	mmInsertMembers.defaultExpectation.paramPtrs.roleID = &roleID
-	mmInsertMembers.defaultExpectation.expectationOrigins.originRoleID = minimock.CallerInfo(1)
-
-	return mmInsertMembers
-}
-
-// ExpectUsersIDParam4 sets up expected param usersID for UserGroup.InsertMembers
-func (mmInsertMembers *mUserGroupMockInsertMembers) ExpectUsersIDParam4(usersID ...uuid.UUID) *mUserGroupMockInsertMembers {
-	if mmInsertMembers.mock.funcInsertMembers != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Set")
-	}
-
-	if mmInsertMembers.defaultExpectation == nil {
-		mmInsertMembers.defaultExpectation = &UserGroupMockInsertMembersExpectation{}
-	}
-
-	if mmInsertMembers.defaultExpectation.params != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Expect")
-	}
-
-	if mmInsertMembers.defaultExpectation.paramPtrs == nil {
-		mmInsertMembers.defaultExpectation.paramPtrs = &UserGroupMockInsertMembersParamPtrs{}
-	}
-	mmInsertMembers.defaultExpectation.paramPtrs.usersID = &usersID
-	mmInsertMembers.defaultExpectation.expectationOrigins.originUsersID = minimock.CallerInfo(1)
-
-	return mmInsertMembers
-}
-
-// Inspect accepts an inspector function that has same arguments as the UserGroup.InsertMembers
-func (mmInsertMembers *mUserGroupMockInsertMembers) Inspect(f func(ctx context.Context, groupID uuid.UUID, roleID uuid.UUID, usersID ...uuid.UUID)) *mUserGroupMockInsertMembers {
-	if mmInsertMembers.mock.inspectFuncInsertMembers != nil {
-		mmInsertMembers.mock.t.Fatalf("Inspect function is already set for UserGroupMock.InsertMembers")
-	}
-
-	mmInsertMembers.mock.inspectFuncInsertMembers = f
-
-	return mmInsertMembers
-}
-
-// Return sets up results that will be returned by UserGroup.InsertMembers
-func (mmInsertMembers *mUserGroupMockInsertMembers) Return(ga1 []domain.GroupMember, err error) *UserGroupMock {
-	if mmInsertMembers.mock.funcInsertMembers != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Set")
-	}
-
-	if mmInsertMembers.defaultExpectation == nil {
-		mmInsertMembers.defaultExpectation = &UserGroupMockInsertMembersExpectation{mock: mmInsertMembers.mock}
-	}
-	mmInsertMembers.defaultExpectation.results = &UserGroupMockInsertMembersResults{ga1, err}
-	mmInsertMembers.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmInsertMembers.mock
-}
-
-// Set uses given function f to mock the UserGroup.InsertMembers method
-func (mmInsertMembers *mUserGroupMockInsertMembers) Set(f func(ctx context.Context, groupID uuid.UUID, roleID uuid.UUID, usersID ...uuid.UUID) (ga1 []domain.GroupMember, err error)) *UserGroupMock {
-	if mmInsertMembers.defaultExpectation != nil {
-		mmInsertMembers.mock.t.Fatalf("Default expectation is already set for the UserGroup.InsertMembers method")
-	}
-
-	if len(mmInsertMembers.expectations) > 0 {
-		mmInsertMembers.mock.t.Fatalf("Some expectations are already set for the UserGroup.InsertMembers method")
-	}
-
-	mmInsertMembers.mock.funcInsertMembers = f
-	mmInsertMembers.mock.funcInsertMembersOrigin = minimock.CallerInfo(1)
-	return mmInsertMembers.mock
-}
-
-// When sets expectation for the UserGroup.InsertMembers which will trigger the result defined by the following
-// Then helper
-func (mmInsertMembers *mUserGroupMockInsertMembers) When(ctx context.Context, groupID uuid.UUID, roleID uuid.UUID, usersID ...uuid.UUID) *UserGroupMockInsertMembersExpectation {
-	if mmInsertMembers.mock.funcInsertMembers != nil {
-		mmInsertMembers.mock.t.Fatalf("UserGroupMock.InsertMembers mock is already set by Set")
-	}
-
-	expectation := &UserGroupMockInsertMembersExpectation{
-		mock:               mmInsertMembers.mock,
-		params:             &UserGroupMockInsertMembersParams{ctx, groupID, roleID, usersID},
-		expectationOrigins: UserGroupMockInsertMembersExpectationOrigins{origin: minimock.CallerInfo(1)},
-	}
-	mmInsertMembers.expectations = append(mmInsertMembers.expectations, expectation)
-	return expectation
-}
-
-// Then sets up UserGroup.InsertMembers return parameters for the expectation previously defined by the When method
-func (e *UserGroupMockInsertMembersExpectation) Then(ga1 []domain.GroupMember, err error) *UserGroupMock {
-	e.results = &UserGroupMockInsertMembersResults{ga1, err}
-	return e.mock
-}
-
-// Times sets number of times UserGroup.InsertMembers should be invoked
-func (mmInsertMembers *mUserGroupMockInsertMembers) Times(n uint64) *mUserGroupMockInsertMembers {
-	if n == 0 {
-		mmInsertMembers.mock.t.Fatalf("Times of UserGroupMock.InsertMembers mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmInsertMembers.expectedInvocations, n)
-	mmInsertMembers.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmInsertMembers
-}
-
-func (mmInsertMembers *mUserGroupMockInsertMembers) invocationsDone() bool {
-	if len(mmInsertMembers.expectations) == 0 && mmInsertMembers.defaultExpectation == nil && mmInsertMembers.mock.funcInsertMembers == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmInsertMembers.mock.afterInsertMembersCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmInsertMembers.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// InsertMembers implements mm_repository.UserGroup
-func (mmInsertMembers *UserGroupMock) InsertMembers(ctx context.Context, groupID uuid.UUID, roleID uuid.UUID, usersID ...uuid.UUID) (ga1 []domain.GroupMember, err error) {
-	mm_atomic.AddUint64(&mmInsertMembers.beforeInsertMembersCounter, 1)
-	defer mm_atomic.AddUint64(&mmInsertMembers.afterInsertMembersCounter, 1)
-
-	mmInsertMembers.t.Helper()
-
-	if mmInsertMembers.inspectFuncInsertMembers != nil {
-		mmInsertMembers.inspectFuncInsertMembers(ctx, groupID, roleID, usersID...)
-	}
-
-	mm_params := UserGroupMockInsertMembersParams{ctx, groupID, roleID, usersID}
-
-	// Record call args
-	mmInsertMembers.InsertMembersMock.mutex.Lock()
-	mmInsertMembers.InsertMembersMock.callArgs = append(mmInsertMembers.InsertMembersMock.callArgs, &mm_params)
-	mmInsertMembers.InsertMembersMock.mutex.Unlock()
-
-	for _, e := range mmInsertMembers.InsertMembersMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.ga1, e.results.err
-		}
-	}
-
-	if mmInsertMembers.InsertMembersMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmInsertMembers.InsertMembersMock.defaultExpectation.Counter, 1)
-		mm_want := mmInsertMembers.InsertMembersMock.defaultExpectation.params
-		mm_want_ptrs := mmInsertMembers.InsertMembersMock.defaultExpectation.paramPtrs
-
-		mm_got := UserGroupMockInsertMembersParams{ctx, groupID, roleID, usersID}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmInsertMembers.t.Errorf("UserGroupMock.InsertMembers got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmInsertMembers.InsertMembersMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
-				mmInsertMembers.t.Errorf("UserGroupMock.InsertMembers got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmInsertMembers.InsertMembersMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
-			}
-
-			if mm_want_ptrs.roleID != nil && !minimock.Equal(*mm_want_ptrs.roleID, mm_got.roleID) {
-				mmInsertMembers.t.Errorf("UserGroupMock.InsertMembers got unexpected parameter roleID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmInsertMembers.InsertMembersMock.defaultExpectation.expectationOrigins.originRoleID, *mm_want_ptrs.roleID, mm_got.roleID, minimock.Diff(*mm_want_ptrs.roleID, mm_got.roleID))
-			}
-
-			if mm_want_ptrs.usersID != nil && !minimock.Equal(*mm_want_ptrs.usersID, mm_got.usersID) {
-				mmInsertMembers.t.Errorf("UserGroupMock.InsertMembers got unexpected parameter usersID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmInsertMembers.InsertMembersMock.defaultExpectation.expectationOrigins.originUsersID, *mm_want_ptrs.usersID, mm_got.usersID, minimock.Diff(*mm_want_ptrs.usersID, mm_got.usersID))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmInsertMembers.t.Errorf("UserGroupMock.InsertMembers got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmInsertMembers.InsertMembersMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmInsertMembers.InsertMembersMock.defaultExpectation.results
-		if mm_results == nil {
-			mmInsertMembers.t.Fatal("No results are set for the UserGroupMock.InsertMembers")
-		}
-		return (*mm_results).ga1, (*mm_results).err
-	}
-	if mmInsertMembers.funcInsertMembers != nil {
-		return mmInsertMembers.funcInsertMembers(ctx, groupID, roleID, usersID...)
-	}
-	mmInsertMembers.t.Fatalf("Unexpected call to UserGroupMock.InsertMembers. %v %v %v %v", ctx, groupID, roleID, usersID)
-	return
-}
-
-// InsertMembersAfterCounter returns a count of finished UserGroupMock.InsertMembers invocations
-func (mmInsertMembers *UserGroupMock) InsertMembersAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmInsertMembers.afterInsertMembersCounter)
-}
-
-// InsertMembersBeforeCounter returns a count of UserGroupMock.InsertMembers invocations
-func (mmInsertMembers *UserGroupMock) InsertMembersBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmInsertMembers.beforeInsertMembersCounter)
-}
-
-// Calls returns a list of arguments used in each call to UserGroupMock.InsertMembers.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmInsertMembers *mUserGroupMockInsertMembers) Calls() []*UserGroupMockInsertMembersParams {
-	mmInsertMembers.mutex.RLock()
-
-	argCopy := make([]*UserGroupMockInsertMembersParams, len(mmInsertMembers.callArgs))
-	copy(argCopy, mmInsertMembers.callArgs)
-
-	mmInsertMembers.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockInsertMembersDone returns true if the count of the InsertMembers invocations corresponds
-// the number of defined expectations
-func (m *UserGroupMock) MinimockInsertMembersDone() bool {
-	if m.InsertMembersMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.InsertMembersMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.InsertMembersMock.invocationsDone()
-}
-
-// MinimockInsertMembersInspect logs each unmet expectation
-func (m *UserGroupMock) MinimockInsertMembersInspect() {
-	for _, e := range m.InsertMembersMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to UserGroupMock.InsertMembers at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
-		}
-	}
-
-	afterInsertMembersCounter := mm_atomic.LoadUint64(&m.afterInsertMembersCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.InsertMembersMock.defaultExpectation != nil && afterInsertMembersCounter < 1 {
-		if m.InsertMembersMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to UserGroupMock.InsertMembers at\n%s", m.InsertMembersMock.defaultExpectation.returnOrigin)
-		} else {
-			m.t.Errorf("Expected call to UserGroupMock.InsertMembers at\n%s with params: %#v", m.InsertMembersMock.defaultExpectation.expectationOrigins.origin, *m.InsertMembersMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcInsertMembers != nil && afterInsertMembersCounter < 1 {
-		m.t.Errorf("Expected call to UserGroupMock.InsertMembers at\n%s", m.funcInsertMembersOrigin)
-	}
-
-	if !m.InsertMembersMock.invocationsDone() && afterInsertMembersCounter > 0 {
-		m.t.Errorf("Expected %d calls to UserGroupMock.InsertMembers at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.InsertMembersMock.expectedInvocations), m.InsertMembersMock.expectedInvocationsOrigin, afterInsertMembersCounter)
+	if !m.InsertMock.invocationsDone() && afterInsertCounter > 0 {
+		m.t.Errorf("Expected %d calls to UserGroupMock.Insert at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.InsertMock.expectedInvocations), m.InsertMock.expectedInvocationsOrigin, afterInsertCounter)
 	}
 }
 
@@ -837,9 +422,7 @@ func (m *UserGroupMock) MinimockInsertMembersInspect() {
 func (m *UserGroupMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
-			m.MinimockInsertGroupInspect()
-
-			m.MinimockInsertMembersInspect()
+			m.MinimockInsertInspect()
 		}
 	})
 }
@@ -863,6 +446,5 @@ func (m *UserGroupMock) MinimockWait(timeout mm_time.Duration) {
 func (m *UserGroupMock) minimockDone() bool {
 	done := true
 	return done &&
-		m.MinimockInsertGroupDone() &&
-		m.MinimockInsertMembersDone()
+		m.MinimockInsertDone()
 }

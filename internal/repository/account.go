@@ -2,11 +2,13 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/schema"
 
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stephenafamo/bob/dialect/psql"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"go.uber.org/zap"
@@ -31,6 +33,9 @@ func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...uuid
 			sm.Where(schema.Users.Columns.UserID.EQ(psql.Arg(id))),
 		).One(ctx, exec)
 		if err != nil {
+			if errors.Is(pgx.ErrNoRows, err) {
+				return nil, ErrNotFound
+			}
 			zap.L().Error(err.Error())
 			return nil, err
 		}
@@ -58,7 +63,7 @@ func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...uuid
 		).One(ctx, exec)
 		if err != nil {
 			zap.L().Error(err.Error())
-			return []domain.Account{}, err
+			return nil, err
 		}
 
 		account := domain.Account{}
@@ -101,13 +106,11 @@ func (r *AccountRepository) SelectByID(ctx context.Context, accountsID ...uuid.U
 			sm.Where(schema.Accounts.Columns.AccountID.EQ(psql.Arg(id))),
 		).One(ctx, exec)
 		if err != nil {
+			if errors.Is(pgx.ErrNoRows, err) {
+				return nil, ErrNotFound
+			}
 			zap.L().Error(err.Error())
 			return nil, err
-		}
-
-		if accountDB == nil {
-			zap.L().Warn("account not found: " + id.String())
-			return nil, nil
 		}
 
 		accounts[i].FromDB(accountDB)

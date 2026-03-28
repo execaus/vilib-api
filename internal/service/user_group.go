@@ -19,7 +19,7 @@ func (s *UserGroupService) Create(
 	accountID, initiatorID uuid.UUID,
 	name string,
 ) (domain.UserGroup, error) {
-	group, err := s.repo.InsertGroup(ctx, accountID, name)
+	group, err := s.repo.Insert(ctx, accountID, name)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.UserGroup{}, nil
@@ -35,15 +35,15 @@ func (s *UserGroupService) AddMembers(
 ) ([]domain.GroupMember, error) {
 	// TODO get default role id in account
 
-	roleID := uuid.New()
+	//roleID := uuid.New()
+	//
+	//members, err := s.repo.InsertMembers(ctx, groupID, roleID, targetsID...)
+	//if err != nil {
+	//	zap.L().Error(err.Error())
+	//	return nil, err
+	//}
 
-	members, err := s.repo.InsertMembers(ctx, groupID, roleID, targetsID...)
-	if err != nil {
-		zap.L().Error(err.Error())
-		return nil, err
-	}
-
-	return members, nil
+	return nil, nil
 }
 
 func NewUserGroupService(repo repository.UserGroup, srv *Service) *UserGroupService {

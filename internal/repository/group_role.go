@@ -7,6 +7,8 @@ import (
 
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
+	"github.com/stephenafamo/bob/dialect/psql"
+	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"go.uber.org/zap"
 )
 
@@ -16,6 +18,30 @@ type GroupRoleRepository struct {
 
 func NewGroupRoleRepository(provider *ExecutorProvider) *GroupRoleRepository {
 	return &GroupRoleRepository{provider: provider}
+}
+
+func (r *GroupRoleRepository) SelectByAccount(ctx context.Context, accountID uuid.UUID) ([]domain.GroupRole, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	rolesDB, err := schema.GroupRoles.Query(
+		sm.Where(schema.GroupRoles.Columns.AccountID.EQ(psql.Arg(accountID))),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	if rolesDB == nil {
+		return nil, ErrNotFound
+	}
+
+	roles := make([]domain.GroupRole, len(rolesDB))
+	for i, role := range rolesDB {
+		roles[i] = domain.GroupRole{}
+		roles[i].FromDB(role)
+	}
+
+	return roles, nil
 }
 
 func (r *GroupRoleRepository) Insert(
