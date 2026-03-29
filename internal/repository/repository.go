@@ -30,7 +30,7 @@ type User interface {
 type AccountRole interface {
 	Insert(
 		ctx context.Context,
-		accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool,
+		accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault, isSystem bool,
 	) (domain.AccountRole, error)
 	SelectByAccountID(ctx context.Context, accountID uuid.UUID) ([]domain.AccountRole, error)
 }

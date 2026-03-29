@@ -24,9 +24,9 @@ func (s *AccountRoleService) Create(
 	name string,
 	parentID *uuid.UUID,
 	permission domain.PermissionMask,
-	isDefault bool,
+	isDefault, isSystem bool,
 ) ([]domain.AccountRole, error) {
-	if _, err := s.repo.Insert(ctx, accountID, name, parentID, permission, isDefault); err != nil {
+	if _, err := s.repo.Insert(ctx, accountID, name, parentID, permission, isDefault, isSystem); err != nil {
 		zap.L().Error(err.Error())
 		return nil, err
 	}

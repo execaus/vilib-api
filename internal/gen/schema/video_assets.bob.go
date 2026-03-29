@@ -47,6 +47,7 @@ type VideoAssetsQuery = *psql.ViewQuery[*VideoAsset, VideoAssetSlice]
 
 // videoAssetR is where relationships are stored.
 type videoAssetR struct {
+	File                *File           // video_assets.fk_video_assets_file
 	VideoUserGroupVideo *UserGroupVideo // video_assets.video_assets_video_id_fkey
 }
 
@@ -418,6 +419,30 @@ func (o VideoAssetSlice) ReloadAll(ctx context.Context, exec bob.Executor) error
 	return nil
 }
 
+// File starts a query for related objects on files
+func (o *VideoAsset) File(mods ...bob.Mod[*dialect.SelectQuery]) FilesQuery {
+	return Files.Query(append(mods,
+		sm.Where(Files.Columns.FileID.EQ(psql.Arg(o.FileID))),
+	)...)
+}
+
+func (os VideoAssetSlice) File(mods ...bob.Mod[*dialect.SelectQuery]) FilesQuery {
+	pkFileID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkFileID = append(pkFileID, o.FileID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkFileID), "uuid[]")),
+	))
+
+	return Files.Query(append(mods,
+		sm.Where(psql.Group(Files.Columns.FileID).OP("IN", PKArgExpr)),
+	)...)
+}
+
 // VideoUserGroupVideo starts a query for related objects on user_group_videos
 func (o *VideoAsset) VideoUserGroupVideo(mods ...bob.Mod[*dialect.SelectQuery]) UserGroupVideosQuery {
 	return UserGroupVideos.Query(append(mods,
@@ -440,6 +465,54 @@ func (os VideoAssetSlice) VideoUserGroupVideo(mods ...bob.Mod[*dialect.SelectQue
 	return UserGroupVideos.Query(append(mods,
 		sm.Where(psql.Group(UserGroupVideos.Columns.ID).OP("IN", PKArgExpr)),
 	)...)
+}
+
+func attachVideoAssetFile0(ctx context.Context, exec bob.Executor, count int, videoAsset0 *VideoAsset, file1 *File) (*VideoAsset, error) {
+	setter := &VideoAssetSetter{
+		FileID: omit.From(file1.FileID),
+	}
+
+	err := videoAsset0.Update(ctx, exec, setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachVideoAssetFile0: %w", err)
+	}
+
+	return videoAsset0, nil
+}
+
+func (videoAsset0 *VideoAsset) InsertFile(ctx context.Context, exec bob.Executor, related *FileSetter) error {
+	var err error
+
+	file1, err := Files.Insert(related).One(ctx, exec)
+	if err != nil {
+		return fmt.Errorf("inserting related objects: %w", err)
+	}
+
+	_, err = attachVideoAssetFile0(ctx, exec, 1, videoAsset0, file1)
+	if err != nil {
+		return err
+	}
+
+	videoAsset0.R.File = file1
+
+	file1.R.VideoAsset = videoAsset0
+
+	return nil
+}
+
+func (videoAsset0 *VideoAsset) AttachFile(ctx context.Context, exec bob.Executor, file1 *File) error {
+	var err error
+
+	_, err = attachVideoAssetFile0(ctx, exec, 1, videoAsset0, file1)
+	if err != nil {
+		return err
+	}
+
+	videoAsset0.R.File = file1
+
+	file1.R.VideoAsset = videoAsset0
+
+	return nil
 }
 
 func attachVideoAssetVideoUserGroupVideo0(ctx context.Context, exec bob.Executor, count int, videoAsset0 *VideoAsset, userGroupVideo1 *UserGroupVideo) (*VideoAsset, error) {

@@ -40,7 +40,7 @@ type Account interface {
 type AccountRole interface {
 	Create(
 		ctx context.Context,
-		accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool,
+		accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault, isSystem bool,
 	) ([]domain.AccountRole, error)
 }
 

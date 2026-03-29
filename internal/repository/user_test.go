@@ -27,10 +27,17 @@ func TestRepository_UserSelectByEmail_Success(t *testing.T) {
 		for i := range emailCount {
 			emails[i] = f.Person().Contact().Email
 			account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-			role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, permission, true)
+			role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, permission, true, false)
 			generatedUsers[i] = make([]domain.User, userWithEmailCount)
 			for j := range userWithEmailCount {
-				generatedUsers[i][j], _ = r.User.Insert(t.Context(), f.Person().FirstName(), f.Person().LastName(), f.Hash().MD5(), emails[i], role.ID)
+				generatedUsers[i][j], _ = r.User.Insert(
+					t.Context(),
+					f.Person().FirstName(),
+					f.Person().LastName(),
+					f.Hash().MD5(),
+					emails[i],
+					role.ID,
+				)
 			}
 		}
 
@@ -81,6 +88,7 @@ func TestRepository_UserInsert_Success(t *testing.T) {
 			nil,
 			permission,
 			true,
+			false,
 		)
 
 		timeStart := time.Now()
@@ -114,6 +122,7 @@ func TestRepository_UserSelectByID_Success(t *testing.T) {
 			nil,
 			4,
 			true,
+			false,
 		)
 
 		generatedUsersID := make([]uuid.UUID, userCount)

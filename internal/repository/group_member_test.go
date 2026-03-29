@@ -21,7 +21,15 @@ func TestRepository_GroupMemberInsert_Success(t *testing.T) {
 
 		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
 		group, _ := r.UserGroup.Insert(t.Context(), account.ID, name)
-		accountRole, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true)
+		accountRole, _ := r.AccountRole.Insert(
+			t.Context(),
+			account.ID,
+			f.Beer().Name(),
+			nil,
+			4,
+			true,
+			false,
+		)
 
 		generatedUsersID := make([]uuid.UUID, userCount)
 		for i := range userCount {

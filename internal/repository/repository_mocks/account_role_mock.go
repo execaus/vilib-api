@@ -20,9 +20,9 @@ type AccountRoleMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
-	funcInsert          func(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool) (a1 domain.AccountRole, err error)
+	funcInsert          func(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool, isSystem bool) (a1 domain.AccountRole, err error)
 	funcInsertOrigin    string
-	inspectFuncInsert   func(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool)
+	inspectFuncInsert   func(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool, isSystem bool)
 	afterInsertCounter  uint64
 	beforeInsertCounter uint64
 	InsertMock          mAccountRoleMockInsert
@@ -86,6 +86,7 @@ type AccountRoleMockInsertParams struct {
 	parentID   *uuid.UUID
 	permission domain.PermissionMask
 	isDefault  bool
+	isSystem   bool
 }
 
 // AccountRoleMockInsertParamPtrs contains pointers to parameters of the AccountRole.Insert
@@ -96,6 +97,7 @@ type AccountRoleMockInsertParamPtrs struct {
 	parentID   **uuid.UUID
 	permission *domain.PermissionMask
 	isDefault  *bool
+	isSystem   *bool
 }
 
 // AccountRoleMockInsertResults contains results of the AccountRole.Insert
@@ -113,6 +115,7 @@ type AccountRoleMockInsertExpectationOrigins struct {
 	originParentID   string
 	originPermission string
 	originIsDefault  string
+	originIsSystem   string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -126,7 +129,7 @@ func (mmInsert *mAccountRoleMockInsert) Optional() *mAccountRoleMockInsert {
 }
 
 // Expect sets up expected params for AccountRole.Insert
-func (mmInsert *mAccountRoleMockInsert) Expect(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool) *mAccountRoleMockInsert {
+func (mmInsert *mAccountRoleMockInsert) Expect(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool, isSystem bool) *mAccountRoleMockInsert {
 	if mmInsert.mock.funcInsert != nil {
 		mmInsert.mock.t.Fatalf("AccountRoleMock.Insert mock is already set by Set")
 	}
@@ -139,7 +142,7 @@ func (mmInsert *mAccountRoleMockInsert) Expect(ctx context.Context, accountID uu
 		mmInsert.mock.t.Fatalf("AccountRoleMock.Insert mock is already set by ExpectParams functions")
 	}
 
-	mmInsert.defaultExpectation.params = &AccountRoleMockInsertParams{ctx, accountID, name, parentID, permission, isDefault}
+	mmInsert.defaultExpectation.params = &AccountRoleMockInsertParams{ctx, accountID, name, parentID, permission, isDefault, isSystem}
 	mmInsert.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmInsert.expectations {
 		if minimock.Equal(e.params, mmInsert.defaultExpectation.params) {
@@ -288,8 +291,31 @@ func (mmInsert *mAccountRoleMockInsert) ExpectIsDefaultParam6(isDefault bool) *m
 	return mmInsert
 }
 
+// ExpectIsSystemParam7 sets up expected param isSystem for AccountRole.Insert
+func (mmInsert *mAccountRoleMockInsert) ExpectIsSystemParam7(isSystem bool) *mAccountRoleMockInsert {
+	if mmInsert.mock.funcInsert != nil {
+		mmInsert.mock.t.Fatalf("AccountRoleMock.Insert mock is already set by Set")
+	}
+
+	if mmInsert.defaultExpectation == nil {
+		mmInsert.defaultExpectation = &AccountRoleMockInsertExpectation{}
+	}
+
+	if mmInsert.defaultExpectation.params != nil {
+		mmInsert.mock.t.Fatalf("AccountRoleMock.Insert mock is already set by Expect")
+	}
+
+	if mmInsert.defaultExpectation.paramPtrs == nil {
+		mmInsert.defaultExpectation.paramPtrs = &AccountRoleMockInsertParamPtrs{}
+	}
+	mmInsert.defaultExpectation.paramPtrs.isSystem = &isSystem
+	mmInsert.defaultExpectation.expectationOrigins.originIsSystem = minimock.CallerInfo(1)
+
+	return mmInsert
+}
+
 // Inspect accepts an inspector function that has same arguments as the AccountRole.Insert
-func (mmInsert *mAccountRoleMockInsert) Inspect(f func(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool)) *mAccountRoleMockInsert {
+func (mmInsert *mAccountRoleMockInsert) Inspect(f func(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool, isSystem bool)) *mAccountRoleMockInsert {
 	if mmInsert.mock.inspectFuncInsert != nil {
 		mmInsert.mock.t.Fatalf("Inspect function is already set for AccountRoleMock.Insert")
 	}
@@ -314,7 +340,7 @@ func (mmInsert *mAccountRoleMockInsert) Return(a1 domain.AccountRole, err error)
 }
 
 // Set uses given function f to mock the AccountRole.Insert method
-func (mmInsert *mAccountRoleMockInsert) Set(f func(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool) (a1 domain.AccountRole, err error)) *AccountRoleMock {
+func (mmInsert *mAccountRoleMockInsert) Set(f func(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool, isSystem bool) (a1 domain.AccountRole, err error)) *AccountRoleMock {
 	if mmInsert.defaultExpectation != nil {
 		mmInsert.mock.t.Fatalf("Default expectation is already set for the AccountRole.Insert method")
 	}
@@ -330,14 +356,14 @@ func (mmInsert *mAccountRoleMockInsert) Set(f func(ctx context.Context, accountI
 
 // When sets expectation for the AccountRole.Insert which will trigger the result defined by the following
 // Then helper
-func (mmInsert *mAccountRoleMockInsert) When(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool) *AccountRoleMockInsertExpectation {
+func (mmInsert *mAccountRoleMockInsert) When(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool, isSystem bool) *AccountRoleMockInsertExpectation {
 	if mmInsert.mock.funcInsert != nil {
 		mmInsert.mock.t.Fatalf("AccountRoleMock.Insert mock is already set by Set")
 	}
 
 	expectation := &AccountRoleMockInsertExpectation{
 		mock:               mmInsert.mock,
-		params:             &AccountRoleMockInsertParams{ctx, accountID, name, parentID, permission, isDefault},
+		params:             &AccountRoleMockInsertParams{ctx, accountID, name, parentID, permission, isDefault, isSystem},
 		expectationOrigins: AccountRoleMockInsertExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmInsert.expectations = append(mmInsert.expectations, expectation)
@@ -372,17 +398,17 @@ func (mmInsert *mAccountRoleMockInsert) invocationsDone() bool {
 }
 
 // Insert implements mm_repository.AccountRole
-func (mmInsert *AccountRoleMock) Insert(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool) (a1 domain.AccountRole, err error) {
+func (mmInsert *AccountRoleMock) Insert(ctx context.Context, accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool, isSystem bool) (a1 domain.AccountRole, err error) {
 	mm_atomic.AddUint64(&mmInsert.beforeInsertCounter, 1)
 	defer mm_atomic.AddUint64(&mmInsert.afterInsertCounter, 1)
 
 	mmInsert.t.Helper()
 
 	if mmInsert.inspectFuncInsert != nil {
-		mmInsert.inspectFuncInsert(ctx, accountID, name, parentID, permission, isDefault)
+		mmInsert.inspectFuncInsert(ctx, accountID, name, parentID, permission, isDefault, isSystem)
 	}
 
-	mm_params := AccountRoleMockInsertParams{ctx, accountID, name, parentID, permission, isDefault}
+	mm_params := AccountRoleMockInsertParams{ctx, accountID, name, parentID, permission, isDefault, isSystem}
 
 	// Record call args
 	mmInsert.InsertMock.mutex.Lock()
@@ -401,7 +427,7 @@ func (mmInsert *AccountRoleMock) Insert(ctx context.Context, accountID uuid.UUID
 		mm_want := mmInsert.InsertMock.defaultExpectation.params
 		mm_want_ptrs := mmInsert.InsertMock.defaultExpectation.paramPtrs
 
-		mm_got := AccountRoleMockInsertParams{ctx, accountID, name, parentID, permission, isDefault}
+		mm_got := AccountRoleMockInsertParams{ctx, accountID, name, parentID, permission, isDefault, isSystem}
 
 		if mm_want_ptrs != nil {
 
@@ -435,6 +461,11 @@ func (mmInsert *AccountRoleMock) Insert(ctx context.Context, accountID uuid.UUID
 					mmInsert.InsertMock.defaultExpectation.expectationOrigins.originIsDefault, *mm_want_ptrs.isDefault, mm_got.isDefault, minimock.Diff(*mm_want_ptrs.isDefault, mm_got.isDefault))
 			}
 
+			if mm_want_ptrs.isSystem != nil && !minimock.Equal(*mm_want_ptrs.isSystem, mm_got.isSystem) {
+				mmInsert.t.Errorf("AccountRoleMock.Insert got unexpected parameter isSystem, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmInsert.InsertMock.defaultExpectation.expectationOrigins.originIsSystem, *mm_want_ptrs.isSystem, mm_got.isSystem, minimock.Diff(*mm_want_ptrs.isSystem, mm_got.isSystem))
+			}
+
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
 			mmInsert.t.Errorf("AccountRoleMock.Insert got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 				mmInsert.InsertMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
@@ -447,9 +478,9 @@ func (mmInsert *AccountRoleMock) Insert(ctx context.Context, accountID uuid.UUID
 		return (*mm_results).a1, (*mm_results).err
 	}
 	if mmInsert.funcInsert != nil {
-		return mmInsert.funcInsert(ctx, accountID, name, parentID, permission, isDefault)
+		return mmInsert.funcInsert(ctx, accountID, name, parentID, permission, isDefault, isSystem)
 	}
-	mmInsert.t.Fatalf("Unexpected call to AccountRoleMock.Insert. %v %v %v %v %v %v", ctx, accountID, name, parentID, permission, isDefault)
+	mmInsert.t.Fatalf("Unexpected call to AccountRoleMock.Insert. %v %v %v %v %v %v %v", ctx, accountID, name, parentID, permission, isDefault, isSystem)
 	return
 }
 

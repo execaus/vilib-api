@@ -5,6 +5,7 @@ package schema
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"github.com/stephenafamo/bob/dialect/psql/um"
 	"github.com/stephenafamo/bob/expr"
+	"github.com/stephenafamo/bob/types/pgtypes"
 )
 
 // File is an object representing the database table.
@@ -31,6 +33,8 @@ type File struct {
 	SizeBytes int64 `db:"size_bytes" `
 	// Время создания файла
 	CreatedAt time.Time `db:"created_at" `
+
+	R fileR `db:"-" `
 }
 
 // FileSlice is an alias for a slice of pointers to File.
@@ -42,6 +46,11 @@ var Files = psql.NewTablex[*File, FileSlice, *FileSetter]("", "files", buildFile
 
 // FilesQuery is a query on the files table
 type FilesQuery = *psql.ViewQuery[*File, FileSlice]
+
+// fileR is where relationships are stored.
+type fileR struct {
+	VideoAsset *VideoAsset // video_assets.fk_video_assets_file
+}
 
 func buildFileColumns(alias string) fileColumns {
 	return fileColumns{
@@ -268,6 +277,7 @@ func (o *File) Update(ctx context.Context, exec bob.Executor, s *FileSetter) err
 		return err
 	}
 
+	o.R = v.R
 	*o = *v
 
 	return nil
@@ -287,7 +297,7 @@ func (o *File) Reload(ctx context.Context, exec bob.Executor) error {
 	if err != nil {
 		return err
 	}
-
+	o2.R = o.R
 	*o = *o2
 
 	return nil
@@ -334,7 +344,7 @@ func (o FileSlice) copyMatchingRows(from ...*File) {
 			if new.FileID != old.FileID {
 				continue
 			}
-
+			new.R = old.R
 			o[i] = new
 			break
 		}
@@ -428,6 +438,84 @@ func (o FileSlice) ReloadAll(ctx context.Context, exec bob.Executor) error {
 	}
 
 	o.copyMatchingRows(o2...)
+
+	return nil
+}
+
+// VideoAsset starts a query for related objects on video_assets
+func (o *File) VideoAsset(mods ...bob.Mod[*dialect.SelectQuery]) VideoAssetsQuery {
+	return VideoAssets.Query(append(mods,
+		sm.Where(VideoAssets.Columns.FileID.EQ(psql.Arg(o.FileID))),
+	)...)
+}
+
+func (os FileSlice) VideoAsset(mods ...bob.Mod[*dialect.SelectQuery]) VideoAssetsQuery {
+	pkFileID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkFileID = append(pkFileID, o.FileID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkFileID), "uuid[]")),
+	))
+
+	return VideoAssets.Query(append(mods,
+		sm.Where(psql.Group(VideoAssets.Columns.FileID).OP("IN", PKArgExpr)),
+	)...)
+}
+
+func insertFileVideoAsset0(ctx context.Context, exec bob.Executor, videoAsset1 *VideoAssetSetter, file0 *File) (*VideoAsset, error) {
+	videoAsset1.FileID = omit.From(file0.FileID)
+
+	ret, err := VideoAssets.Insert(videoAsset1).One(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertFileVideoAsset0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachFileVideoAsset0(ctx context.Context, exec bob.Executor, count int, videoAsset1 *VideoAsset, file0 *File) (*VideoAsset, error) {
+	setter := &VideoAssetSetter{
+		FileID: omit.From(file0.FileID),
+	}
+
+	err := videoAsset1.Update(ctx, exec, setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachFileVideoAsset0: %w", err)
+	}
+
+	return videoAsset1, nil
+}
+
+func (file0 *File) InsertVideoAsset(ctx context.Context, exec bob.Executor, related *VideoAssetSetter) error {
+	var err error
+
+	videoAsset1, err := insertFileVideoAsset0(ctx, exec, related, file0)
+	if err != nil {
+		return err
+	}
+
+	file0.R.VideoAsset = videoAsset1
+
+	videoAsset1.R.File = file0
+
+	return nil
+}
+
+func (file0 *File) AttachVideoAsset(ctx context.Context, exec bob.Executor, videoAsset1 *VideoAsset) error {
+	var err error
+
+	_, err = attachFileVideoAsset0(ctx, exec, 1, videoAsset1, file0)
+	if err != nil {
+		return err
+	}
+
+	file0.R.VideoAsset = videoAsset1
+
+	videoAsset1.R.File = file0
 
 	return nil
 }

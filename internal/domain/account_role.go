@@ -11,6 +11,7 @@ type AccountRole struct {
 	ID             uuid.UUID
 	Name           string
 	PermissionMask PermissionMask
+	IsSystem       bool
 	IsDefault      bool
 	ParentID       *uuid.UUID
 }
@@ -21,4 +22,5 @@ func (r *AccountRole) FromDB(db *schema.AccountRole) {
 	r.PermissionMask = db.PermissionMask
 	r.ParentID = dbconv.NullValToPtr(db.ParentRoleID)
 	r.IsDefault = db.IsDefault
+	r.IsSystem = db.IsSystem
 }

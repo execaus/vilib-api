@@ -75,7 +75,10 @@ func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...uuid
 	return accounts, nil
 }
 
-func (r *AccountRepository) Insert(ctx context.Context, name, email string) (domain.Account, error) {
+func (r *AccountRepository) Insert(
+	ctx context.Context,
+	name, email string,
+) (domain.Account, error) {
 	exec := r.provider.GetExecutor(ctx)
 
 	var account domain.Account

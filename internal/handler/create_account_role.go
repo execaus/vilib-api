@@ -30,7 +30,7 @@ func (h *Handler) CreateAccountRole(c *gin.Context) {
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
 		accountRoles, err = services.AccountRole.Create(
 			ctx,
-			accountID, req.Name, req.ParentID, req.Permission, req.IsDefault,
+			accountID, req.Name, req.ParentID, req.Permission, req.IsDefault, false,
 		)
 		if err != nil {
 			zap.L().Error(err.Error())

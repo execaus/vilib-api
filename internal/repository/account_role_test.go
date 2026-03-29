@@ -19,12 +19,13 @@ func TestRepository_AccountRoleInsert_Success(t *testing.T) {
 			permission domain.PermissionMask = 5
 			name                             = f.Beer().Name()
 			isDefault                        = true
+			isSystem                         = true
 		)
 
 		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
 
-		parent, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false)
-		role, err := r.AccountRole.Insert(t.Context(), account.ID, name, &parent.ID, permission, isDefault)
+		parent, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
+		role, err := r.AccountRole.Insert(t.Context(), account.ID, name, &parent.ID, permission, isDefault, isSystem)
 
 		require.Nil(t, err)
 		require.NotEmpty(t, role.ID)
@@ -32,6 +33,7 @@ func TestRepository_AccountRoleInsert_Success(t *testing.T) {
 		require.Equal(t, name, role.Name)
 		require.Equal(t, isDefault, role.IsDefault)
 		require.Equal(t, parent.ID, *role.ParentID)
+		require.Equal(t, isSystem, role.IsSystem)
 	})
 }
 
@@ -56,6 +58,7 @@ func TestRepository_AccountRoleSelectByAccountID_Success(t *testing.T) {
 					f.Beer().Name(),
 					nil,
 					0,
+					false,
 					false,
 				)
 			}

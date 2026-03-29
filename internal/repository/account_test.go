@@ -26,6 +26,7 @@ func TestRepository_AccountInsert_Success(t *testing.T) {
 		require.NotEmpty(t, account.ID)
 		require.Equal(t, email, account.Email)
 		require.Equal(t, name, account.Name)
+		require.Equal(t, name, account.Name)
 		require.WithinDuration(t, startTime, account.CreatedAt, time.Second)
 	})
 }
@@ -92,7 +93,7 @@ func TestRepository_AccountSelectByUsersID_Success(t *testing.T) {
 		for i, account := range generatedAccounts {
 			roles[i] = make([]domain.AccountRole, roleInAccountCount)
 			for j := range roleInAccountCount {
-				roles[i][j], _ = r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false)
+				roles[i][j], _ = r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
 			}
 		}
 

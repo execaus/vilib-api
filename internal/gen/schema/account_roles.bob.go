@@ -34,6 +34,8 @@ type AccountRole struct {
 	AccountID    uuid.UUID           `db:"account_id" `
 	ParentRoleID null.Val[uuid.UUID] `db:"parent_role_id" `
 	IsDefault    bool                `db:"is_default" `
+	// Признак того, что роль является системной
+	IsSystem bool `db:"is_system" `
 
 	R accountRoleR `db:"-" `
 }
@@ -59,7 +61,7 @@ type accountRoleR struct {
 func buildAccountRoleColumns(alias string) accountRoleColumns {
 	return accountRoleColumns{
 		ColumnsExpr: expr.NewColumnsExpr(
-			"account_role_id", "name", "permission_mask", "account_id", "parent_role_id", "is_default",
+			"account_role_id", "name", "permission_mask", "account_id", "parent_role_id", "is_default", "is_system",
 		).WithParent("account_roles"),
 		tableAlias:     alias,
 		AccountRoleID:  psql.Quote(alias, "account_role_id"),
@@ -68,6 +70,7 @@ func buildAccountRoleColumns(alias string) accountRoleColumns {
 		AccountID:      psql.Quote(alias, "account_id"),
 		ParentRoleID:   psql.Quote(alias, "parent_role_id"),
 		IsDefault:      psql.Quote(alias, "is_default"),
+		IsSystem:       psql.Quote(alias, "is_system"),
 	}
 }
 
@@ -80,6 +83,7 @@ type accountRoleColumns struct {
 	AccountID      psql.Expression
 	ParentRoleID   psql.Expression
 	IsDefault      psql.Expression
+	IsSystem       psql.Expression
 }
 
 func (c accountRoleColumns) Alias() string {
@@ -100,10 +104,11 @@ type AccountRoleSetter struct {
 	AccountID      omit.Val[uuid.UUID]     `db:"account_id" `
 	ParentRoleID   omitnull.Val[uuid.UUID] `db:"parent_role_id" `
 	IsDefault      omit.Val[bool]          `db:"is_default" `
+	IsSystem       omit.Val[bool]          `db:"is_system" `
 }
 
 func (s AccountRoleSetter) SetColumns() []string {
-	vals := make([]string, 0, 6)
+	vals := make([]string, 0, 7)
 	if s.AccountRoleID.IsValue() {
 		vals = append(vals, "account_role_id")
 	}
@@ -121,6 +126,9 @@ func (s AccountRoleSetter) SetColumns() []string {
 	}
 	if s.IsDefault.IsValue() {
 		vals = append(vals, "is_default")
+	}
+	if s.IsSystem.IsValue() {
+		vals = append(vals, "is_system")
 	}
 	return vals
 }
@@ -144,6 +152,9 @@ func (s AccountRoleSetter) Overwrite(t *AccountRole) {
 	if s.IsDefault.IsValue() {
 		t.IsDefault = s.IsDefault.MustGet()
 	}
+	if s.IsSystem.IsValue() {
+		t.IsSystem = s.IsSystem.MustGet()
+	}
 }
 
 func (s *AccountRoleSetter) Apply(q *dialect.InsertQuery) {
@@ -152,7 +163,7 @@ func (s *AccountRoleSetter) Apply(q *dialect.InsertQuery) {
 	})
 
 	q.AppendValues(bob.ExpressionFunc(func(ctx context.Context, w io.StringWriter, d bob.Dialect, start int) ([]any, error) {
-		vals := make([]bob.Expression, 6)
+		vals := make([]bob.Expression, 7)
 		if s.AccountRoleID.IsValue() {
 			vals[0] = psql.Arg(s.AccountRoleID.MustGet())
 		} else {
@@ -189,6 +200,12 @@ func (s *AccountRoleSetter) Apply(q *dialect.InsertQuery) {
 			vals[5] = psql.Raw("DEFAULT")
 		}
 
+		if s.IsSystem.IsValue() {
+			vals[6] = psql.Arg(s.IsSystem.MustGet())
+		} else {
+			vals[6] = psql.Raw("DEFAULT")
+		}
+
 		return bob.ExpressSlice(ctx, w, d, start, vals, "", ", ", "")
 	}))
 }
@@ -198,7 +215,7 @@ func (s AccountRoleSetter) UpdateMod() bob.Mod[*dialect.UpdateQuery] {
 }
 
 func (s AccountRoleSetter) Expressions(prefix ...string) []bob.Expression {
-	exprs := make([]bob.Expression, 0, 6)
+	exprs := make([]bob.Expression, 0, 7)
 
 	if s.AccountRoleID.IsValue() {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
@@ -239,6 +256,13 @@ func (s AccountRoleSetter) Expressions(prefix ...string) []bob.Expression {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
 			psql.Quote(append(prefix, "is_default")...),
 			psql.Arg(s.IsDefault),
+		}})
+	}
+
+	if s.IsSystem.IsValue() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "is_system")...),
+			psql.Arg(s.IsSystem),
 		}})
 	}
 

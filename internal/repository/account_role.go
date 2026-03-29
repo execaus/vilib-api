@@ -27,7 +27,7 @@ func (r *AccountRoleRepository) Insert(
 	name string,
 	parentID *uuid.UUID,
 	permission domain.PermissionMask,
-	isDefault bool,
+	isDefault, isSystem bool,
 ) (domain.AccountRole, error) {
 	exec := r.provider.GetExecutor(ctx)
 
@@ -37,6 +37,7 @@ func (r *AccountRoleRepository) Insert(
 		AccountID:      omit.From(accountID),
 		ParentRoleID:   omitnull.FromPtr(parentID),
 		IsDefault:      omit.From(isDefault),
+		IsSystem:       omit.From(isSystem),
 	}).One(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())
