@@ -34,6 +34,13 @@ type AccountRoleMock struct {
 	beforeCreateSystemAccountOwnerCounter uint64
 	CreateSystemAccountOwnerMock          mAccountRoleMockCreateSystemAccountOwner
 
+	funcGetByID          func(ctx context.Context, rolesID ...uuid.UUID) (aa1 []domain.AccountRole, err error)
+	funcGetByIDOrigin    string
+	inspectFuncGetByID   func(ctx context.Context, rolesID ...uuid.UUID)
+	afterGetByIDCounter  uint64
+	beforeGetByIDCounter uint64
+	GetByIDMock          mAccountRoleMockGetByID
+
 	funcGetDefault          func(ctx context.Context, accountID uuid.UUID) (a1 domain.AccountRole, err error)
 	funcGetDefaultOrigin    string
 	inspectFuncGetDefault   func(ctx context.Context, accountID uuid.UUID)
@@ -55,6 +62,9 @@ func NewAccountRoleMock(t minimock.Tester) *AccountRoleMock {
 
 	m.CreateSystemAccountOwnerMock = mAccountRoleMockCreateSystemAccountOwner{mock: m}
 	m.CreateSystemAccountOwnerMock.callArgs = []*AccountRoleMockCreateSystemAccountOwnerParams{}
+
+	m.GetByIDMock = mAccountRoleMockGetByID{mock: m}
+	m.GetByIDMock.callArgs = []*AccountRoleMockGetByIDParams{}
 
 	m.GetDefaultMock = mAccountRoleMockGetDefault{mock: m}
 	m.GetDefaultMock.callArgs = []*AccountRoleMockGetDefaultParams{}
@@ -874,6 +884,349 @@ func (m *AccountRoleMock) MinimockCreateSystemAccountOwnerInspect() {
 	}
 }
 
+type mAccountRoleMockGetByID struct {
+	optional           bool
+	mock               *AccountRoleMock
+	defaultExpectation *AccountRoleMockGetByIDExpectation
+	expectations       []*AccountRoleMockGetByIDExpectation
+
+	callArgs []*AccountRoleMockGetByIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AccountRoleMockGetByIDExpectation specifies expectation struct of the AccountRole.GetByID
+type AccountRoleMockGetByIDExpectation struct {
+	mock               *AccountRoleMock
+	params             *AccountRoleMockGetByIDParams
+	paramPtrs          *AccountRoleMockGetByIDParamPtrs
+	expectationOrigins AccountRoleMockGetByIDExpectationOrigins
+	results            *AccountRoleMockGetByIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AccountRoleMockGetByIDParams contains parameters of the AccountRole.GetByID
+type AccountRoleMockGetByIDParams struct {
+	ctx     context.Context
+	rolesID []uuid.UUID
+}
+
+// AccountRoleMockGetByIDParamPtrs contains pointers to parameters of the AccountRole.GetByID
+type AccountRoleMockGetByIDParamPtrs struct {
+	ctx     *context.Context
+	rolesID *[]uuid.UUID
+}
+
+// AccountRoleMockGetByIDResults contains results of the AccountRole.GetByID
+type AccountRoleMockGetByIDResults struct {
+	aa1 []domain.AccountRole
+	err error
+}
+
+// AccountRoleMockGetByIDOrigins contains origins of expectations of the AccountRole.GetByID
+type AccountRoleMockGetByIDExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originRolesID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetByID *mAccountRoleMockGetByID) Optional() *mAccountRoleMockGetByID {
+	mmGetByID.optional = true
+	return mmGetByID
+}
+
+// Expect sets up expected params for AccountRole.GetByID
+func (mmGetByID *mAccountRoleMockGetByID) Expect(ctx context.Context, rolesID ...uuid.UUID) *mAccountRoleMockGetByID {
+	if mmGetByID.mock.funcGetByID != nil {
+		mmGetByID.mock.t.Fatalf("AccountRoleMock.GetByID mock is already set by Set")
+	}
+
+	if mmGetByID.defaultExpectation == nil {
+		mmGetByID.defaultExpectation = &AccountRoleMockGetByIDExpectation{}
+	}
+
+	if mmGetByID.defaultExpectation.paramPtrs != nil {
+		mmGetByID.mock.t.Fatalf("AccountRoleMock.GetByID mock is already set by ExpectParams functions")
+	}
+
+	mmGetByID.defaultExpectation.params = &AccountRoleMockGetByIDParams{ctx, rolesID}
+	mmGetByID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetByID.expectations {
+		if minimock.Equal(e.params, mmGetByID.defaultExpectation.params) {
+			mmGetByID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetByID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetByID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for AccountRole.GetByID
+func (mmGetByID *mAccountRoleMockGetByID) ExpectCtxParam1(ctx context.Context) *mAccountRoleMockGetByID {
+	if mmGetByID.mock.funcGetByID != nil {
+		mmGetByID.mock.t.Fatalf("AccountRoleMock.GetByID mock is already set by Set")
+	}
+
+	if mmGetByID.defaultExpectation == nil {
+		mmGetByID.defaultExpectation = &AccountRoleMockGetByIDExpectation{}
+	}
+
+	if mmGetByID.defaultExpectation.params != nil {
+		mmGetByID.mock.t.Fatalf("AccountRoleMock.GetByID mock is already set by Expect")
+	}
+
+	if mmGetByID.defaultExpectation.paramPtrs == nil {
+		mmGetByID.defaultExpectation.paramPtrs = &AccountRoleMockGetByIDParamPtrs{}
+	}
+	mmGetByID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetByID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetByID
+}
+
+// ExpectRolesIDParam2 sets up expected param rolesID for AccountRole.GetByID
+func (mmGetByID *mAccountRoleMockGetByID) ExpectRolesIDParam2(rolesID ...uuid.UUID) *mAccountRoleMockGetByID {
+	if mmGetByID.mock.funcGetByID != nil {
+		mmGetByID.mock.t.Fatalf("AccountRoleMock.GetByID mock is already set by Set")
+	}
+
+	if mmGetByID.defaultExpectation == nil {
+		mmGetByID.defaultExpectation = &AccountRoleMockGetByIDExpectation{}
+	}
+
+	if mmGetByID.defaultExpectation.params != nil {
+		mmGetByID.mock.t.Fatalf("AccountRoleMock.GetByID mock is already set by Expect")
+	}
+
+	if mmGetByID.defaultExpectation.paramPtrs == nil {
+		mmGetByID.defaultExpectation.paramPtrs = &AccountRoleMockGetByIDParamPtrs{}
+	}
+	mmGetByID.defaultExpectation.paramPtrs.rolesID = &rolesID
+	mmGetByID.defaultExpectation.expectationOrigins.originRolesID = minimock.CallerInfo(1)
+
+	return mmGetByID
+}
+
+// Inspect accepts an inspector function that has same arguments as the AccountRole.GetByID
+func (mmGetByID *mAccountRoleMockGetByID) Inspect(f func(ctx context.Context, rolesID ...uuid.UUID)) *mAccountRoleMockGetByID {
+	if mmGetByID.mock.inspectFuncGetByID != nil {
+		mmGetByID.mock.t.Fatalf("Inspect function is already set for AccountRoleMock.GetByID")
+	}
+
+	mmGetByID.mock.inspectFuncGetByID = f
+
+	return mmGetByID
+}
+
+// Return sets up results that will be returned by AccountRole.GetByID
+func (mmGetByID *mAccountRoleMockGetByID) Return(aa1 []domain.AccountRole, err error) *AccountRoleMock {
+	if mmGetByID.mock.funcGetByID != nil {
+		mmGetByID.mock.t.Fatalf("AccountRoleMock.GetByID mock is already set by Set")
+	}
+
+	if mmGetByID.defaultExpectation == nil {
+		mmGetByID.defaultExpectation = &AccountRoleMockGetByIDExpectation{mock: mmGetByID.mock}
+	}
+	mmGetByID.defaultExpectation.results = &AccountRoleMockGetByIDResults{aa1, err}
+	mmGetByID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetByID.mock
+}
+
+// Set uses given function f to mock the AccountRole.GetByID method
+func (mmGetByID *mAccountRoleMockGetByID) Set(f func(ctx context.Context, rolesID ...uuid.UUID) (aa1 []domain.AccountRole, err error)) *AccountRoleMock {
+	if mmGetByID.defaultExpectation != nil {
+		mmGetByID.mock.t.Fatalf("Default expectation is already set for the AccountRole.GetByID method")
+	}
+
+	if len(mmGetByID.expectations) > 0 {
+		mmGetByID.mock.t.Fatalf("Some expectations are already set for the AccountRole.GetByID method")
+	}
+
+	mmGetByID.mock.funcGetByID = f
+	mmGetByID.mock.funcGetByIDOrigin = minimock.CallerInfo(1)
+	return mmGetByID.mock
+}
+
+// When sets expectation for the AccountRole.GetByID which will trigger the result defined by the following
+// Then helper
+func (mmGetByID *mAccountRoleMockGetByID) When(ctx context.Context, rolesID ...uuid.UUID) *AccountRoleMockGetByIDExpectation {
+	if mmGetByID.mock.funcGetByID != nil {
+		mmGetByID.mock.t.Fatalf("AccountRoleMock.GetByID mock is already set by Set")
+	}
+
+	expectation := &AccountRoleMockGetByIDExpectation{
+		mock:               mmGetByID.mock,
+		params:             &AccountRoleMockGetByIDParams{ctx, rolesID},
+		expectationOrigins: AccountRoleMockGetByIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetByID.expectations = append(mmGetByID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up AccountRole.GetByID return parameters for the expectation previously defined by the When method
+func (e *AccountRoleMockGetByIDExpectation) Then(aa1 []domain.AccountRole, err error) *AccountRoleMock {
+	e.results = &AccountRoleMockGetByIDResults{aa1, err}
+	return e.mock
+}
+
+// Times sets number of times AccountRole.GetByID should be invoked
+func (mmGetByID *mAccountRoleMockGetByID) Times(n uint64) *mAccountRoleMockGetByID {
+	if n == 0 {
+		mmGetByID.mock.t.Fatalf("Times of AccountRoleMock.GetByID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetByID.expectedInvocations, n)
+	mmGetByID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetByID
+}
+
+func (mmGetByID *mAccountRoleMockGetByID) invocationsDone() bool {
+	if len(mmGetByID.expectations) == 0 && mmGetByID.defaultExpectation == nil && mmGetByID.mock.funcGetByID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetByID.mock.afterGetByIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetByID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetByID implements mm_service.AccountRole
+func (mmGetByID *AccountRoleMock) GetByID(ctx context.Context, rolesID ...uuid.UUID) (aa1 []domain.AccountRole, err error) {
+	mm_atomic.AddUint64(&mmGetByID.beforeGetByIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetByID.afterGetByIDCounter, 1)
+
+	mmGetByID.t.Helper()
+
+	if mmGetByID.inspectFuncGetByID != nil {
+		mmGetByID.inspectFuncGetByID(ctx, rolesID...)
+	}
+
+	mm_params := AccountRoleMockGetByIDParams{ctx, rolesID}
+
+	// Record call args
+	mmGetByID.GetByIDMock.mutex.Lock()
+	mmGetByID.GetByIDMock.callArgs = append(mmGetByID.GetByIDMock.callArgs, &mm_params)
+	mmGetByID.GetByIDMock.mutex.Unlock()
+
+	for _, e := range mmGetByID.GetByIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.aa1, e.results.err
+		}
+	}
+
+	if mmGetByID.GetByIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetByID.GetByIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetByID.GetByIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetByID.GetByIDMock.defaultExpectation.paramPtrs
+
+		mm_got := AccountRoleMockGetByIDParams{ctx, rolesID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetByID.t.Errorf("AccountRoleMock.GetByID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetByID.GetByIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.rolesID != nil && !minimock.Equal(*mm_want_ptrs.rolesID, mm_got.rolesID) {
+				mmGetByID.t.Errorf("AccountRoleMock.GetByID got unexpected parameter rolesID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetByID.GetByIDMock.defaultExpectation.expectationOrigins.originRolesID, *mm_want_ptrs.rolesID, mm_got.rolesID, minimock.Diff(*mm_want_ptrs.rolesID, mm_got.rolesID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetByID.t.Errorf("AccountRoleMock.GetByID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetByID.GetByIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetByID.GetByIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetByID.t.Fatal("No results are set for the AccountRoleMock.GetByID")
+		}
+		return (*mm_results).aa1, (*mm_results).err
+	}
+	if mmGetByID.funcGetByID != nil {
+		return mmGetByID.funcGetByID(ctx, rolesID...)
+	}
+	mmGetByID.t.Fatalf("Unexpected call to AccountRoleMock.GetByID. %v %v", ctx, rolesID)
+	return
+}
+
+// GetByIDAfterCounter returns a count of finished AccountRoleMock.GetByID invocations
+func (mmGetByID *AccountRoleMock) GetByIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetByID.afterGetByIDCounter)
+}
+
+// GetByIDBeforeCounter returns a count of AccountRoleMock.GetByID invocations
+func (mmGetByID *AccountRoleMock) GetByIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetByID.beforeGetByIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to AccountRoleMock.GetByID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetByID *mAccountRoleMockGetByID) Calls() []*AccountRoleMockGetByIDParams {
+	mmGetByID.mutex.RLock()
+
+	argCopy := make([]*AccountRoleMockGetByIDParams, len(mmGetByID.callArgs))
+	copy(argCopy, mmGetByID.callArgs)
+
+	mmGetByID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetByIDDone returns true if the count of the GetByID invocations corresponds
+// the number of defined expectations
+func (m *AccountRoleMock) MinimockGetByIDDone() bool {
+	if m.GetByIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetByIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetByIDMock.invocationsDone()
+}
+
+// MinimockGetByIDInspect logs each unmet expectation
+func (m *AccountRoleMock) MinimockGetByIDInspect() {
+	for _, e := range m.GetByIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AccountRoleMock.GetByID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetByIDCounter := mm_atomic.LoadUint64(&m.afterGetByIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetByIDMock.defaultExpectation != nil && afterGetByIDCounter < 1 {
+		if m.GetByIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AccountRoleMock.GetByID at\n%s", m.GetByIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AccountRoleMock.GetByID at\n%s with params: %#v", m.GetByIDMock.defaultExpectation.expectationOrigins.origin, *m.GetByIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetByID != nil && afterGetByIDCounter < 1 {
+		m.t.Errorf("Expected call to AccountRoleMock.GetByID at\n%s", m.funcGetByIDOrigin)
+	}
+
+	if !m.GetByIDMock.invocationsDone() && afterGetByIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to AccountRoleMock.GetByID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetByIDMock.expectedInvocations), m.GetByIDMock.expectedInvocationsOrigin, afterGetByIDCounter)
+	}
+}
+
 type mAccountRoleMockGetDefault struct {
 	optional           bool
 	mock               *AccountRoleMock
@@ -1225,6 +1578,8 @@ func (m *AccountRoleMock) MinimockFinish() {
 
 			m.MinimockCreateSystemAccountOwnerInspect()
 
+			m.MinimockGetByIDInspect()
+
 			m.MinimockGetDefaultInspect()
 		}
 	})
@@ -1251,5 +1606,6 @@ func (m *AccountRoleMock) minimockDone() bool {
 	return done &&
 		m.MinimockCreateDone() &&
 		m.MinimockCreateSystemAccountOwnerDone() &&
+		m.MinimockGetByIDDone() &&
 		m.MinimockGetDefaultDone()
 }

@@ -48,9 +48,9 @@ type AccountMock struct {
 	beforeGetByUserEmailCounter uint64
 	GetByUserEmailMock          mAccountMockGetByUserEmail
 
-	funcIsExistsUserByEmail          func(ctx context.Context, accountID uuid.UUID, email string) (b1 bool, err error)
+	funcIsExistsUserByEmail          func(ctx context.Context, email string) (b1 bool, err error)
 	funcIsExistsUserByEmailOrigin    string
-	inspectFuncIsExistsUserByEmail   func(ctx context.Context, accountID uuid.UUID, email string)
+	inspectFuncIsExistsUserByEmail   func(ctx context.Context, email string)
 	afterIsExistsUserByEmailCounter  uint64
 	beforeIsExistsUserByEmailCounter uint64
 	IsExistsUserByEmailMock          mAccountMockIsExistsUserByEmail
@@ -1637,16 +1637,14 @@ type AccountMockIsExistsUserByEmailExpectation struct {
 
 // AccountMockIsExistsUserByEmailParams contains parameters of the Account.IsExistsUserByEmail
 type AccountMockIsExistsUserByEmailParams struct {
-	ctx       context.Context
-	accountID uuid.UUID
-	email     string
+	ctx   context.Context
+	email string
 }
 
 // AccountMockIsExistsUserByEmailParamPtrs contains pointers to parameters of the Account.IsExistsUserByEmail
 type AccountMockIsExistsUserByEmailParamPtrs struct {
-	ctx       *context.Context
-	accountID *uuid.UUID
-	email     *string
+	ctx   *context.Context
+	email *string
 }
 
 // AccountMockIsExistsUserByEmailResults contains results of the Account.IsExistsUserByEmail
@@ -1657,10 +1655,9 @@ type AccountMockIsExistsUserByEmailResults struct {
 
 // AccountMockIsExistsUserByEmailOrigins contains origins of expectations of the Account.IsExistsUserByEmail
 type AccountMockIsExistsUserByEmailExpectationOrigins struct {
-	origin          string
-	originCtx       string
-	originAccountID string
-	originEmail     string
+	origin      string
+	originCtx   string
+	originEmail string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -1674,7 +1671,7 @@ func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) Optional() *mAccou
 }
 
 // Expect sets up expected params for Account.IsExistsUserByEmail
-func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) Expect(ctx context.Context, accountID uuid.UUID, email string) *mAccountMockIsExistsUserByEmail {
+func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) Expect(ctx context.Context, email string) *mAccountMockIsExistsUserByEmail {
 	if mmIsExistsUserByEmail.mock.funcIsExistsUserByEmail != nil {
 		mmIsExistsUserByEmail.mock.t.Fatalf("AccountMock.IsExistsUserByEmail mock is already set by Set")
 	}
@@ -1687,7 +1684,7 @@ func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) Expect(ctx context
 		mmIsExistsUserByEmail.mock.t.Fatalf("AccountMock.IsExistsUserByEmail mock is already set by ExpectParams functions")
 	}
 
-	mmIsExistsUserByEmail.defaultExpectation.params = &AccountMockIsExistsUserByEmailParams{ctx, accountID, email}
+	mmIsExistsUserByEmail.defaultExpectation.params = &AccountMockIsExistsUserByEmailParams{ctx, email}
 	mmIsExistsUserByEmail.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmIsExistsUserByEmail.expectations {
 		if minimock.Equal(e.params, mmIsExistsUserByEmail.defaultExpectation.params) {
@@ -1721,31 +1718,8 @@ func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) ExpectCtxParam1(ct
 	return mmIsExistsUserByEmail
 }
 
-// ExpectAccountIDParam2 sets up expected param accountID for Account.IsExistsUserByEmail
-func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) ExpectAccountIDParam2(accountID uuid.UUID) *mAccountMockIsExistsUserByEmail {
-	if mmIsExistsUserByEmail.mock.funcIsExistsUserByEmail != nil {
-		mmIsExistsUserByEmail.mock.t.Fatalf("AccountMock.IsExistsUserByEmail mock is already set by Set")
-	}
-
-	if mmIsExistsUserByEmail.defaultExpectation == nil {
-		mmIsExistsUserByEmail.defaultExpectation = &AccountMockIsExistsUserByEmailExpectation{}
-	}
-
-	if mmIsExistsUserByEmail.defaultExpectation.params != nil {
-		mmIsExistsUserByEmail.mock.t.Fatalf("AccountMock.IsExistsUserByEmail mock is already set by Expect")
-	}
-
-	if mmIsExistsUserByEmail.defaultExpectation.paramPtrs == nil {
-		mmIsExistsUserByEmail.defaultExpectation.paramPtrs = &AccountMockIsExistsUserByEmailParamPtrs{}
-	}
-	mmIsExistsUserByEmail.defaultExpectation.paramPtrs.accountID = &accountID
-	mmIsExistsUserByEmail.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
-
-	return mmIsExistsUserByEmail
-}
-
-// ExpectEmailParam3 sets up expected param email for Account.IsExistsUserByEmail
-func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) ExpectEmailParam3(email string) *mAccountMockIsExistsUserByEmail {
+// ExpectEmailParam2 sets up expected param email for Account.IsExistsUserByEmail
+func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) ExpectEmailParam2(email string) *mAccountMockIsExistsUserByEmail {
 	if mmIsExistsUserByEmail.mock.funcIsExistsUserByEmail != nil {
 		mmIsExistsUserByEmail.mock.t.Fatalf("AccountMock.IsExistsUserByEmail mock is already set by Set")
 	}
@@ -1768,7 +1742,7 @@ func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) ExpectEmailParam3(
 }
 
 // Inspect accepts an inspector function that has same arguments as the Account.IsExistsUserByEmail
-func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) Inspect(f func(ctx context.Context, accountID uuid.UUID, email string)) *mAccountMockIsExistsUserByEmail {
+func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) Inspect(f func(ctx context.Context, email string)) *mAccountMockIsExistsUserByEmail {
 	if mmIsExistsUserByEmail.mock.inspectFuncIsExistsUserByEmail != nil {
 		mmIsExistsUserByEmail.mock.t.Fatalf("Inspect function is already set for AccountMock.IsExistsUserByEmail")
 	}
@@ -1793,7 +1767,7 @@ func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) Return(b1 bool, er
 }
 
 // Set uses given function f to mock the Account.IsExistsUserByEmail method
-func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) Set(f func(ctx context.Context, accountID uuid.UUID, email string) (b1 bool, err error)) *AccountMock {
+func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) Set(f func(ctx context.Context, email string) (b1 bool, err error)) *AccountMock {
 	if mmIsExistsUserByEmail.defaultExpectation != nil {
 		mmIsExistsUserByEmail.mock.t.Fatalf("Default expectation is already set for the Account.IsExistsUserByEmail method")
 	}
@@ -1809,14 +1783,14 @@ func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) Set(f func(ctx con
 
 // When sets expectation for the Account.IsExistsUserByEmail which will trigger the result defined by the following
 // Then helper
-func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) When(ctx context.Context, accountID uuid.UUID, email string) *AccountMockIsExistsUserByEmailExpectation {
+func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) When(ctx context.Context, email string) *AccountMockIsExistsUserByEmailExpectation {
 	if mmIsExistsUserByEmail.mock.funcIsExistsUserByEmail != nil {
 		mmIsExistsUserByEmail.mock.t.Fatalf("AccountMock.IsExistsUserByEmail mock is already set by Set")
 	}
 
 	expectation := &AccountMockIsExistsUserByEmailExpectation{
 		mock:               mmIsExistsUserByEmail.mock,
-		params:             &AccountMockIsExistsUserByEmailParams{ctx, accountID, email},
+		params:             &AccountMockIsExistsUserByEmailParams{ctx, email},
 		expectationOrigins: AccountMockIsExistsUserByEmailExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmIsExistsUserByEmail.expectations = append(mmIsExistsUserByEmail.expectations, expectation)
@@ -1851,17 +1825,17 @@ func (mmIsExistsUserByEmail *mAccountMockIsExistsUserByEmail) invocationsDone() 
 }
 
 // IsExistsUserByEmail implements mm_service.Account
-func (mmIsExistsUserByEmail *AccountMock) IsExistsUserByEmail(ctx context.Context, accountID uuid.UUID, email string) (b1 bool, err error) {
+func (mmIsExistsUserByEmail *AccountMock) IsExistsUserByEmail(ctx context.Context, email string) (b1 bool, err error) {
 	mm_atomic.AddUint64(&mmIsExistsUserByEmail.beforeIsExistsUserByEmailCounter, 1)
 	defer mm_atomic.AddUint64(&mmIsExistsUserByEmail.afterIsExistsUserByEmailCounter, 1)
 
 	mmIsExistsUserByEmail.t.Helper()
 
 	if mmIsExistsUserByEmail.inspectFuncIsExistsUserByEmail != nil {
-		mmIsExistsUserByEmail.inspectFuncIsExistsUserByEmail(ctx, accountID, email)
+		mmIsExistsUserByEmail.inspectFuncIsExistsUserByEmail(ctx, email)
 	}
 
-	mm_params := AccountMockIsExistsUserByEmailParams{ctx, accountID, email}
+	mm_params := AccountMockIsExistsUserByEmailParams{ctx, email}
 
 	// Record call args
 	mmIsExistsUserByEmail.IsExistsUserByEmailMock.mutex.Lock()
@@ -1880,18 +1854,13 @@ func (mmIsExistsUserByEmail *AccountMock) IsExistsUserByEmail(ctx context.Contex
 		mm_want := mmIsExistsUserByEmail.IsExistsUserByEmailMock.defaultExpectation.params
 		mm_want_ptrs := mmIsExistsUserByEmail.IsExistsUserByEmailMock.defaultExpectation.paramPtrs
 
-		mm_got := AccountMockIsExistsUserByEmailParams{ctx, accountID, email}
+		mm_got := AccountMockIsExistsUserByEmailParams{ctx, email}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
 				mmIsExistsUserByEmail.t.Errorf("AccountMock.IsExistsUserByEmail got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmIsExistsUserByEmail.IsExistsUserByEmailMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
-				mmIsExistsUserByEmail.t.Errorf("AccountMock.IsExistsUserByEmail got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmIsExistsUserByEmail.IsExistsUserByEmailMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
 			}
 
 			if mm_want_ptrs.email != nil && !minimock.Equal(*mm_want_ptrs.email, mm_got.email) {
@@ -1911,9 +1880,9 @@ func (mmIsExistsUserByEmail *AccountMock) IsExistsUserByEmail(ctx context.Contex
 		return (*mm_results).b1, (*mm_results).err
 	}
 	if mmIsExistsUserByEmail.funcIsExistsUserByEmail != nil {
-		return mmIsExistsUserByEmail.funcIsExistsUserByEmail(ctx, accountID, email)
+		return mmIsExistsUserByEmail.funcIsExistsUserByEmail(ctx, email)
 	}
-	mmIsExistsUserByEmail.t.Fatalf("Unexpected call to AccountMock.IsExistsUserByEmail. %v %v %v", ctx, accountID, email)
+	mmIsExistsUserByEmail.t.Fatalf("Unexpected call to AccountMock.IsExistsUserByEmail. %v %v", ctx, email)
 	return
 }
 

@@ -30,7 +30,7 @@ type Auth interface {
 }
 
 type Account interface {
-	IsExistsUserByEmail(ctx context.Context, accountID uuid.UUID, email string) (bool, error)
+	IsExistsUserByEmail(ctx context.Context, email string) (bool, error)
 	GetByUserEmail(ctx context.Context, email string) ([]domain.Account, error)
 	GetByID(ctx context.Context, accountsID ...uuid.UUID) ([]domain.Account, error)
 	Create(ctx context.Context, userName, userSurname, email string) (domain.Account, error)
@@ -44,6 +44,7 @@ type AccountRole interface {
 	) (domain.AccountRole, error)
 	CreateSystemAccountOwner(ctx context.Context, accountID uuid.UUID) (domain.AccountRole, error)
 	GetDefault(ctx context.Context, accountID uuid.UUID) (domain.AccountRole, error)
+	GetByID(ctx context.Context, rolesID ...uuid.UUID) ([]domain.AccountRole, error)
 }
 
 type User interface {

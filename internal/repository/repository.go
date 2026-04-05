@@ -33,6 +33,7 @@ type AccountRole interface {
 		accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault, isSystem bool,
 	) (domain.AccountRole, error)
 	SelectByAccountID(ctx context.Context, accountID uuid.UUID) ([]domain.AccountRole, error)
+	SelectByID(ctx context.Context, rolesID ...uuid.UUID) ([]domain.AccountRole, error)
 }
 
 type UserGroup interface {

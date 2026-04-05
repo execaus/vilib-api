@@ -84,3 +84,48 @@ func TestRepository_AccountRoleSelectByAccountID_NilNotFound(t *testing.T) {
 		require.ErrorIs(t, repository.ErrNotFound, err)
 	})
 }
+
+func TestRepository_AccountRoleSelectByID_Success(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		const (
+			accountCount       = 5
+			roleInAccountCount = 3
+		)
+
+		accounts := make([]domain.Account, accountCount)
+		generatedRoles := make([][]domain.AccountRole, accountCount)
+		for i := range accountCount {
+			accounts[i], _ = r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+			generatedRoles[i] = make([]domain.AccountRole, roleInAccountCount)
+			for j := range roleInAccountCount {
+				generatedRoles[i][j], _ = r.AccountRole.Insert(
+					t.Context(),
+					accounts[i].ID,
+					f.Beer().Name(),
+					nil,
+					0,
+					false,
+					false,
+				)
+			}
+		}
+
+		roles, err := r.AccountRole.SelectByID(t.Context(), generatedRoles[3][0].ID)
+
+		require.Nil(t, err)
+		require.Contains(t, generatedRoles[3], roles[0])
+	})
+}
+
+func TestRepository_AccountRoleSelectByID_NilNotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		roles, err := r.AccountRole.SelectByID(t.Context(), uuid.New())
+
+		require.Nil(t, roles)
+		require.ErrorIs(t, repository.ErrNotFound, err)
+	})
+}

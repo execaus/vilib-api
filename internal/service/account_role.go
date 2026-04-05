@@ -102,3 +102,12 @@ func (s *AccountRoleService) findDefaultRole(roles []domain.AccountRole) (domain
 
 	return defaultRoles[0], nil
 }
+
+func (s *AccountRoleService) GetByID(ctx context.Context, rolesID ...uuid.UUID) ([]domain.AccountRole, error) {
+	roles, err := s.repo.SelectByID(ctx, rolesID...)
+	if err != nil {
+		zap.L().Error(err.Error())
+	}
+
+	return roles, nil
+}

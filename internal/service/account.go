@@ -11,15 +11,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	testName         = "John"
-	testSurname      = "Doe"
-	testEmail        = "john@mail.com"
-	testInvalid      = "invalid"
-	testPassword     = "pass"
-	testPasswordHash = "hash"
-)
-
 type AccountService struct {
 	repo repository.Account
 	srv  *Service
@@ -91,7 +82,7 @@ func (s *AccountService) CreateUser(
 	name, surname, email string,
 ) (domain.User, error) {
 	// Существует ли пользователь в аккаунте
-	exists, err := s.srv.Account.IsExistsUserByEmail(ctx, accountID, email)
+	exists, err := s.srv.Account.IsExistsUserByEmail(ctx, email)
 	if exists {
 		zap.L().Error(ErrAccountUserExists.Error())
 		return domain.User{}, ErrAccountUserExists
@@ -144,6 +135,16 @@ func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]do
 	}
 
 	accountsID := make([]uuid.UUID, len(accountRolesID))
+	accountsRole, err := s.srv.AccountRole.GetByID(ctx, accountRolesID...)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	for i, role := range accountsRole {
+		accountsID[i] = role.ID
+	}
+
 	accounts, err := s.GetByID(ctx, accountsID...)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -153,7 +154,7 @@ func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]do
 	return accounts, nil
 }
 
-func (s *AccountService) IsExistsUserByEmail(ctx context.Context, accountID uuid.UUID, email string) (bool, error) {
+func (s *AccountService) IsExistsUserByEmail(ctx context.Context, email string) (bool, error) {
 	accounts, err := s.srv.Account.GetByUserEmail(ctx, email)
 	if err != nil {
 		zap.L().Error(err.Error())
