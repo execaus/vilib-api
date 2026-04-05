@@ -18,9 +18,12 @@ func NewUserService(repo repository.User, srv *Service) *UserService {
 	return &UserService{repo: repo, srv: srv}
 }
 
-func (s *UserService) Create(ctx context.Context, name, surname, email, passwordHash string) (domain.User, error) {
-	// исправить роль
-	user, err := s.repo.Insert(ctx, name, surname, passwordHash, email, uuid.New())
+func (s *UserService) Create(
+	ctx context.Context,
+	name, surname, email, passwordHash string,
+	roleID uuid.UUID,
+) (domain.User, error) {
+	user, err := s.repo.Insert(ctx, name, surname, passwordHash, email, roleID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return user, err

@@ -17,6 +17,6 @@ func TestRepositoryWithDB(t *testing.T, fn func(r *repository.Repository, f fake
 
 	WithDB(t, migrationsPath, func(bobDB *bob.DB) {
 		t.Helper()
-		fn(repository.NewRepository(repository.NewExecutorProvider(bobDB)), localFaker)
+		fn(repository.NewRepository(repository.NewExecutorProvider(bobDB)), Faker)
 	})
 }

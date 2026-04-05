@@ -25,12 +25,12 @@ func (h *Handler) CreateAccountRole(c *gin.Context) {
 	}
 
 	var (
-		accountRoles []domain.AccountRole
+		accountRole domain.AccountRole
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		accountRoles, err = services.AccountRole.Create(
+		accountRole, err = services.AccountRole.Create(
 			ctx,
-			accountID, req.Name, req.ParentID, req.Permission, req.IsDefault, false,
+			accountID, req.Name, req.ParentID, req.Permission, req.IsDefault,
 		)
 		if err != nil {
 			zap.L().Error(err.Error())
@@ -43,13 +43,10 @@ func (h *Handler) CreateAccountRole(c *gin.Context) {
 		return
 	}
 
-	dtoAccountRoles := make([]dto.AccountRole, len(accountRoles))
-	for i, role := range accountRoles {
-		dtoAccountRoles[i] = dto.AccountRole{}
-		dtoAccountRoles[i].FromDomain(role)
-	}
+	dtoAccountRole := dto.AccountRole{}
+	dtoAccountRole.FromDomain(accountRole)
 
 	sendCreated(c, dto.CreateAccountRoleResponse{
-		AccountRoles: dtoAccountRoles,
+		AccountRole: dtoAccountRole,
 	})
 }

@@ -9,7 +9,15 @@ import (
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
+)
+
+const (
+	testName         = "John"
+	testSurname      = "Doe"
+	testEmail        = "john@mail.com"
+	testInvalid      = "invalid"
+	testPassword     = "pass"
+	testPasswordHash = "hash"
 )
 
 type AccountService struct {
@@ -40,6 +48,13 @@ func (s *AccountService) Create(ctx context.Context, userName, userSurname, emai
 		return domain.Account{}, err
 	}
 
+	// Создание системной роли владельца аккаунта
+	ownerRole, err := s.srv.AccountRole.CreateSystemAccountOwner(ctx, account.ID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.Account{}, err
+	}
+
 	// Генерация пароля для пользователя
 	password, err := s.srv.Auth.GeneratePassword()
 	if err != nil {
@@ -55,18 +70,13 @@ func (s *AccountService) Create(ctx context.Context, userName, userSurname, emai
 	}
 
 	// Создание пользователя
-	user, err := s.srv.User.Create(ctx, userName, userSurname, email, passwordHash)
+	user, err := s.srv.User.Create(ctx, userName, userSurname, email, passwordHash, ownerRole.ID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.Account{}, err
 	}
 
-	// Назначение пользователю статус супер администратора аккаунта
-	//if _, err = s.srv.AccountStatus.Issue(ctx, user.ID, domain.AccountSuperAdminBitPosition); err != nil {
-	//	zap.L().Error(err.Error())
-	//	return domain.Account{}, err
-	//}
-
+	// Отправка пароля на почту
 	if err = s.srv.Email.SendRegisteredMail(ctx, user.Email, password); err != nil {
 		zap.L().Error(err.Error())
 		return domain.Account{}, err
@@ -75,7 +85,11 @@ func (s *AccountService) Create(ctx context.Context, userName, userSurname, emai
 	return account, nil
 }
 
-func (s *AccountService) CreateUser(ctx context.Context, accountID uuid.UUID, name, surname, email string) (domain.User, error) {
+func (s *AccountService) CreateUser(
+	ctx context.Context,
+	accountID uuid.UUID,
+	name, surname, email string,
+) (domain.User, error) {
 	// Существует ли пользователь в аккаунте
 	exists, err := s.srv.Account.IsExistsUserByEmail(ctx, accountID, email)
 	if exists {
@@ -90,18 +104,19 @@ func (s *AccountService) CreateUser(ctx context.Context, accountID uuid.UUID, na
 		return domain.User{}, err
 	}
 
-	// Создание пользователя в базе данных
-	user, err := s.srv.User.Create(ctx, name, surname, email, password)
+	// Получение дефолтной роли организации
+	defaultRole, err := s.srv.AccountRole.GetDefault(ctx, accountID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.User{}, err
 	}
 
-	// Связывание пользователя с аккаунтом с правами обычного пользователя
-	//if _, err = s.srv.AccountStatus.Issue(ctx, user.ID, domain.AccountUserBitPosition); err != nil {
-	//	zap.L().Error(err.Error())
-	//	return domain.User{}, err
-	//}
+	// Создание пользователя в базе данных
+	user, err := s.srv.User.Create(ctx, name, surname, email, password, defaultRole.ID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
 
 	// Отправка пароля новому пользователю на почту
 	if err = s.srv.Email.SendCreateUserEmail(ctx, email, password); err != nil {
@@ -113,29 +128,22 @@ func (s *AccountService) CreateUser(ctx context.Context, accountID uuid.UUID, na
 }
 
 func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]domain.Account, error) {
+	// Получение пользователей с таким email
 	users, err := s.srv.User.GetByEmail(ctx, email)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return nil, err
 	}
 
-	if len(users) == 0 {
-		return nil, nil
-	}
-
+	// Получение аккаунтов найденных пользователей
 	usersID := make([]uuid.UUID, len(users))
+	accountRolesID := make([]uuid.UUID, len(users))
 	for i, user := range users {
 		usersID[i] = user.ID
+		accountRolesID[i] = user.RoleID
 	}
 
-	//accountStatusesID, err := s.srv.AccountStatus.GetByUsersID(ctx, usersID...)
-	//if err != nil {
-	//	zap.L().Error(err.Error())
-	//	return nil, err
-	//}
-	accountStatusesID := make([]uuid.UUID, 0)
-	accountsID := make([]uuid.UUID, len(accountStatusesID))
-
+	accountsID := make([]uuid.UUID, len(accountRolesID))
 	accounts, err := s.GetByID(ctx, accountsID...)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -152,9 +160,13 @@ func (s *AccountService) IsExistsUserByEmail(ctx context.Context, accountID uuid
 		return false, err
 	}
 
-	return slices.ContainsFunc(accounts, func(account domain.Account) bool {
-		return account.ID == accountID
-	}), nil
+	for _, account := range accounts {
+		if account.Email == email {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (s *AccountService) GetByID(ctx context.Context, accountsID ...uuid.UUID) ([]domain.Account, error) {

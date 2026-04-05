@@ -40,12 +40,14 @@ type Account interface {
 type AccountRole interface {
 	Create(
 		ctx context.Context,
-		accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault, isSystem bool,
-	) ([]domain.AccountRole, error)
+		accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool,
+	) (domain.AccountRole, error)
+	CreateSystemAccountOwner(ctx context.Context, accountID uuid.UUID) (domain.AccountRole, error)
+	GetDefault(ctx context.Context, accountID uuid.UUID) (domain.AccountRole, error)
 }
 
 type User interface {
-	Create(ctx context.Context, name, surname, email, password string) (domain.User, error)
+	Create(ctx context.Context, name, surname, email, password string, roleID uuid.UUID) (domain.User, error)
 	GetByEmail(ctx context.Context, email string) ([]domain.User, error)
 	Update(ctx context.Context, initiatorID, targetID uuid.UUID, roleID *uuid.UUID) (domain.User, error)
 }

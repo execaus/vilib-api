@@ -7,6 +7,15 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	AccountOwnerSystemRoleName = "owner"
+)
+
+const (
+	// AccountPermissionOwner владелец аккаунта.
+	AccountPermissionOwner PermissionFlag = iota
+)
+
 type AccountRole struct {
 	ID             uuid.UUID
 	Name           string

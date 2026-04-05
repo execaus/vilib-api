@@ -14,7 +14,7 @@ type CreateAccountRoleRequest struct {
 }
 
 type CreateAccountRoleResponse struct {
-	AccountRoles []AccountRole `json:"account_roles"`
+	AccountRole AccountRole `json:"account_role"`
 }
 
 type AccountRole struct {

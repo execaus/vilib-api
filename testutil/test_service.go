@@ -12,34 +12,34 @@ import (
 
 func TestService(
 	t *testing.T,
-	prepareFn func(mockServices *ServiceMock, mockRepos *RepositoryMock),
+	setupMocks func(mockServices *ServiceMock, mockRepos *RepositoryMock),
 	fn func(s *service.Service, r *repository.Repository),
 ) {
-	ctrl := minimock.NewController(t)
+	mc := minimock.NewController(t)
 
 	s := &ServiceMock{
-		Auth:        mock_service.NewAuthMock(ctrl),
-		User:        mock_service.NewUserMock(ctrl),
-		Account:     mock_service.NewAccountMock(ctrl),
-		Email:       mock_service.NewEmailMock(ctrl),
-		AccountRole: mock_service.NewAccountRoleMock(ctrl),
-		UserGroup:   mock_service.NewUserGroupMock(ctrl),
-		GroupRole:   mock_service.NewGroupRoleMock(ctrl),
-		Video:       mock_service.NewVideoMock(ctrl),
-		VideoAsset:  mock_service.NewVideoAssetMock(ctrl),
+		Auth:        mock_service.NewAuthMock(mc),
+		User:        mock_service.NewUserMock(mc),
+		Account:     mock_service.NewAccountMock(mc),
+		Email:       mock_service.NewEmailMock(mc),
+		AccountRole: mock_service.NewAccountRoleMock(mc),
+		UserGroup:   mock_service.NewUserGroupMock(mc),
+		GroupRole:   mock_service.NewGroupRoleMock(mc),
+		Video:       mock_service.NewVideoMock(mc),
+		VideoAsset:  mock_service.NewVideoAssetMock(mc),
 	}
 
 	r := &RepositoryMock{
-		Account:     mock_repository.NewAccountMock(ctrl),
-		User:        mock_repository.NewUserMock(ctrl),
-		AccountRole: mock_repository.NewAccountRoleMock(ctrl),
-		UserGroup:   mock_repository.NewUserGroupMock(ctrl),
-		GroupRole:   mock_repository.NewGroupRoleMock(ctrl),
-		Video:       mock_repository.NewVideoMock(ctrl),
-		VideoAsset:  mock_repository.NewVideoAssetMock(ctrl),
+		Account:     mock_repository.NewAccountMock(mc),
+		User:        mock_repository.NewUserMock(mc),
+		AccountRole: mock_repository.NewAccountRoleMock(mc),
+		UserGroup:   mock_repository.NewUserGroupMock(mc),
+		GroupRole:   mock_repository.NewGroupRoleMock(mc),
+		Video:       mock_repository.NewVideoMock(mc),
+		VideoAsset:  mock_repository.NewVideoAssetMock(mc),
 	}
 
-	prepareFn(s, r)
+	setupMocks(s, r)
 
 	fn(s.ToServices(), r.ToRepositories())
 }

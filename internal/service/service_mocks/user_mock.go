@@ -20,9 +20,9 @@ type UserMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
-	funcCreate          func(ctx context.Context, name string, surname string, email string, password string) (u1 domain.User, err error)
+	funcCreate          func(ctx context.Context, name string, surname string, email string, password string, roleID uuid.UUID) (u1 domain.User, err error)
 	funcCreateOrigin    string
-	inspectFuncCreate   func(ctx context.Context, name string, surname string, email string, password string)
+	inspectFuncCreate   func(ctx context.Context, name string, surname string, email string, password string, roleID uuid.UUID)
 	afterCreateCounter  uint64
 	beforeCreateCounter uint64
 	CreateMock          mUserMockCreate
@@ -95,6 +95,7 @@ type UserMockCreateParams struct {
 	surname  string
 	email    string
 	password string
+	roleID   uuid.UUID
 }
 
 // UserMockCreateParamPtrs contains pointers to parameters of the User.Create
@@ -104,6 +105,7 @@ type UserMockCreateParamPtrs struct {
 	surname  *string
 	email    *string
 	password *string
+	roleID   *uuid.UUID
 }
 
 // UserMockCreateResults contains results of the User.Create
@@ -120,6 +122,7 @@ type UserMockCreateExpectationOrigins struct {
 	originSurname  string
 	originEmail    string
 	originPassword string
+	originRoleID   string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -133,7 +136,7 @@ func (mmCreate *mUserMockCreate) Optional() *mUserMockCreate {
 }
 
 // Expect sets up expected params for User.Create
-func (mmCreate *mUserMockCreate) Expect(ctx context.Context, name string, surname string, email string, password string) *mUserMockCreate {
+func (mmCreate *mUserMockCreate) Expect(ctx context.Context, name string, surname string, email string, password string, roleID uuid.UUID) *mUserMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("UserMock.Create mock is already set by Set")
 	}
@@ -146,7 +149,7 @@ func (mmCreate *mUserMockCreate) Expect(ctx context.Context, name string, surnam
 		mmCreate.mock.t.Fatalf("UserMock.Create mock is already set by ExpectParams functions")
 	}
 
-	mmCreate.defaultExpectation.params = &UserMockCreateParams{ctx, name, surname, email, password}
+	mmCreate.defaultExpectation.params = &UserMockCreateParams{ctx, name, surname, email, password, roleID}
 	mmCreate.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmCreate.expectations {
 		if minimock.Equal(e.params, mmCreate.defaultExpectation.params) {
@@ -272,8 +275,31 @@ func (mmCreate *mUserMockCreate) ExpectPasswordParam5(password string) *mUserMoc
 	return mmCreate
 }
 
+// ExpectRoleIDParam6 sets up expected param roleID for User.Create
+func (mmCreate *mUserMockCreate) ExpectRoleIDParam6(roleID uuid.UUID) *mUserMockCreate {
+	if mmCreate.mock.funcCreate != nil {
+		mmCreate.mock.t.Fatalf("UserMock.Create mock is already set by Set")
+	}
+
+	if mmCreate.defaultExpectation == nil {
+		mmCreate.defaultExpectation = &UserMockCreateExpectation{}
+	}
+
+	if mmCreate.defaultExpectation.params != nil {
+		mmCreate.mock.t.Fatalf("UserMock.Create mock is already set by Expect")
+	}
+
+	if mmCreate.defaultExpectation.paramPtrs == nil {
+		mmCreate.defaultExpectation.paramPtrs = &UserMockCreateParamPtrs{}
+	}
+	mmCreate.defaultExpectation.paramPtrs.roleID = &roleID
+	mmCreate.defaultExpectation.expectationOrigins.originRoleID = minimock.CallerInfo(1)
+
+	return mmCreate
+}
+
 // Inspect accepts an inspector function that has same arguments as the User.Create
-func (mmCreate *mUserMockCreate) Inspect(f func(ctx context.Context, name string, surname string, email string, password string)) *mUserMockCreate {
+func (mmCreate *mUserMockCreate) Inspect(f func(ctx context.Context, name string, surname string, email string, password string, roleID uuid.UUID)) *mUserMockCreate {
 	if mmCreate.mock.inspectFuncCreate != nil {
 		mmCreate.mock.t.Fatalf("Inspect function is already set for UserMock.Create")
 	}
@@ -298,7 +324,7 @@ func (mmCreate *mUserMockCreate) Return(u1 domain.User, err error) *UserMock {
 }
 
 // Set uses given function f to mock the User.Create method
-func (mmCreate *mUserMockCreate) Set(f func(ctx context.Context, name string, surname string, email string, password string) (u1 domain.User, err error)) *UserMock {
+func (mmCreate *mUserMockCreate) Set(f func(ctx context.Context, name string, surname string, email string, password string, roleID uuid.UUID) (u1 domain.User, err error)) *UserMock {
 	if mmCreate.defaultExpectation != nil {
 		mmCreate.mock.t.Fatalf("Default expectation is already set for the User.Create method")
 	}
@@ -314,14 +340,14 @@ func (mmCreate *mUserMockCreate) Set(f func(ctx context.Context, name string, su
 
 // When sets expectation for the User.Create which will trigger the result defined by the following
 // Then helper
-func (mmCreate *mUserMockCreate) When(ctx context.Context, name string, surname string, email string, password string) *UserMockCreateExpectation {
+func (mmCreate *mUserMockCreate) When(ctx context.Context, name string, surname string, email string, password string, roleID uuid.UUID) *UserMockCreateExpectation {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("UserMock.Create mock is already set by Set")
 	}
 
 	expectation := &UserMockCreateExpectation{
 		mock:               mmCreate.mock,
-		params:             &UserMockCreateParams{ctx, name, surname, email, password},
+		params:             &UserMockCreateParams{ctx, name, surname, email, password, roleID},
 		expectationOrigins: UserMockCreateExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmCreate.expectations = append(mmCreate.expectations, expectation)
@@ -356,17 +382,17 @@ func (mmCreate *mUserMockCreate) invocationsDone() bool {
 }
 
 // Create implements mm_service.User
-func (mmCreate *UserMock) Create(ctx context.Context, name string, surname string, email string, password string) (u1 domain.User, err error) {
+func (mmCreate *UserMock) Create(ctx context.Context, name string, surname string, email string, password string, roleID uuid.UUID) (u1 domain.User, err error) {
 	mm_atomic.AddUint64(&mmCreate.beforeCreateCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreate.afterCreateCounter, 1)
 
 	mmCreate.t.Helper()
 
 	if mmCreate.inspectFuncCreate != nil {
-		mmCreate.inspectFuncCreate(ctx, name, surname, email, password)
+		mmCreate.inspectFuncCreate(ctx, name, surname, email, password, roleID)
 	}
 
-	mm_params := UserMockCreateParams{ctx, name, surname, email, password}
+	mm_params := UserMockCreateParams{ctx, name, surname, email, password, roleID}
 
 	// Record call args
 	mmCreate.CreateMock.mutex.Lock()
@@ -385,7 +411,7 @@ func (mmCreate *UserMock) Create(ctx context.Context, name string, surname strin
 		mm_want := mmCreate.CreateMock.defaultExpectation.params
 		mm_want_ptrs := mmCreate.CreateMock.defaultExpectation.paramPtrs
 
-		mm_got := UserMockCreateParams{ctx, name, surname, email, password}
+		mm_got := UserMockCreateParams{ctx, name, surname, email, password, roleID}
 
 		if mm_want_ptrs != nil {
 
@@ -414,6 +440,11 @@ func (mmCreate *UserMock) Create(ctx context.Context, name string, surname strin
 					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originPassword, *mm_want_ptrs.password, mm_got.password, minimock.Diff(*mm_want_ptrs.password, mm_got.password))
 			}
 
+			if mm_want_ptrs.roleID != nil && !minimock.Equal(*mm_want_ptrs.roleID, mm_got.roleID) {
+				mmCreate.t.Errorf("UserMock.Create got unexpected parameter roleID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originRoleID, *mm_want_ptrs.roleID, mm_got.roleID, minimock.Diff(*mm_want_ptrs.roleID, mm_got.roleID))
+			}
+
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
 			mmCreate.t.Errorf("UserMock.Create got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 				mmCreate.CreateMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
@@ -426,9 +457,9 @@ func (mmCreate *UserMock) Create(ctx context.Context, name string, surname strin
 		return (*mm_results).u1, (*mm_results).err
 	}
 	if mmCreate.funcCreate != nil {
-		return mmCreate.funcCreate(ctx, name, surname, email, password)
+		return mmCreate.funcCreate(ctx, name, surname, email, password, roleID)
 	}
-	mmCreate.t.Fatalf("Unexpected call to UserMock.Create. %v %v %v %v %v", ctx, name, surname, email, password)
+	mmCreate.t.Fatalf("Unexpected call to UserMock.Create. %v %v %v %v %v %v", ctx, name, surname, email, password, roleID)
 	return
 }
 
