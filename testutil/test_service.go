@@ -27,6 +27,7 @@ func TestService(
 		GroupRole:   mock_service.NewGroupRoleMock(mc),
 		Video:       mock_service.NewVideoMock(mc),
 		VideoAsset:  mock_service.NewVideoAssetMock(mc),
+		Access:      mock_service.NewAccessMock(mc),
 	}
 
 	r := &RepositoryMock{
@@ -37,6 +38,7 @@ func TestService(
 		GroupRole:   mock_repository.NewGroupRoleMock(mc),
 		Video:       mock_repository.NewVideoMock(mc),
 		VideoAsset:  mock_repository.NewVideoAssetMock(mc),
+		GroupMember: mock_repository.NewGroupMemberMock(mc),
 	}
 
 	setupMocks(s, r)

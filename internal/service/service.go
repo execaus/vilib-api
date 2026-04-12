@@ -16,9 +16,11 @@ import (
 //go:generate minimock -i User -o ./service_mocks/user_mock.go
 //go:generate minimock -i Email -o ./service_mocks/email_mock.go
 //go:generate minimock -i UserGroup -o ./service_mocks/user_group_mock.go
+//go:generate minimock -i GroupMember -o ./service_mocks/group_member_mock.go
 //go:generate minimock -i GroupRole -o ./service_mocks/group_role_mock.go
 //go:generate minimock -i Video -o ./service_mocks/video_mock.go
 //go:generate minimock -i VideoAsset -o ./service_mocks/video_asset_mock.go
+//go:generate minimock -i Access -o ./service_mocks/access_mock.go
 
 type Auth interface {
 	GenerateToken(userID uuid.UUID, accounts []uuid.UUID, currentAccountID uuid.UUID) (string, error)
@@ -34,13 +36,15 @@ type Account interface {
 	GetByUserEmail(ctx context.Context, email string) ([]domain.Account, error)
 	GetByID(ctx context.Context, accountsID ...uuid.UUID) ([]domain.Account, error)
 	Create(ctx context.Context, userName, userSurname, email string) (domain.Account, error)
-	CreateUser(ctx context.Context, accountID uuid.UUID, name, surname, email string) (domain.User, error)
+	CreateUser(ctx context.Context, accountID, initiatorID uuid.UUID, name, surname, email string) (domain.User, error)
+	IsHasUser(ctx context.Context, accountID, initiatorID uuid.UUID) error
 }
 
 type AccountRole interface {
 	Create(
 		ctx context.Context,
-		accountID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool,
+		accountID, initiatorID uuid.UUID,
+		name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool,
 	) (domain.AccountRole, error)
 	CreateSystemAccountOwner(ctx context.Context, accountID uuid.UUID) (domain.AccountRole, error)
 	GetDefault(ctx context.Context, accountID uuid.UUID) (domain.AccountRole, error)
@@ -51,6 +55,7 @@ type User interface {
 	Create(ctx context.Context, name, surname, email, password string, roleID uuid.UUID) (domain.User, error)
 	GetByEmail(ctx context.Context, email string) ([]domain.User, error)
 	Update(ctx context.Context, initiatorID, targetID uuid.UUID, roleID *uuid.UUID) (domain.User, error)
+	GetByID(ctx context.Context, userID ...uuid.UUID) ([]domain.User, error)
 }
 
 type Email interface {
@@ -67,10 +72,14 @@ type UserGroup interface {
 	) ([]domain.GroupMember, error)
 }
 
+type GroupMember interface {
+	Create(ctx context.Context, groupID, roleID uuid.UUID, usersID ...uuid.UUID) ([]domain.GroupMember, error)
+}
+
 type GroupRole interface {
 	Create(
 		ctx context.Context,
-		accountID uuid.UUID,
+		accountID, initiatorID uuid.UUID,
 		name string,
 		mask domain.PermissionMask,
 		isDefault bool,
@@ -98,6 +107,13 @@ type VideoAsset interface {
 	Get(ctx context.Context, videoID uuid.UUID) ([]domain.VideoAsset, error)
 }
 
+type Access interface {
+	IsCheckAccountAction(
+		ctx context.Context,
+		accountID, initiatorID uuid.UUID, action domain.PermissionFlag,
+	) error
+}
+
 type Service struct {
 	Auth
 	Account
@@ -105,9 +121,11 @@ type Service struct {
 	Email
 	AccountRole
 	UserGroup
+	GroupMember
 	GroupRole
 	Video
 	VideoAsset
+	Access
 }
 
 func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *repository.Repository) *Service {
@@ -119,9 +137,11 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 	s.Email = NewEmailService(cfg.Email, cfg.Server.Mode, localMailBox)
 	s.AccountRole = NewAccountRoleService(r.AccountRole, s)
 	s.UserGroup = NewUserGroupService(r.UserGroup, s)
+	s.GroupMember = NewGroupMemberService(r.GroupMember, s)
 	s.GroupRole = NewGroupRoleService(r.GroupRole, s)
 	s.Video = NewVideoService(s3, r.Video, s)
 	s.VideoAsset = NewVideoAssetService(r.VideoAsset, s)
+	s.Access = NewAccessService(s)
 
 	return s
 }

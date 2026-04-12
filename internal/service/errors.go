@@ -1,5 +1,9 @@
 package service
 
+var (
+	ErrForbidden = NewForbiddenError("user creation is forbidden")
+)
+
 type ConflictError struct {
 	message string
 }

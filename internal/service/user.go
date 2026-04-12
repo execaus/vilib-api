@@ -50,3 +50,13 @@ func (s *UserService) Update(
 
 	return domain.User{}, nil
 }
+
+func (s *UserService) GetByID(ctx context.Context, userID ...uuid.UUID) ([]domain.User, error) {
+	users, err := s.repo.SelectByID(ctx, userID...)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return users, nil
+}

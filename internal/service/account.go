@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 )
 
 type AccountService struct {
@@ -78,9 +80,16 @@ func (s *AccountService) Create(ctx context.Context, userName, userSurname, emai
 
 func (s *AccountService) CreateUser(
 	ctx context.Context,
-	accountID uuid.UUID,
+	accountID, initiatorID uuid.UUID,
 	name, surname, email string,
 ) (domain.User, error) {
+	// Разрешено ли пользователю создавать пользователей
+	err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionCreateUser)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+
 	// Существует ли пользователь в аккаунте
 	exists, err := s.srv.Account.IsExistsUserByEmail(ctx, email)
 	if exists {
@@ -178,4 +187,20 @@ func (s *AccountService) GetByID(ctx context.Context, accountsID ...uuid.UUID) (
 	}
 
 	return accounts, nil
+}
+
+func (s *AccountService) IsHasUser(ctx context.Context, accountID, initiatorID uuid.UUID) error {
+	userAccounts, err := s.repo.SelectByUsersID(ctx, initiatorID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if !slices.ContainsFunc(userAccounts, func(account domain.Account) bool {
+		return account.ID == accountID
+	}) {
+		return fmt.Errorf("%w: account does not contain a user", ErrForbidden)
+	}
+
+	return nil
 }

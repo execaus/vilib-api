@@ -23,7 +23,20 @@ func (h *Handler) CreateGroupRole(c *gin.Context) {
 		role domain.GroupRole
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		role, err = services.GroupRole.Create(ctx, accountID, req.Name, req.PermissionMask, req.IsDefault)
+		claims, err := h.getClaims(c, services.Auth)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		role, err = services.GroupRole.Create(
+			ctx,
+			accountID,
+			claims.UserID,
+			req.Name,
+			req.PermissionMask,
+			req.IsDefault,
+		)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err

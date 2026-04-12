@@ -13,6 +13,7 @@ type RepositoryMock struct {
 	GroupRole   *mock_repository.GroupRoleMock
 	Video       *mock_repository.VideoMock
 	VideoAsset  *mock_repository.VideoAssetMock
+	GroupMember *mock_repository.GroupMemberMock
 }
 
 func (r *RepositoryMock) ToRepositories() *repository.Repository {
@@ -24,5 +25,6 @@ func (r *RepositoryMock) ToRepositories() *repository.Repository {
 		GroupRole:   r.GroupRole,
 		Video:       r.Video,
 		VideoAsset:  r.VideoAsset,
+		GroupMember: r.GroupMember,
 	}
 }

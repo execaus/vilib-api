@@ -31,7 +31,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	if err := c.BindJSON(&req); err != nil {
+	if err = c.BindJSON(&req); err != nil {
 		sendBadRequest(c, err)
 		return
 	}
@@ -40,7 +40,13 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		user domain.User
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		user, err = services.Account.CreateUser(ctx, accountID, req.Name, req.Surname, req.Email)
+		claims, err := h.getClaims(c, services.Auth)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		user, err = services.Account.CreateUser(ctx, accountID, claims.UserID, req.Name, req.Surname, req.Email)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err

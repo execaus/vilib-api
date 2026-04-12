@@ -28,9 +28,16 @@ func (h *Handler) CreateAccountRole(c *gin.Context) {
 		accountRole domain.AccountRole
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
+		claims, err := h.getClaims(c, services.Auth)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
 		accountRole, err = services.AccountRole.Create(
 			ctx,
-			accountID, req.Name, req.ParentID, req.Permission, req.IsDefault,
+			accountID, claims.UserID,
+			req.Name, req.ParentID, req.Permission, req.IsDefault,
 		)
 		if err != nil {
 			zap.L().Error(err.Error())

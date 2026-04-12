@@ -20,9 +20,9 @@ type GroupRoleMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
-	funcCreate          func(ctx context.Context, accountID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool) (g1 domain.GroupRole, err error)
+	funcCreate          func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool) (g1 domain.GroupRole, err error)
 	funcCreateOrigin    string
-	inspectFuncCreate   func(ctx context.Context, accountID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool)
+	inspectFuncCreate   func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool)
 	afterCreateCounter  uint64
 	beforeCreateCounter uint64
 	CreateMock          mGroupRoleMockCreate
@@ -70,20 +70,22 @@ type GroupRoleMockCreateExpectation struct {
 
 // GroupRoleMockCreateParams contains parameters of the GroupRole.Create
 type GroupRoleMockCreateParams struct {
-	ctx       context.Context
-	accountID uuid.UUID
-	name      string
-	mask      domain.PermissionMask
-	isDefault bool
+	ctx         context.Context
+	accountID   uuid.UUID
+	initiatorID uuid.UUID
+	name        string
+	mask        domain.PermissionMask
+	isDefault   bool
 }
 
 // GroupRoleMockCreateParamPtrs contains pointers to parameters of the GroupRole.Create
 type GroupRoleMockCreateParamPtrs struct {
-	ctx       *context.Context
-	accountID *uuid.UUID
-	name      *string
-	mask      *domain.PermissionMask
-	isDefault *bool
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	initiatorID *uuid.UUID
+	name        *string
+	mask        *domain.PermissionMask
+	isDefault   *bool
 }
 
 // GroupRoleMockCreateResults contains results of the GroupRole.Create
@@ -94,12 +96,13 @@ type GroupRoleMockCreateResults struct {
 
 // GroupRoleMockCreateOrigins contains origins of expectations of the GroupRole.Create
 type GroupRoleMockCreateExpectationOrigins struct {
-	origin          string
-	originCtx       string
-	originAccountID string
-	originName      string
-	originMask      string
-	originIsDefault string
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originInitiatorID string
+	originName        string
+	originMask        string
+	originIsDefault   string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -113,7 +116,7 @@ func (mmCreate *mGroupRoleMockCreate) Optional() *mGroupRoleMockCreate {
 }
 
 // Expect sets up expected params for GroupRole.Create
-func (mmCreate *mGroupRoleMockCreate) Expect(ctx context.Context, accountID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool) *mGroupRoleMockCreate {
+func (mmCreate *mGroupRoleMockCreate) Expect(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool) *mGroupRoleMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("GroupRoleMock.Create mock is already set by Set")
 	}
@@ -126,7 +129,7 @@ func (mmCreate *mGroupRoleMockCreate) Expect(ctx context.Context, accountID uuid
 		mmCreate.mock.t.Fatalf("GroupRoleMock.Create mock is already set by ExpectParams functions")
 	}
 
-	mmCreate.defaultExpectation.params = &GroupRoleMockCreateParams{ctx, accountID, name, mask, isDefault}
+	mmCreate.defaultExpectation.params = &GroupRoleMockCreateParams{ctx, accountID, initiatorID, name, mask, isDefault}
 	mmCreate.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmCreate.expectations {
 		if minimock.Equal(e.params, mmCreate.defaultExpectation.params) {
@@ -183,8 +186,31 @@ func (mmCreate *mGroupRoleMockCreate) ExpectAccountIDParam2(accountID uuid.UUID)
 	return mmCreate
 }
 
-// ExpectNameParam3 sets up expected param name for GroupRole.Create
-func (mmCreate *mGroupRoleMockCreate) ExpectNameParam3(name string) *mGroupRoleMockCreate {
+// ExpectInitiatorIDParam3 sets up expected param initiatorID for GroupRole.Create
+func (mmCreate *mGroupRoleMockCreate) ExpectInitiatorIDParam3(initiatorID uuid.UUID) *mGroupRoleMockCreate {
+	if mmCreate.mock.funcCreate != nil {
+		mmCreate.mock.t.Fatalf("GroupRoleMock.Create mock is already set by Set")
+	}
+
+	if mmCreate.defaultExpectation == nil {
+		mmCreate.defaultExpectation = &GroupRoleMockCreateExpectation{}
+	}
+
+	if mmCreate.defaultExpectation.params != nil {
+		mmCreate.mock.t.Fatalf("GroupRoleMock.Create mock is already set by Expect")
+	}
+
+	if mmCreate.defaultExpectation.paramPtrs == nil {
+		mmCreate.defaultExpectation.paramPtrs = &GroupRoleMockCreateParamPtrs{}
+	}
+	mmCreate.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmCreate.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmCreate
+}
+
+// ExpectNameParam4 sets up expected param name for GroupRole.Create
+func (mmCreate *mGroupRoleMockCreate) ExpectNameParam4(name string) *mGroupRoleMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("GroupRoleMock.Create mock is already set by Set")
 	}
@@ -206,8 +232,8 @@ func (mmCreate *mGroupRoleMockCreate) ExpectNameParam3(name string) *mGroupRoleM
 	return mmCreate
 }
 
-// ExpectMaskParam4 sets up expected param mask for GroupRole.Create
-func (mmCreate *mGroupRoleMockCreate) ExpectMaskParam4(mask domain.PermissionMask) *mGroupRoleMockCreate {
+// ExpectMaskParam5 sets up expected param mask for GroupRole.Create
+func (mmCreate *mGroupRoleMockCreate) ExpectMaskParam5(mask domain.PermissionMask) *mGroupRoleMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("GroupRoleMock.Create mock is already set by Set")
 	}
@@ -229,8 +255,8 @@ func (mmCreate *mGroupRoleMockCreate) ExpectMaskParam4(mask domain.PermissionMas
 	return mmCreate
 }
 
-// ExpectIsDefaultParam5 sets up expected param isDefault for GroupRole.Create
-func (mmCreate *mGroupRoleMockCreate) ExpectIsDefaultParam5(isDefault bool) *mGroupRoleMockCreate {
+// ExpectIsDefaultParam6 sets up expected param isDefault for GroupRole.Create
+func (mmCreate *mGroupRoleMockCreate) ExpectIsDefaultParam6(isDefault bool) *mGroupRoleMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("GroupRoleMock.Create mock is already set by Set")
 	}
@@ -253,7 +279,7 @@ func (mmCreate *mGroupRoleMockCreate) ExpectIsDefaultParam5(isDefault bool) *mGr
 }
 
 // Inspect accepts an inspector function that has same arguments as the GroupRole.Create
-func (mmCreate *mGroupRoleMockCreate) Inspect(f func(ctx context.Context, accountID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool)) *mGroupRoleMockCreate {
+func (mmCreate *mGroupRoleMockCreate) Inspect(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool)) *mGroupRoleMockCreate {
 	if mmCreate.mock.inspectFuncCreate != nil {
 		mmCreate.mock.t.Fatalf("Inspect function is already set for GroupRoleMock.Create")
 	}
@@ -278,7 +304,7 @@ func (mmCreate *mGroupRoleMockCreate) Return(g1 domain.GroupRole, err error) *Gr
 }
 
 // Set uses given function f to mock the GroupRole.Create method
-func (mmCreate *mGroupRoleMockCreate) Set(f func(ctx context.Context, accountID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool) (g1 domain.GroupRole, err error)) *GroupRoleMock {
+func (mmCreate *mGroupRoleMockCreate) Set(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool) (g1 domain.GroupRole, err error)) *GroupRoleMock {
 	if mmCreate.defaultExpectation != nil {
 		mmCreate.mock.t.Fatalf("Default expectation is already set for the GroupRole.Create method")
 	}
@@ -294,14 +320,14 @@ func (mmCreate *mGroupRoleMockCreate) Set(f func(ctx context.Context, accountID 
 
 // When sets expectation for the GroupRole.Create which will trigger the result defined by the following
 // Then helper
-func (mmCreate *mGroupRoleMockCreate) When(ctx context.Context, accountID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool) *GroupRoleMockCreateExpectation {
+func (mmCreate *mGroupRoleMockCreate) When(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool) *GroupRoleMockCreateExpectation {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("GroupRoleMock.Create mock is already set by Set")
 	}
 
 	expectation := &GroupRoleMockCreateExpectation{
 		mock:               mmCreate.mock,
-		params:             &GroupRoleMockCreateParams{ctx, accountID, name, mask, isDefault},
+		params:             &GroupRoleMockCreateParams{ctx, accountID, initiatorID, name, mask, isDefault},
 		expectationOrigins: GroupRoleMockCreateExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmCreate.expectations = append(mmCreate.expectations, expectation)
@@ -336,17 +362,17 @@ func (mmCreate *mGroupRoleMockCreate) invocationsDone() bool {
 }
 
 // Create implements mm_service.GroupRole
-func (mmCreate *GroupRoleMock) Create(ctx context.Context, accountID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool) (g1 domain.GroupRole, err error) {
+func (mmCreate *GroupRoleMock) Create(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, mask domain.PermissionMask, isDefault bool) (g1 domain.GroupRole, err error) {
 	mm_atomic.AddUint64(&mmCreate.beforeCreateCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreate.afterCreateCounter, 1)
 
 	mmCreate.t.Helper()
 
 	if mmCreate.inspectFuncCreate != nil {
-		mmCreate.inspectFuncCreate(ctx, accountID, name, mask, isDefault)
+		mmCreate.inspectFuncCreate(ctx, accountID, initiatorID, name, mask, isDefault)
 	}
 
-	mm_params := GroupRoleMockCreateParams{ctx, accountID, name, mask, isDefault}
+	mm_params := GroupRoleMockCreateParams{ctx, accountID, initiatorID, name, mask, isDefault}
 
 	// Record call args
 	mmCreate.CreateMock.mutex.Lock()
@@ -365,7 +391,7 @@ func (mmCreate *GroupRoleMock) Create(ctx context.Context, accountID uuid.UUID, 
 		mm_want := mmCreate.CreateMock.defaultExpectation.params
 		mm_want_ptrs := mmCreate.CreateMock.defaultExpectation.paramPtrs
 
-		mm_got := GroupRoleMockCreateParams{ctx, accountID, name, mask, isDefault}
+		mm_got := GroupRoleMockCreateParams{ctx, accountID, initiatorID, name, mask, isDefault}
 
 		if mm_want_ptrs != nil {
 
@@ -377,6 +403,11 @@ func (mmCreate *GroupRoleMock) Create(ctx context.Context, accountID uuid.UUID, 
 			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
 				mmCreate.t.Errorf("GroupRoleMock.Create got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmCreate.t.Errorf("GroupRoleMock.Create got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
 			}
 
 			if mm_want_ptrs.name != nil && !minimock.Equal(*mm_want_ptrs.name, mm_got.name) {
@@ -406,9 +437,9 @@ func (mmCreate *GroupRoleMock) Create(ctx context.Context, accountID uuid.UUID, 
 		return (*mm_results).g1, (*mm_results).err
 	}
 	if mmCreate.funcCreate != nil {
-		return mmCreate.funcCreate(ctx, accountID, name, mask, isDefault)
+		return mmCreate.funcCreate(ctx, accountID, initiatorID, name, mask, isDefault)
 	}
-	mmCreate.t.Fatalf("Unexpected call to GroupRoleMock.Create. %v %v %v %v %v", ctx, accountID, name, mask, isDefault)
+	mmCreate.t.Fatalf("Unexpected call to GroupRoleMock.Create. %v %v %v %v %v %v", ctx, accountID, initiatorID, name, mask, isDefault)
 	return
 }
 

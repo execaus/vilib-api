@@ -27,9 +27,9 @@ type AccountMock struct {
 	beforeCreateCounter uint64
 	CreateMock          mAccountMockCreate
 
-	funcCreateUser          func(ctx context.Context, accountID uuid.UUID, name string, surname string, email string) (u1 domain.User, err error)
+	funcCreateUser          func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, surname string, email string) (u1 domain.User, err error)
 	funcCreateUserOrigin    string
-	inspectFuncCreateUser   func(ctx context.Context, accountID uuid.UUID, name string, surname string, email string)
+	inspectFuncCreateUser   func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, surname string, email string)
 	afterCreateUserCounter  uint64
 	beforeCreateUserCounter uint64
 	CreateUserMock          mAccountMockCreateUser
@@ -54,6 +54,13 @@ type AccountMock struct {
 	afterIsExistsUserByEmailCounter  uint64
 	beforeIsExistsUserByEmailCounter uint64
 	IsExistsUserByEmailMock          mAccountMockIsExistsUserByEmail
+
+	funcIsHasUser          func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID) (err error)
+	funcIsHasUserOrigin    string
+	inspectFuncIsHasUser   func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID)
+	afterIsHasUserCounter  uint64
+	beforeIsHasUserCounter uint64
+	IsHasUserMock          mAccountMockIsHasUser
 }
 
 // NewAccountMock returns a mock for mm_service.Account
@@ -78,6 +85,9 @@ func NewAccountMock(t minimock.Tester) *AccountMock {
 
 	m.IsExistsUserByEmailMock = mAccountMockIsExistsUserByEmail{mock: m}
 	m.IsExistsUserByEmailMock.callArgs = []*AccountMockIsExistsUserByEmailParams{}
+
+	m.IsHasUserMock = mAccountMockIsHasUser{mock: m}
+	m.IsHasUserMock.callArgs = []*AccountMockIsHasUserParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -515,20 +525,22 @@ type AccountMockCreateUserExpectation struct {
 
 // AccountMockCreateUserParams contains parameters of the Account.CreateUser
 type AccountMockCreateUserParams struct {
-	ctx       context.Context
-	accountID uuid.UUID
-	name      string
-	surname   string
-	email     string
+	ctx         context.Context
+	accountID   uuid.UUID
+	initiatorID uuid.UUID
+	name        string
+	surname     string
+	email       string
 }
 
 // AccountMockCreateUserParamPtrs contains pointers to parameters of the Account.CreateUser
 type AccountMockCreateUserParamPtrs struct {
-	ctx       *context.Context
-	accountID *uuid.UUID
-	name      *string
-	surname   *string
-	email     *string
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	initiatorID *uuid.UUID
+	name        *string
+	surname     *string
+	email       *string
 }
 
 // AccountMockCreateUserResults contains results of the Account.CreateUser
@@ -539,12 +551,13 @@ type AccountMockCreateUserResults struct {
 
 // AccountMockCreateUserOrigins contains origins of expectations of the Account.CreateUser
 type AccountMockCreateUserExpectationOrigins struct {
-	origin          string
-	originCtx       string
-	originAccountID string
-	originName      string
-	originSurname   string
-	originEmail     string
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originInitiatorID string
+	originName        string
+	originSurname     string
+	originEmail       string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -558,7 +571,7 @@ func (mmCreateUser *mAccountMockCreateUser) Optional() *mAccountMockCreateUser {
 }
 
 // Expect sets up expected params for Account.CreateUser
-func (mmCreateUser *mAccountMockCreateUser) Expect(ctx context.Context, accountID uuid.UUID, name string, surname string, email string) *mAccountMockCreateUser {
+func (mmCreateUser *mAccountMockCreateUser) Expect(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, surname string, email string) *mAccountMockCreateUser {
 	if mmCreateUser.mock.funcCreateUser != nil {
 		mmCreateUser.mock.t.Fatalf("AccountMock.CreateUser mock is already set by Set")
 	}
@@ -571,7 +584,7 @@ func (mmCreateUser *mAccountMockCreateUser) Expect(ctx context.Context, accountI
 		mmCreateUser.mock.t.Fatalf("AccountMock.CreateUser mock is already set by ExpectParams functions")
 	}
 
-	mmCreateUser.defaultExpectation.params = &AccountMockCreateUserParams{ctx, accountID, name, surname, email}
+	mmCreateUser.defaultExpectation.params = &AccountMockCreateUserParams{ctx, accountID, initiatorID, name, surname, email}
 	mmCreateUser.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmCreateUser.expectations {
 		if minimock.Equal(e.params, mmCreateUser.defaultExpectation.params) {
@@ -628,8 +641,31 @@ func (mmCreateUser *mAccountMockCreateUser) ExpectAccountIDParam2(accountID uuid
 	return mmCreateUser
 }
 
-// ExpectNameParam3 sets up expected param name for Account.CreateUser
-func (mmCreateUser *mAccountMockCreateUser) ExpectNameParam3(name string) *mAccountMockCreateUser {
+// ExpectInitiatorIDParam3 sets up expected param initiatorID for Account.CreateUser
+func (mmCreateUser *mAccountMockCreateUser) ExpectInitiatorIDParam3(initiatorID uuid.UUID) *mAccountMockCreateUser {
+	if mmCreateUser.mock.funcCreateUser != nil {
+		mmCreateUser.mock.t.Fatalf("AccountMock.CreateUser mock is already set by Set")
+	}
+
+	if mmCreateUser.defaultExpectation == nil {
+		mmCreateUser.defaultExpectation = &AccountMockCreateUserExpectation{}
+	}
+
+	if mmCreateUser.defaultExpectation.params != nil {
+		mmCreateUser.mock.t.Fatalf("AccountMock.CreateUser mock is already set by Expect")
+	}
+
+	if mmCreateUser.defaultExpectation.paramPtrs == nil {
+		mmCreateUser.defaultExpectation.paramPtrs = &AccountMockCreateUserParamPtrs{}
+	}
+	mmCreateUser.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmCreateUser.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmCreateUser
+}
+
+// ExpectNameParam4 sets up expected param name for Account.CreateUser
+func (mmCreateUser *mAccountMockCreateUser) ExpectNameParam4(name string) *mAccountMockCreateUser {
 	if mmCreateUser.mock.funcCreateUser != nil {
 		mmCreateUser.mock.t.Fatalf("AccountMock.CreateUser mock is already set by Set")
 	}
@@ -651,8 +687,8 @@ func (mmCreateUser *mAccountMockCreateUser) ExpectNameParam3(name string) *mAcco
 	return mmCreateUser
 }
 
-// ExpectSurnameParam4 sets up expected param surname for Account.CreateUser
-func (mmCreateUser *mAccountMockCreateUser) ExpectSurnameParam4(surname string) *mAccountMockCreateUser {
+// ExpectSurnameParam5 sets up expected param surname for Account.CreateUser
+func (mmCreateUser *mAccountMockCreateUser) ExpectSurnameParam5(surname string) *mAccountMockCreateUser {
 	if mmCreateUser.mock.funcCreateUser != nil {
 		mmCreateUser.mock.t.Fatalf("AccountMock.CreateUser mock is already set by Set")
 	}
@@ -674,8 +710,8 @@ func (mmCreateUser *mAccountMockCreateUser) ExpectSurnameParam4(surname string) 
 	return mmCreateUser
 }
 
-// ExpectEmailParam5 sets up expected param email for Account.CreateUser
-func (mmCreateUser *mAccountMockCreateUser) ExpectEmailParam5(email string) *mAccountMockCreateUser {
+// ExpectEmailParam6 sets up expected param email for Account.CreateUser
+func (mmCreateUser *mAccountMockCreateUser) ExpectEmailParam6(email string) *mAccountMockCreateUser {
 	if mmCreateUser.mock.funcCreateUser != nil {
 		mmCreateUser.mock.t.Fatalf("AccountMock.CreateUser mock is already set by Set")
 	}
@@ -698,7 +734,7 @@ func (mmCreateUser *mAccountMockCreateUser) ExpectEmailParam5(email string) *mAc
 }
 
 // Inspect accepts an inspector function that has same arguments as the Account.CreateUser
-func (mmCreateUser *mAccountMockCreateUser) Inspect(f func(ctx context.Context, accountID uuid.UUID, name string, surname string, email string)) *mAccountMockCreateUser {
+func (mmCreateUser *mAccountMockCreateUser) Inspect(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, surname string, email string)) *mAccountMockCreateUser {
 	if mmCreateUser.mock.inspectFuncCreateUser != nil {
 		mmCreateUser.mock.t.Fatalf("Inspect function is already set for AccountMock.CreateUser")
 	}
@@ -723,7 +759,7 @@ func (mmCreateUser *mAccountMockCreateUser) Return(u1 domain.User, err error) *A
 }
 
 // Set uses given function f to mock the Account.CreateUser method
-func (mmCreateUser *mAccountMockCreateUser) Set(f func(ctx context.Context, accountID uuid.UUID, name string, surname string, email string) (u1 domain.User, err error)) *AccountMock {
+func (mmCreateUser *mAccountMockCreateUser) Set(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, surname string, email string) (u1 domain.User, err error)) *AccountMock {
 	if mmCreateUser.defaultExpectation != nil {
 		mmCreateUser.mock.t.Fatalf("Default expectation is already set for the Account.CreateUser method")
 	}
@@ -739,14 +775,14 @@ func (mmCreateUser *mAccountMockCreateUser) Set(f func(ctx context.Context, acco
 
 // When sets expectation for the Account.CreateUser which will trigger the result defined by the following
 // Then helper
-func (mmCreateUser *mAccountMockCreateUser) When(ctx context.Context, accountID uuid.UUID, name string, surname string, email string) *AccountMockCreateUserExpectation {
+func (mmCreateUser *mAccountMockCreateUser) When(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, surname string, email string) *AccountMockCreateUserExpectation {
 	if mmCreateUser.mock.funcCreateUser != nil {
 		mmCreateUser.mock.t.Fatalf("AccountMock.CreateUser mock is already set by Set")
 	}
 
 	expectation := &AccountMockCreateUserExpectation{
 		mock:               mmCreateUser.mock,
-		params:             &AccountMockCreateUserParams{ctx, accountID, name, surname, email},
+		params:             &AccountMockCreateUserParams{ctx, accountID, initiatorID, name, surname, email},
 		expectationOrigins: AccountMockCreateUserExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmCreateUser.expectations = append(mmCreateUser.expectations, expectation)
@@ -781,17 +817,17 @@ func (mmCreateUser *mAccountMockCreateUser) invocationsDone() bool {
 }
 
 // CreateUser implements mm_service.Account
-func (mmCreateUser *AccountMock) CreateUser(ctx context.Context, accountID uuid.UUID, name string, surname string, email string) (u1 domain.User, err error) {
+func (mmCreateUser *AccountMock) CreateUser(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, name string, surname string, email string) (u1 domain.User, err error) {
 	mm_atomic.AddUint64(&mmCreateUser.beforeCreateUserCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreateUser.afterCreateUserCounter, 1)
 
 	mmCreateUser.t.Helper()
 
 	if mmCreateUser.inspectFuncCreateUser != nil {
-		mmCreateUser.inspectFuncCreateUser(ctx, accountID, name, surname, email)
+		mmCreateUser.inspectFuncCreateUser(ctx, accountID, initiatorID, name, surname, email)
 	}
 
-	mm_params := AccountMockCreateUserParams{ctx, accountID, name, surname, email}
+	mm_params := AccountMockCreateUserParams{ctx, accountID, initiatorID, name, surname, email}
 
 	// Record call args
 	mmCreateUser.CreateUserMock.mutex.Lock()
@@ -810,7 +846,7 @@ func (mmCreateUser *AccountMock) CreateUser(ctx context.Context, accountID uuid.
 		mm_want := mmCreateUser.CreateUserMock.defaultExpectation.params
 		mm_want_ptrs := mmCreateUser.CreateUserMock.defaultExpectation.paramPtrs
 
-		mm_got := AccountMockCreateUserParams{ctx, accountID, name, surname, email}
+		mm_got := AccountMockCreateUserParams{ctx, accountID, initiatorID, name, surname, email}
 
 		if mm_want_ptrs != nil {
 
@@ -822,6 +858,11 @@ func (mmCreateUser *AccountMock) CreateUser(ctx context.Context, accountID uuid.
 			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
 				mmCreateUser.t.Errorf("AccountMock.CreateUser got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmCreateUser.CreateUserMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmCreateUser.t.Errorf("AccountMock.CreateUser got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateUser.CreateUserMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
 			}
 
 			if mm_want_ptrs.name != nil && !minimock.Equal(*mm_want_ptrs.name, mm_got.name) {
@@ -851,9 +892,9 @@ func (mmCreateUser *AccountMock) CreateUser(ctx context.Context, accountID uuid.
 		return (*mm_results).u1, (*mm_results).err
 	}
 	if mmCreateUser.funcCreateUser != nil {
-		return mmCreateUser.funcCreateUser(ctx, accountID, name, surname, email)
+		return mmCreateUser.funcCreateUser(ctx, accountID, initiatorID, name, surname, email)
 	}
-	mmCreateUser.t.Fatalf("Unexpected call to AccountMock.CreateUser. %v %v %v %v %v", ctx, accountID, name, surname, email)
+	mmCreateUser.t.Fatalf("Unexpected call to AccountMock.CreateUser. %v %v %v %v %v %v", ctx, accountID, initiatorID, name, surname, email)
 	return
 }
 
@@ -1954,6 +1995,379 @@ func (m *AccountMock) MinimockIsExistsUserByEmailInspect() {
 	}
 }
 
+type mAccountMockIsHasUser struct {
+	optional           bool
+	mock               *AccountMock
+	defaultExpectation *AccountMockIsHasUserExpectation
+	expectations       []*AccountMockIsHasUserExpectation
+
+	callArgs []*AccountMockIsHasUserParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AccountMockIsHasUserExpectation specifies expectation struct of the Account.IsHasUser
+type AccountMockIsHasUserExpectation struct {
+	mock               *AccountMock
+	params             *AccountMockIsHasUserParams
+	paramPtrs          *AccountMockIsHasUserParamPtrs
+	expectationOrigins AccountMockIsHasUserExpectationOrigins
+	results            *AccountMockIsHasUserResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AccountMockIsHasUserParams contains parameters of the Account.IsHasUser
+type AccountMockIsHasUserParams struct {
+	ctx         context.Context
+	accountID   uuid.UUID
+	initiatorID uuid.UUID
+}
+
+// AccountMockIsHasUserParamPtrs contains pointers to parameters of the Account.IsHasUser
+type AccountMockIsHasUserParamPtrs struct {
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	initiatorID *uuid.UUID
+}
+
+// AccountMockIsHasUserResults contains results of the Account.IsHasUser
+type AccountMockIsHasUserResults struct {
+	err error
+}
+
+// AccountMockIsHasUserOrigins contains origins of expectations of the Account.IsHasUser
+type AccountMockIsHasUserExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originInitiatorID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmIsHasUser *mAccountMockIsHasUser) Optional() *mAccountMockIsHasUser {
+	mmIsHasUser.optional = true
+	return mmIsHasUser
+}
+
+// Expect sets up expected params for Account.IsHasUser
+func (mmIsHasUser *mAccountMockIsHasUser) Expect(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID) *mAccountMockIsHasUser {
+	if mmIsHasUser.mock.funcIsHasUser != nil {
+		mmIsHasUser.mock.t.Fatalf("AccountMock.IsHasUser mock is already set by Set")
+	}
+
+	if mmIsHasUser.defaultExpectation == nil {
+		mmIsHasUser.defaultExpectation = &AccountMockIsHasUserExpectation{}
+	}
+
+	if mmIsHasUser.defaultExpectation.paramPtrs != nil {
+		mmIsHasUser.mock.t.Fatalf("AccountMock.IsHasUser mock is already set by ExpectParams functions")
+	}
+
+	mmIsHasUser.defaultExpectation.params = &AccountMockIsHasUserParams{ctx, accountID, initiatorID}
+	mmIsHasUser.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmIsHasUser.expectations {
+		if minimock.Equal(e.params, mmIsHasUser.defaultExpectation.params) {
+			mmIsHasUser.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmIsHasUser.defaultExpectation.params)
+		}
+	}
+
+	return mmIsHasUser
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Account.IsHasUser
+func (mmIsHasUser *mAccountMockIsHasUser) ExpectCtxParam1(ctx context.Context) *mAccountMockIsHasUser {
+	if mmIsHasUser.mock.funcIsHasUser != nil {
+		mmIsHasUser.mock.t.Fatalf("AccountMock.IsHasUser mock is already set by Set")
+	}
+
+	if mmIsHasUser.defaultExpectation == nil {
+		mmIsHasUser.defaultExpectation = &AccountMockIsHasUserExpectation{}
+	}
+
+	if mmIsHasUser.defaultExpectation.params != nil {
+		mmIsHasUser.mock.t.Fatalf("AccountMock.IsHasUser mock is already set by Expect")
+	}
+
+	if mmIsHasUser.defaultExpectation.paramPtrs == nil {
+		mmIsHasUser.defaultExpectation.paramPtrs = &AccountMockIsHasUserParamPtrs{}
+	}
+	mmIsHasUser.defaultExpectation.paramPtrs.ctx = &ctx
+	mmIsHasUser.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmIsHasUser
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Account.IsHasUser
+func (mmIsHasUser *mAccountMockIsHasUser) ExpectAccountIDParam2(accountID uuid.UUID) *mAccountMockIsHasUser {
+	if mmIsHasUser.mock.funcIsHasUser != nil {
+		mmIsHasUser.mock.t.Fatalf("AccountMock.IsHasUser mock is already set by Set")
+	}
+
+	if mmIsHasUser.defaultExpectation == nil {
+		mmIsHasUser.defaultExpectation = &AccountMockIsHasUserExpectation{}
+	}
+
+	if mmIsHasUser.defaultExpectation.params != nil {
+		mmIsHasUser.mock.t.Fatalf("AccountMock.IsHasUser mock is already set by Expect")
+	}
+
+	if mmIsHasUser.defaultExpectation.paramPtrs == nil {
+		mmIsHasUser.defaultExpectation.paramPtrs = &AccountMockIsHasUserParamPtrs{}
+	}
+	mmIsHasUser.defaultExpectation.paramPtrs.accountID = &accountID
+	mmIsHasUser.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmIsHasUser
+}
+
+// ExpectInitiatorIDParam3 sets up expected param initiatorID for Account.IsHasUser
+func (mmIsHasUser *mAccountMockIsHasUser) ExpectInitiatorIDParam3(initiatorID uuid.UUID) *mAccountMockIsHasUser {
+	if mmIsHasUser.mock.funcIsHasUser != nil {
+		mmIsHasUser.mock.t.Fatalf("AccountMock.IsHasUser mock is already set by Set")
+	}
+
+	if mmIsHasUser.defaultExpectation == nil {
+		mmIsHasUser.defaultExpectation = &AccountMockIsHasUserExpectation{}
+	}
+
+	if mmIsHasUser.defaultExpectation.params != nil {
+		mmIsHasUser.mock.t.Fatalf("AccountMock.IsHasUser mock is already set by Expect")
+	}
+
+	if mmIsHasUser.defaultExpectation.paramPtrs == nil {
+		mmIsHasUser.defaultExpectation.paramPtrs = &AccountMockIsHasUserParamPtrs{}
+	}
+	mmIsHasUser.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmIsHasUser.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmIsHasUser
+}
+
+// Inspect accepts an inspector function that has same arguments as the Account.IsHasUser
+func (mmIsHasUser *mAccountMockIsHasUser) Inspect(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID)) *mAccountMockIsHasUser {
+	if mmIsHasUser.mock.inspectFuncIsHasUser != nil {
+		mmIsHasUser.mock.t.Fatalf("Inspect function is already set for AccountMock.IsHasUser")
+	}
+
+	mmIsHasUser.mock.inspectFuncIsHasUser = f
+
+	return mmIsHasUser
+}
+
+// Return sets up results that will be returned by Account.IsHasUser
+func (mmIsHasUser *mAccountMockIsHasUser) Return(err error) *AccountMock {
+	if mmIsHasUser.mock.funcIsHasUser != nil {
+		mmIsHasUser.mock.t.Fatalf("AccountMock.IsHasUser mock is already set by Set")
+	}
+
+	if mmIsHasUser.defaultExpectation == nil {
+		mmIsHasUser.defaultExpectation = &AccountMockIsHasUserExpectation{mock: mmIsHasUser.mock}
+	}
+	mmIsHasUser.defaultExpectation.results = &AccountMockIsHasUserResults{err}
+	mmIsHasUser.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmIsHasUser.mock
+}
+
+// Set uses given function f to mock the Account.IsHasUser method
+func (mmIsHasUser *mAccountMockIsHasUser) Set(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID) (err error)) *AccountMock {
+	if mmIsHasUser.defaultExpectation != nil {
+		mmIsHasUser.mock.t.Fatalf("Default expectation is already set for the Account.IsHasUser method")
+	}
+
+	if len(mmIsHasUser.expectations) > 0 {
+		mmIsHasUser.mock.t.Fatalf("Some expectations are already set for the Account.IsHasUser method")
+	}
+
+	mmIsHasUser.mock.funcIsHasUser = f
+	mmIsHasUser.mock.funcIsHasUserOrigin = minimock.CallerInfo(1)
+	return mmIsHasUser.mock
+}
+
+// When sets expectation for the Account.IsHasUser which will trigger the result defined by the following
+// Then helper
+func (mmIsHasUser *mAccountMockIsHasUser) When(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID) *AccountMockIsHasUserExpectation {
+	if mmIsHasUser.mock.funcIsHasUser != nil {
+		mmIsHasUser.mock.t.Fatalf("AccountMock.IsHasUser mock is already set by Set")
+	}
+
+	expectation := &AccountMockIsHasUserExpectation{
+		mock:               mmIsHasUser.mock,
+		params:             &AccountMockIsHasUserParams{ctx, accountID, initiatorID},
+		expectationOrigins: AccountMockIsHasUserExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmIsHasUser.expectations = append(mmIsHasUser.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Account.IsHasUser return parameters for the expectation previously defined by the When method
+func (e *AccountMockIsHasUserExpectation) Then(err error) *AccountMock {
+	e.results = &AccountMockIsHasUserResults{err}
+	return e.mock
+}
+
+// Times sets number of times Account.IsHasUser should be invoked
+func (mmIsHasUser *mAccountMockIsHasUser) Times(n uint64) *mAccountMockIsHasUser {
+	if n == 0 {
+		mmIsHasUser.mock.t.Fatalf("Times of AccountMock.IsHasUser mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmIsHasUser.expectedInvocations, n)
+	mmIsHasUser.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmIsHasUser
+}
+
+func (mmIsHasUser *mAccountMockIsHasUser) invocationsDone() bool {
+	if len(mmIsHasUser.expectations) == 0 && mmIsHasUser.defaultExpectation == nil && mmIsHasUser.mock.funcIsHasUser == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmIsHasUser.mock.afterIsHasUserCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmIsHasUser.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// IsHasUser implements mm_service.Account
+func (mmIsHasUser *AccountMock) IsHasUser(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmIsHasUser.beforeIsHasUserCounter, 1)
+	defer mm_atomic.AddUint64(&mmIsHasUser.afterIsHasUserCounter, 1)
+
+	mmIsHasUser.t.Helper()
+
+	if mmIsHasUser.inspectFuncIsHasUser != nil {
+		mmIsHasUser.inspectFuncIsHasUser(ctx, accountID, initiatorID)
+	}
+
+	mm_params := AccountMockIsHasUserParams{ctx, accountID, initiatorID}
+
+	// Record call args
+	mmIsHasUser.IsHasUserMock.mutex.Lock()
+	mmIsHasUser.IsHasUserMock.callArgs = append(mmIsHasUser.IsHasUserMock.callArgs, &mm_params)
+	mmIsHasUser.IsHasUserMock.mutex.Unlock()
+
+	for _, e := range mmIsHasUser.IsHasUserMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmIsHasUser.IsHasUserMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmIsHasUser.IsHasUserMock.defaultExpectation.Counter, 1)
+		mm_want := mmIsHasUser.IsHasUserMock.defaultExpectation.params
+		mm_want_ptrs := mmIsHasUser.IsHasUserMock.defaultExpectation.paramPtrs
+
+		mm_got := AccountMockIsHasUserParams{ctx, accountID, initiatorID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmIsHasUser.t.Errorf("AccountMock.IsHasUser got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsHasUser.IsHasUserMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmIsHasUser.t.Errorf("AccountMock.IsHasUser got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsHasUser.IsHasUserMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmIsHasUser.t.Errorf("AccountMock.IsHasUser got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsHasUser.IsHasUserMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmIsHasUser.t.Errorf("AccountMock.IsHasUser got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmIsHasUser.IsHasUserMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmIsHasUser.IsHasUserMock.defaultExpectation.results
+		if mm_results == nil {
+			mmIsHasUser.t.Fatal("No results are set for the AccountMock.IsHasUser")
+		}
+		return (*mm_results).err
+	}
+	if mmIsHasUser.funcIsHasUser != nil {
+		return mmIsHasUser.funcIsHasUser(ctx, accountID, initiatorID)
+	}
+	mmIsHasUser.t.Fatalf("Unexpected call to AccountMock.IsHasUser. %v %v %v", ctx, accountID, initiatorID)
+	return
+}
+
+// IsHasUserAfterCounter returns a count of finished AccountMock.IsHasUser invocations
+func (mmIsHasUser *AccountMock) IsHasUserAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIsHasUser.afterIsHasUserCounter)
+}
+
+// IsHasUserBeforeCounter returns a count of AccountMock.IsHasUser invocations
+func (mmIsHasUser *AccountMock) IsHasUserBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIsHasUser.beforeIsHasUserCounter)
+}
+
+// Calls returns a list of arguments used in each call to AccountMock.IsHasUser.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmIsHasUser *mAccountMockIsHasUser) Calls() []*AccountMockIsHasUserParams {
+	mmIsHasUser.mutex.RLock()
+
+	argCopy := make([]*AccountMockIsHasUserParams, len(mmIsHasUser.callArgs))
+	copy(argCopy, mmIsHasUser.callArgs)
+
+	mmIsHasUser.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockIsHasUserDone returns true if the count of the IsHasUser invocations corresponds
+// the number of defined expectations
+func (m *AccountMock) MinimockIsHasUserDone() bool {
+	if m.IsHasUserMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.IsHasUserMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.IsHasUserMock.invocationsDone()
+}
+
+// MinimockIsHasUserInspect logs each unmet expectation
+func (m *AccountMock) MinimockIsHasUserInspect() {
+	for _, e := range m.IsHasUserMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AccountMock.IsHasUser at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterIsHasUserCounter := mm_atomic.LoadUint64(&m.afterIsHasUserCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.IsHasUserMock.defaultExpectation != nil && afterIsHasUserCounter < 1 {
+		if m.IsHasUserMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AccountMock.IsHasUser at\n%s", m.IsHasUserMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AccountMock.IsHasUser at\n%s with params: %#v", m.IsHasUserMock.defaultExpectation.expectationOrigins.origin, *m.IsHasUserMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcIsHasUser != nil && afterIsHasUserCounter < 1 {
+		m.t.Errorf("Expected call to AccountMock.IsHasUser at\n%s", m.funcIsHasUserOrigin)
+	}
+
+	if !m.IsHasUserMock.invocationsDone() && afterIsHasUserCounter > 0 {
+		m.t.Errorf("Expected %d calls to AccountMock.IsHasUser at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.IsHasUserMock.expectedInvocations), m.IsHasUserMock.expectedInvocationsOrigin, afterIsHasUserCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *AccountMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
@@ -1967,6 +2381,8 @@ func (m *AccountMock) MinimockFinish() {
 			m.MinimockGetByUserEmailInspect()
 
 			m.MinimockIsExistsUserByEmailInspect()
+
+			m.MinimockIsHasUserInspect()
 		}
 	})
 }
@@ -1994,5 +2410,6 @@ func (m *AccountMock) minimockDone() bool {
 		m.MinimockCreateUserDone() &&
 		m.MinimockGetByIDDone() &&
 		m.MinimockGetByUserEmailDone() &&
-		m.MinimockIsExistsUserByEmailDone()
+		m.MinimockIsExistsUserByEmailDone() &&
+		m.MinimockIsHasUserDone()
 }

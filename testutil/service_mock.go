@@ -12,9 +12,11 @@ type ServiceMock struct {
 	Email       *mock_service.EmailMock
 	AccountRole *mock_service.AccountRoleMock
 	UserGroup   *mock_service.UserGroupMock
+	GroupMember *mock_service.GroupMemberMock
 	GroupRole   *mock_service.GroupRoleMock
 	Video       *mock_service.VideoMock
 	VideoAsset  *mock_service.VideoAssetMock
+	Access      *mock_service.AccessMock
 }
 
 func (s *ServiceMock) ToServices() *service.Service {
@@ -25,8 +27,10 @@ func (s *ServiceMock) ToServices() *service.Service {
 		Email:       s.Email,
 		AccountRole: s.AccountRole,
 		UserGroup:   s.UserGroup,
+		GroupMember: s.GroupMember,
 		GroupRole:   s.GroupRole,
 		Video:       s.Video,
 		VideoAsset:  s.VideoAsset,
+		Access:      s.Access,
 	}
 }

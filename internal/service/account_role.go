@@ -64,12 +64,22 @@ func (s *AccountRoleService) CreateSystemAccountOwner(
 
 func (s *AccountRoleService) Create(
 	ctx context.Context,
-	accountID uuid.UUID,
+	accountID, initiatorID uuid.UUID,
 	name string,
 	parentID *uuid.UUID,
 	permission domain.PermissionMask,
 	isDefault bool,
 ) (domain.AccountRole, error) {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionCreateAccountRole,
+	); err != nil {
+		zap.L().Error(err.Error())
+		return domain.AccountRole{}, nil
+	}
+
 	if _, err := s.repo.Insert(ctx, accountID, name, parentID, permission, isDefault, false); err != nil {
 		zap.L().Error(err.Error())
 		return domain.AccountRole{}, err

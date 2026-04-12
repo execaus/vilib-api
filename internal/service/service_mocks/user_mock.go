@@ -34,6 +34,13 @@ type UserMock struct {
 	beforeGetByEmailCounter uint64
 	GetByEmailMock          mUserMockGetByEmail
 
+	funcGetByID          func(ctx context.Context, userID ...uuid.UUID) (ua1 []domain.User, err error)
+	funcGetByIDOrigin    string
+	inspectFuncGetByID   func(ctx context.Context, userID ...uuid.UUID)
+	afterGetByIDCounter  uint64
+	beforeGetByIDCounter uint64
+	GetByIDMock          mUserMockGetByID
+
 	funcUpdate          func(ctx context.Context, initiatorID uuid.UUID, targetID uuid.UUID, roleID *uuid.UUID) (u1 domain.User, err error)
 	funcUpdateOrigin    string
 	inspectFuncUpdate   func(ctx context.Context, initiatorID uuid.UUID, targetID uuid.UUID, roleID *uuid.UUID)
@@ -55,6 +62,9 @@ func NewUserMock(t minimock.Tester) *UserMock {
 
 	m.GetByEmailMock = mUserMockGetByEmail{mock: m}
 	m.GetByEmailMock.callArgs = []*UserMockGetByEmailParams{}
+
+	m.GetByIDMock = mUserMockGetByID{mock: m}
+	m.GetByIDMock.callArgs = []*UserMockGetByIDParams{}
 
 	m.UpdateMock = mUserMockUpdate{mock: m}
 	m.UpdateMock.callArgs = []*UserMockUpdateParams{}
@@ -874,6 +884,349 @@ func (m *UserMock) MinimockGetByEmailInspect() {
 	}
 }
 
+type mUserMockGetByID struct {
+	optional           bool
+	mock               *UserMock
+	defaultExpectation *UserMockGetByIDExpectation
+	expectations       []*UserMockGetByIDExpectation
+
+	callArgs []*UserMockGetByIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// UserMockGetByIDExpectation specifies expectation struct of the User.GetByID
+type UserMockGetByIDExpectation struct {
+	mock               *UserMock
+	params             *UserMockGetByIDParams
+	paramPtrs          *UserMockGetByIDParamPtrs
+	expectationOrigins UserMockGetByIDExpectationOrigins
+	results            *UserMockGetByIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// UserMockGetByIDParams contains parameters of the User.GetByID
+type UserMockGetByIDParams struct {
+	ctx    context.Context
+	userID []uuid.UUID
+}
+
+// UserMockGetByIDParamPtrs contains pointers to parameters of the User.GetByID
+type UserMockGetByIDParamPtrs struct {
+	ctx    *context.Context
+	userID *[]uuid.UUID
+}
+
+// UserMockGetByIDResults contains results of the User.GetByID
+type UserMockGetByIDResults struct {
+	ua1 []domain.User
+	err error
+}
+
+// UserMockGetByIDOrigins contains origins of expectations of the User.GetByID
+type UserMockGetByIDExpectationOrigins struct {
+	origin       string
+	originCtx    string
+	originUserID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetByID *mUserMockGetByID) Optional() *mUserMockGetByID {
+	mmGetByID.optional = true
+	return mmGetByID
+}
+
+// Expect sets up expected params for User.GetByID
+func (mmGetByID *mUserMockGetByID) Expect(ctx context.Context, userID ...uuid.UUID) *mUserMockGetByID {
+	if mmGetByID.mock.funcGetByID != nil {
+		mmGetByID.mock.t.Fatalf("UserMock.GetByID mock is already set by Set")
+	}
+
+	if mmGetByID.defaultExpectation == nil {
+		mmGetByID.defaultExpectation = &UserMockGetByIDExpectation{}
+	}
+
+	if mmGetByID.defaultExpectation.paramPtrs != nil {
+		mmGetByID.mock.t.Fatalf("UserMock.GetByID mock is already set by ExpectParams functions")
+	}
+
+	mmGetByID.defaultExpectation.params = &UserMockGetByIDParams{ctx, userID}
+	mmGetByID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetByID.expectations {
+		if minimock.Equal(e.params, mmGetByID.defaultExpectation.params) {
+			mmGetByID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetByID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetByID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for User.GetByID
+func (mmGetByID *mUserMockGetByID) ExpectCtxParam1(ctx context.Context) *mUserMockGetByID {
+	if mmGetByID.mock.funcGetByID != nil {
+		mmGetByID.mock.t.Fatalf("UserMock.GetByID mock is already set by Set")
+	}
+
+	if mmGetByID.defaultExpectation == nil {
+		mmGetByID.defaultExpectation = &UserMockGetByIDExpectation{}
+	}
+
+	if mmGetByID.defaultExpectation.params != nil {
+		mmGetByID.mock.t.Fatalf("UserMock.GetByID mock is already set by Expect")
+	}
+
+	if mmGetByID.defaultExpectation.paramPtrs == nil {
+		mmGetByID.defaultExpectation.paramPtrs = &UserMockGetByIDParamPtrs{}
+	}
+	mmGetByID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetByID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetByID
+}
+
+// ExpectUserIDParam2 sets up expected param userID for User.GetByID
+func (mmGetByID *mUserMockGetByID) ExpectUserIDParam2(userID ...uuid.UUID) *mUserMockGetByID {
+	if mmGetByID.mock.funcGetByID != nil {
+		mmGetByID.mock.t.Fatalf("UserMock.GetByID mock is already set by Set")
+	}
+
+	if mmGetByID.defaultExpectation == nil {
+		mmGetByID.defaultExpectation = &UserMockGetByIDExpectation{}
+	}
+
+	if mmGetByID.defaultExpectation.params != nil {
+		mmGetByID.mock.t.Fatalf("UserMock.GetByID mock is already set by Expect")
+	}
+
+	if mmGetByID.defaultExpectation.paramPtrs == nil {
+		mmGetByID.defaultExpectation.paramPtrs = &UserMockGetByIDParamPtrs{}
+	}
+	mmGetByID.defaultExpectation.paramPtrs.userID = &userID
+	mmGetByID.defaultExpectation.expectationOrigins.originUserID = minimock.CallerInfo(1)
+
+	return mmGetByID
+}
+
+// Inspect accepts an inspector function that has same arguments as the User.GetByID
+func (mmGetByID *mUserMockGetByID) Inspect(f func(ctx context.Context, userID ...uuid.UUID)) *mUserMockGetByID {
+	if mmGetByID.mock.inspectFuncGetByID != nil {
+		mmGetByID.mock.t.Fatalf("Inspect function is already set for UserMock.GetByID")
+	}
+
+	mmGetByID.mock.inspectFuncGetByID = f
+
+	return mmGetByID
+}
+
+// Return sets up results that will be returned by User.GetByID
+func (mmGetByID *mUserMockGetByID) Return(ua1 []domain.User, err error) *UserMock {
+	if mmGetByID.mock.funcGetByID != nil {
+		mmGetByID.mock.t.Fatalf("UserMock.GetByID mock is already set by Set")
+	}
+
+	if mmGetByID.defaultExpectation == nil {
+		mmGetByID.defaultExpectation = &UserMockGetByIDExpectation{mock: mmGetByID.mock}
+	}
+	mmGetByID.defaultExpectation.results = &UserMockGetByIDResults{ua1, err}
+	mmGetByID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetByID.mock
+}
+
+// Set uses given function f to mock the User.GetByID method
+func (mmGetByID *mUserMockGetByID) Set(f func(ctx context.Context, userID ...uuid.UUID) (ua1 []domain.User, err error)) *UserMock {
+	if mmGetByID.defaultExpectation != nil {
+		mmGetByID.mock.t.Fatalf("Default expectation is already set for the User.GetByID method")
+	}
+
+	if len(mmGetByID.expectations) > 0 {
+		mmGetByID.mock.t.Fatalf("Some expectations are already set for the User.GetByID method")
+	}
+
+	mmGetByID.mock.funcGetByID = f
+	mmGetByID.mock.funcGetByIDOrigin = minimock.CallerInfo(1)
+	return mmGetByID.mock
+}
+
+// When sets expectation for the User.GetByID which will trigger the result defined by the following
+// Then helper
+func (mmGetByID *mUserMockGetByID) When(ctx context.Context, userID ...uuid.UUID) *UserMockGetByIDExpectation {
+	if mmGetByID.mock.funcGetByID != nil {
+		mmGetByID.mock.t.Fatalf("UserMock.GetByID mock is already set by Set")
+	}
+
+	expectation := &UserMockGetByIDExpectation{
+		mock:               mmGetByID.mock,
+		params:             &UserMockGetByIDParams{ctx, userID},
+		expectationOrigins: UserMockGetByIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetByID.expectations = append(mmGetByID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up User.GetByID return parameters for the expectation previously defined by the When method
+func (e *UserMockGetByIDExpectation) Then(ua1 []domain.User, err error) *UserMock {
+	e.results = &UserMockGetByIDResults{ua1, err}
+	return e.mock
+}
+
+// Times sets number of times User.GetByID should be invoked
+func (mmGetByID *mUserMockGetByID) Times(n uint64) *mUserMockGetByID {
+	if n == 0 {
+		mmGetByID.mock.t.Fatalf("Times of UserMock.GetByID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetByID.expectedInvocations, n)
+	mmGetByID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetByID
+}
+
+func (mmGetByID *mUserMockGetByID) invocationsDone() bool {
+	if len(mmGetByID.expectations) == 0 && mmGetByID.defaultExpectation == nil && mmGetByID.mock.funcGetByID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetByID.mock.afterGetByIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetByID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetByID implements mm_service.User
+func (mmGetByID *UserMock) GetByID(ctx context.Context, userID ...uuid.UUID) (ua1 []domain.User, err error) {
+	mm_atomic.AddUint64(&mmGetByID.beforeGetByIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetByID.afterGetByIDCounter, 1)
+
+	mmGetByID.t.Helper()
+
+	if mmGetByID.inspectFuncGetByID != nil {
+		mmGetByID.inspectFuncGetByID(ctx, userID...)
+	}
+
+	mm_params := UserMockGetByIDParams{ctx, userID}
+
+	// Record call args
+	mmGetByID.GetByIDMock.mutex.Lock()
+	mmGetByID.GetByIDMock.callArgs = append(mmGetByID.GetByIDMock.callArgs, &mm_params)
+	mmGetByID.GetByIDMock.mutex.Unlock()
+
+	for _, e := range mmGetByID.GetByIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ua1, e.results.err
+		}
+	}
+
+	if mmGetByID.GetByIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetByID.GetByIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetByID.GetByIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetByID.GetByIDMock.defaultExpectation.paramPtrs
+
+		mm_got := UserMockGetByIDParams{ctx, userID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetByID.t.Errorf("UserMock.GetByID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetByID.GetByIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.userID != nil && !minimock.Equal(*mm_want_ptrs.userID, mm_got.userID) {
+				mmGetByID.t.Errorf("UserMock.GetByID got unexpected parameter userID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetByID.GetByIDMock.defaultExpectation.expectationOrigins.originUserID, *mm_want_ptrs.userID, mm_got.userID, minimock.Diff(*mm_want_ptrs.userID, mm_got.userID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetByID.t.Errorf("UserMock.GetByID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetByID.GetByIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetByID.GetByIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetByID.t.Fatal("No results are set for the UserMock.GetByID")
+		}
+		return (*mm_results).ua1, (*mm_results).err
+	}
+	if mmGetByID.funcGetByID != nil {
+		return mmGetByID.funcGetByID(ctx, userID...)
+	}
+	mmGetByID.t.Fatalf("Unexpected call to UserMock.GetByID. %v %v", ctx, userID)
+	return
+}
+
+// GetByIDAfterCounter returns a count of finished UserMock.GetByID invocations
+func (mmGetByID *UserMock) GetByIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetByID.afterGetByIDCounter)
+}
+
+// GetByIDBeforeCounter returns a count of UserMock.GetByID invocations
+func (mmGetByID *UserMock) GetByIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetByID.beforeGetByIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to UserMock.GetByID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetByID *mUserMockGetByID) Calls() []*UserMockGetByIDParams {
+	mmGetByID.mutex.RLock()
+
+	argCopy := make([]*UserMockGetByIDParams, len(mmGetByID.callArgs))
+	copy(argCopy, mmGetByID.callArgs)
+
+	mmGetByID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetByIDDone returns true if the count of the GetByID invocations corresponds
+// the number of defined expectations
+func (m *UserMock) MinimockGetByIDDone() bool {
+	if m.GetByIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetByIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetByIDMock.invocationsDone()
+}
+
+// MinimockGetByIDInspect logs each unmet expectation
+func (m *UserMock) MinimockGetByIDInspect() {
+	for _, e := range m.GetByIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to UserMock.GetByID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetByIDCounter := mm_atomic.LoadUint64(&m.afterGetByIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetByIDMock.defaultExpectation != nil && afterGetByIDCounter < 1 {
+		if m.GetByIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to UserMock.GetByID at\n%s", m.GetByIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to UserMock.GetByID at\n%s with params: %#v", m.GetByIDMock.defaultExpectation.expectationOrigins.origin, *m.GetByIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetByID != nil && afterGetByIDCounter < 1 {
+		m.t.Errorf("Expected call to UserMock.GetByID at\n%s", m.funcGetByIDOrigin)
+	}
+
+	if !m.GetByIDMock.invocationsDone() && afterGetByIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to UserMock.GetByID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetByIDMock.expectedInvocations), m.GetByIDMock.expectedInvocationsOrigin, afterGetByIDCounter)
+	}
+}
+
 type mUserMockUpdate struct {
 	optional           bool
 	mock               *UserMock
@@ -1287,6 +1640,8 @@ func (m *UserMock) MinimockFinish() {
 
 			m.MinimockGetByEmailInspect()
 
+			m.MinimockGetByIDInspect()
+
 			m.MinimockUpdateInspect()
 		}
 	})
@@ -1313,5 +1668,6 @@ func (m *UserMock) minimockDone() bool {
 	return done &&
 		m.MinimockCreateDone() &&
 		m.MinimockGetByEmailDone() &&
+		m.MinimockGetByIDDone() &&
 		m.MinimockUpdateDone()
 }

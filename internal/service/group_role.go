@@ -20,11 +20,21 @@ func NewGroupRoleService(repo repository.GroupRole, srv *Service) *GroupRoleServ
 
 func (s *GroupRoleService) Create(
 	ctx context.Context,
-	accountID uuid.UUID,
+	accountID, initiatorID uuid.UUID,
 	name string,
 	permission domain.PermissionMask,
 	isDefault bool,
 ) (domain.GroupRole, error) {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionCreateGroupRole,
+	); err != nil {
+		zap.L().Error(err.Error())
+		return domain.GroupRole{}, err
+	}
+
 	role, err := s.repo.Insert(ctx, accountID, name, permission, isDefault)
 	if err != nil {
 		zap.L().Error(err.Error())

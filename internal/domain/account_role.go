@@ -14,11 +14,18 @@ const (
 const (
 	// AccountPermissionOwner владелец аккаунта.
 	AccountPermissionOwner PermissionFlag = iota
+	// AccountPermissionCreateUser разрешено ли создавать пользователей внутри организации.
+	AccountPermissionCreateUser
+	AccountPermissionCreateUserGroup
+	AccountPermissionUserGroupAddMember
+	AccountPermissionCreateAccountRole
+	AccountPermissionCreateGroupRole
 )
 
 type AccountRole struct {
 	ID             uuid.UUID
 	Name           string
+	AccountID      uuid.UUID
 	PermissionMask PermissionMask
 	IsSystem       bool
 	IsDefault      bool
@@ -28,6 +35,7 @@ type AccountRole struct {
 func (r *AccountRole) FromDB(db *schema.AccountRole) {
 	r.ID = db.AccountRoleID
 	r.Name = db.Name
+	r.AccountID = db.AccountID
 	r.PermissionMask = db.PermissionMask
 	r.ParentID = dbconv.NullValToPtr(db.ParentRoleID)
 	r.IsDefault = db.IsDefault

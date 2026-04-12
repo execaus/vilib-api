@@ -11,6 +11,7 @@ import (
 //go:generate minimock -i User -o ./repository_mocks/user_mock.go
 //go:generate minimock -i AccountRole -o ./repository_mocks/account_role_mock.go
 //go:generate minimock -i UserGroup -o ./repository_mocks/user_group_mock.go
+//go:generate minimock -i GroupMember -o ./repository_mocks/group_member_mock.go
 //go:generate minimock -i GroupRole -o ./repository_mocks/group_role_mock.go
 //go:generate minimock -i Video -o ./repository_mocks/video_mock.go
 //go:generate minimock -i VideoAsset -o ./repository_mocks/video_asset_mock.go
@@ -38,6 +39,7 @@ type AccountRole interface {
 
 type UserGroup interface {
 	Insert(ctx context.Context, accountID uuid.UUID, name string) (domain.UserGroup, error)
+	GetByID(ctx context.Context, groupsID ...uuid.UUID) ([]domain.UserGroup, error)
 }
 
 type GroupMember interface {
