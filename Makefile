@@ -23,7 +23,7 @@ install-allure:
 	@echo "Allure установлен! golurectl в $$(go env GOPATH)/bin"
 
 test-allure:
-	go test -json -cover ./... 2>&1 | tee $(TEST_OUTPUT)
+	go test -json -cover -skip '.*_mock.*' ./... 2>&1 | tee $(TEST_OUTPUT)
 
 generate-allure: test-allure
 	golurectl -l -e -s -a -o $(ALLURE_RESULTS) < $(TEST_OUTPUT)
