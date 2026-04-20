@@ -182,7 +182,7 @@ func TestService_Video_Update(t *testing.T) {
 			setupMocks: func(t *testing.T,
 				repo *repository_mocks.VideoMock,
 			) {
-				repo.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(testVideo, nil)
+				repo.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(&testVideo, nil)
 				repo.UpdateMock.Expect(minimock.AnyContext, testVideoID, &testStatus).Return(testVideoUpdated, nil)
 			},
 			args: args{
@@ -197,7 +197,7 @@ func TestService_Video_Update(t *testing.T) {
 			setupMocks: func(t *testing.T,
 				repo *repository_mocks.VideoMock,
 			) {
-				repo.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(domain.Video{}, errNotFound)
+				repo.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(nil, errNotFound)
 			},
 			args: args{
 				videoID:     testVideoID,
