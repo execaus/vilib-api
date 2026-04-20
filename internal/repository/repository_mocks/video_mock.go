@@ -27,7 +27,7 @@ type VideoMock struct {
 	beforeInsertCounter uint64
 	InsertMock          mVideoMockInsert
 
-	funcSelect          func(ctx context.Context, id uuid.UUID) (v1 domain.Video, err error)
+	funcSelect          func(ctx context.Context, id uuid.UUID) (v1 *domain.Video, err error)
 	funcSelectOrigin    string
 	inspectFuncSelect   func(ctx context.Context, id uuid.UUID)
 	afterSelectCounter  uint64
@@ -538,7 +538,7 @@ type VideoMockSelectParamPtrs struct {
 
 // VideoMockSelectResults contains results of the Video.Select
 type VideoMockSelectResults struct {
-	v1  domain.Video
+	v1  *domain.Video
 	err error
 }
 
@@ -642,7 +642,7 @@ func (mmSelect *mVideoMockSelect) Inspect(f func(ctx context.Context, id uuid.UU
 }
 
 // Return sets up results that will be returned by Video.Select
-func (mmSelect *mVideoMockSelect) Return(v1 domain.Video, err error) *VideoMock {
+func (mmSelect *mVideoMockSelect) Return(v1 *domain.Video, err error) *VideoMock {
 	if mmSelect.mock.funcSelect != nil {
 		mmSelect.mock.t.Fatalf("VideoMock.Select mock is already set by Set")
 	}
@@ -656,7 +656,7 @@ func (mmSelect *mVideoMockSelect) Return(v1 domain.Video, err error) *VideoMock 
 }
 
 // Set uses given function f to mock the Video.Select method
-func (mmSelect *mVideoMockSelect) Set(f func(ctx context.Context, id uuid.UUID) (v1 domain.Video, err error)) *VideoMock {
+func (mmSelect *mVideoMockSelect) Set(f func(ctx context.Context, id uuid.UUID) (v1 *domain.Video, err error)) *VideoMock {
 	if mmSelect.defaultExpectation != nil {
 		mmSelect.mock.t.Fatalf("Default expectation is already set for the Video.Select method")
 	}
@@ -687,7 +687,7 @@ func (mmSelect *mVideoMockSelect) When(ctx context.Context, id uuid.UUID) *Video
 }
 
 // Then sets up Video.Select return parameters for the expectation previously defined by the When method
-func (e *VideoMockSelectExpectation) Then(v1 domain.Video, err error) *VideoMock {
+func (e *VideoMockSelectExpectation) Then(v1 *domain.Video, err error) *VideoMock {
 	e.results = &VideoMockSelectResults{v1, err}
 	return e.mock
 }
@@ -714,7 +714,7 @@ func (mmSelect *mVideoMockSelect) invocationsDone() bool {
 }
 
 // Select implements mm_repository.Video
-func (mmSelect *VideoMock) Select(ctx context.Context, id uuid.UUID) (v1 domain.Video, err error) {
+func (mmSelect *VideoMock) Select(ctx context.Context, id uuid.UUID) (v1 *domain.Video, err error) {
 	mm_atomic.AddUint64(&mmSelect.beforeSelectCounter, 1)
 	defer mm_atomic.AddUint64(&mmSelect.afterSelectCounter, 1)
 

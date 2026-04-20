@@ -78,14 +78,14 @@ func TestRepository_VideoSelect_Success(t *testing.T) {
 	})
 }
 
-func TestRepository_VideoSelect_NotFound(t *testing.T) {
+func TestRepository_VideoSelect_NilNotFound(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		video, err := r.Video.Select(t.Context(), uuid.New())
 
-		require.NotNil(t, err)
-		require.Equal(t, domain.Video{}, video)
+		require.Nil(t, video)
+		require.ErrorIs(t, repository.ErrNotFound, err)
 	})
 }
 

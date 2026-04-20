@@ -61,7 +61,7 @@ type GroupRole interface {
 }
 
 type Video interface {
-	Select(ctx context.Context, id uuid.UUID) (domain.Video, error)
+	Select(ctx context.Context, id uuid.UUID) (*domain.Video, error)
 	Insert(ctx context.Context, name string, groupID, userID uuid.UUID, status domain.VideoStatus) (domain.Video, error)
 	Update(ctx context.Context, id uuid.UUID, status *domain.VideoStatus) (domain.Video, error)
 }
@@ -96,5 +96,7 @@ func NewRepository(provider *ExecutorProvider) *Repository {
 		UserGroup:   NewUserGroupRepository(provider),
 		GroupMember: NewGroupMemberRepository(provider),
 		GroupRole:   NewGroupRoleRepository(provider),
+		Video:       NewVideoRepository(provider),
+		VideoAsset:  NewVideoAssetRepository(provider),
 	}
 }

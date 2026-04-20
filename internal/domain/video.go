@@ -2,6 +2,7 @@ package domain
 
 import (
 	"time"
+	"vilib-api/internal/gen/schema"
 
 	"github.com/google/uuid"
 )
@@ -49,4 +50,20 @@ type VideoAsset struct {
 	VideoID   uuid.UUID
 	Tag       VideoAssetTag
 	CreatedAt time.Time
+}
+
+func (v *Video) FromDB(db *schema.UserGroupVideo) {
+	v.ID = db.ID
+	v.GroupID = db.UserGroupID
+	v.Name = db.Name
+	v.Author = db.Author
+	v.Status = VideoStatus(db.Status)
+	v.CreatedAt = db.CreatedAt
+}
+
+func (va *VideoAsset) FromDB(db *schema.VideoAsset) {
+	va.FileID = db.FileID
+	va.VideoID = db.VideoID
+	va.Tag = VideoAssetTag(db.Tag)
+	va.CreatedAt = db.CreatedAt
 }
