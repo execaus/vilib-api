@@ -82,6 +82,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 }
 
 func (s *AuthService) GetClaimsFromToken(tokenString string) (*domain.AuthClaims, error) {
+	// Парсинг токена и извлечение claims
 	token, err := jwt.ParseWithClaims(tokenString, &domain.AuthClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			zap.L().Error(jwt.ErrTokenSignatureInvalid.Error())
@@ -98,6 +99,7 @@ func (s *AuthService) GetClaimsFromToken(tokenString string) (*domain.AuthClaims
 		return nil, err
 	}
 
+	// Проверка валидности токена
 	if claims, ok := token.Claims.(*domain.AuthClaims); ok && token.Valid {
 		return claims, nil
 	}
@@ -111,6 +113,7 @@ func (s *AuthService) GenerateToken(
 	accounts []uuid.UUID,
 	currentAccountID uuid.UUID,
 ) (string, error) {
+	// Создание структуры claims с данными пользователя
 	claims := domain.AuthClaims{
 		UserID:           userID,
 		Accounts:         accounts,
@@ -121,6 +124,7 @@ func (s *AuthService) GenerateToken(
 		},
 	}
 
+	// Создание и подпись токена
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signedToken, err := token.SignedString([]byte(s.secretKey))
 	if err != nil {
@@ -132,6 +136,7 @@ func (s *AuthService) GenerateToken(
 }
 
 func (s *AuthService) ComparePassword(hashedPassword string, password string) bool {
+	// Проверка соответствия пароля хешу
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -142,6 +147,7 @@ func (s *AuthService) ComparePassword(hashedPassword string, password string) bo
 }
 
 func (s *AuthService) HashPassword(password string) (string, error) {
+	// Хеширование пароля
 	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -151,6 +157,7 @@ func (s *AuthService) HashPassword(password string) (string, error) {
 }
 
 func (s *AuthService) GeneratePassword() (string, error) {
+	// Генерация случайного пароля заданной длины
 	password := make([]byte, passwordLength)
 	for i := 0; i < passwordLength; i++ {
 		indexBig, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))

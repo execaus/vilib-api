@@ -10,11 +10,28 @@ import (
 	"go.uber.org/zap"
 )
 
+// CreateUserGroup godoc
+// @Summary Создание группы пользователей
+// @Description Создаёт новую группу пользователей и добавляет указанных пользователей в неё
+// @Tags user-groups
+// @Accept json
+// @Produce json
+// @Param accountId path string true "ID аккаунта"
+// @Param request body dto.CreateUserGroupRequest true "Тело запроса для создания группы"
+// @Success 201 {object} dto.CreateUserGroupResponse
+// @Failure 400 {object} dto.ErrorMessage
+// @Failure 500 {object} dto.ErrorMessage
+// @Router /api/v1/accounts/{accountId}/user-groups [post]
 func (h *Handler) CreateUserGroup(c *gin.Context) {
 	var req dto.CreateUserGroupRequest
 
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
 	if err != nil {
+		sendBadRequest(c, err)
+		return
+	}
+
+	if err = c.BindJSON(&req); err != nil {
 		sendBadRequest(c, err)
 		return
 	}

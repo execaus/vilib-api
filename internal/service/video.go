@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
 	"vilib-api/internal/s3"
@@ -25,16 +26,81 @@ func (s *VideoService) Get(
 	accountID, groupID, initiatorID, videoID uuid.UUID,
 	isPreferOriginal bool,
 ) (domain.PreflightURL, error) {
+	// Проверка прав доступа на уровне аккаунта
+	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionVideoWatch); err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
 
-	s.repo.Select(ctx, videoID)
+	// Проверка прав доступа на уровне группы (является ли участником группы)
+	if err := s.isCheckGroupMember(ctx, groupID, initiatorID); err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
 
-	s.srv.VideoAsset.Get(ctx, videoID)
+	// Получение видео по ID
+	video, err := s.repo.Select(ctx, videoID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
 
+	// Проверка, что видео принадлежит указанной группе
+	if video.GroupID != groupID {
+		zap.L().Error("video does not belong to the specified group")
+		return "", ErrForbidden
+	}
+
+	// Получение ассетов видео
+	assets, err := s.srv.VideoAsset.Get(ctx, videoID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
+
+	// Определение, какой ассет использовать
 	var (
 		bucketName domain.VideoBucket
 		assetID    uuid.UUID
 	)
-	preflightURL, _ := s.s3.GetPreflightURL(ctx, bucketName, assetID, domain.VideoStreamURLTTL)
+
+	if isPreferOriginal {
+		// Всегда возвращаем оригинал
+		for _, asset := range assets {
+			if asset.Tag == domain.VideoAssetTagOriginal {
+				assetID = asset.FileID
+				bucketName = domain.VideoBucketOriginal
+				break
+			}
+		}
+	} else {
+		// Пробуем сначала сжатую версию, если нет — оригинал
+		hasCompressed := false
+		for _, asset := range assets {
+			if asset.Tag == domain.VideoAssetTagCompressed {
+				assetID = asset.FileID
+				bucketName = domain.VideoBucketCompressed
+				hasCompressed = true
+				break
+			}
+		}
+		if !hasCompressed {
+			for _, asset := range assets {
+				if asset.Tag == domain.VideoAssetTagOriginal {
+					assetID = asset.FileID
+					bucketName = domain.VideoBucketOriginal
+					break
+				}
+			}
+		}
+	}
+
+	// Получение URL для стриминга видео
+	preflightURL, err := s.s3.GetPreflightURL(ctx, bucketName, assetID, domain.VideoStreamURLTTL)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
 
 	return preflightURL, nil
 }
@@ -43,9 +109,31 @@ func (s *VideoService) GetPreflightUploadURL(
 	ctx context.Context,
 	accountID, groupID, userID uuid.UUID,
 ) (domain.PreflightURL, error) {
-	video, _ := s.repo.Insert(ctx, domain.DefaultVideoName, groupID, userID, domain.VideoStatusUploading)
+	// Проверка прав доступа на уровне аккаунта
+	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, userID, domain.AccountPermissionVideoUpload); err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
 
-	url, _ := s.s3.GetPreflightUploadURL(ctx, domain.VideoBucketOriginal, video.ID, domain.VideoUploadURLTTL)
+	// Проверка прав доступа на уровне группы (может ли загружать видео)
+	if err := s.isCheckGroupAction(ctx, groupID, userID, domain.GroupPermissionCreateVideo); err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
+
+	// Создание записи о видео в статусе загрузки
+	video, err := s.repo.Insert(ctx, domain.DefaultVideoName, groupID, userID, domain.VideoStatusUploading)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
+
+	// Получение URL для загрузки видео
+	url, err := s.s3.GetPreflightUploadURL(ctx, domain.VideoBucketOriginal, video.ID, domain.VideoUploadURLTTL)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
 
 	return url, nil
 }
@@ -53,13 +141,79 @@ func (s *VideoService) GetPreflightUploadURL(
 func (s *VideoService) Update(
 	ctx context.Context,
 	videoID uuid.UUID,
+	initiatorID *uuid.UUID,
 	status *domain.VideoStatus,
 ) (domain.Video, error) {
-	video, err := s.repo.Update(ctx, videoID, status)
+	// Получение видео по ID
+	video, err := s.repo.Select(ctx, videoID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			zap.L().Error(err.Error())
+			return domain.Video{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.Video{}, err
+	}
+
+	// Проверка прав доступа (только если передан инициатор — не для Kafka)
+	if initiatorID != nil {
+		if err := s.isCheckGroupAction(ctx, video.GroupID, *initiatorID, domain.GroupPermissionEditVideo); err != nil {
+			zap.L().Error(err.Error())
+			return domain.Video{}, err
+		}
+	}
+
+	// Обновление статуса видео
+	updatedVideo, err := s.repo.Update(ctx, videoID, status)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.Video{}, err
 	}
 
-	return video, nil
+	return updatedVideo, nil
+}
+
+func (s *VideoService) isCheckGroupMember(
+	ctx context.Context,
+	groupID, userID uuid.UUID,
+) error {
+	// Проверка, является ли пользователь участником группы
+	_, err := s.srv.GroupMember.GetByUserIDAndGroupID(ctx, userID, groupID)
+	if err != nil {
+		return ErrForbidden
+	}
+
+	return nil
+}
+
+func (s *VideoService) isCheckGroupAction(
+	ctx context.Context,
+	groupID, userID uuid.UUID,
+	action domain.PermissionFlag,
+) error {
+	// Получение роли пользователя в группе
+	member, err := s.srv.GroupMember.GetByUserIDAndGroupID(ctx, userID, groupID)
+	if err != nil {
+		// Если пользователь не состоит в группе — запрещено
+		return ErrForbidden
+	}
+
+	// Получение group role
+	roles, err := s.srv.GroupRole.GetByID(ctx, member.RoleID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	// Проверка: является ли владельцем группы
+	if domain.HasBit(roles[0].PermissionMask, domain.GroupPermissionOwner) {
+		return nil
+	}
+
+	// Проверка наличия запрашиваемого разрешения
+	if domain.HasBit(roles[0].PermissionMask, action) {
+		return nil
+	}
+
+	return ErrForbidden
 }

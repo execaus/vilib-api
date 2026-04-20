@@ -86,3 +86,65 @@ func TestRepository_GroupRoleSelectByAccount_NilNotFound(t *testing.T) {
 		require.ErrorIs(t, repository.ErrNotFound, err)
 	})
 }
+
+func TestRepository_GroupRoleSelectByID_Success(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		var (
+			permission domain.PermissionMask = 5
+			isDefault                        = false
+			name                             = f.Beer().Name()
+		)
+
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		createdRole, _ := r.GroupRole.Insert(t.Context(), account.ID, name, permission, isDefault)
+
+		roles, err := r.GroupRole.SelectByID(t.Context(), createdRole.ID)
+
+		require.Nil(t, err)
+		require.Len(t, roles, 1)
+		require.Equal(t, createdRole.ID, roles[0].ID)
+		require.Equal(t, name, roles[0].Name)
+		require.Equal(t, permission, roles[0].PermissionMask)
+		require.Equal(t, isDefault, roles[0].IsDefault)
+	})
+}
+
+func TestRepository_GroupRoleSelectByID_NotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		roles, err := r.GroupRole.SelectByID(t.Context(), uuid.New())
+
+		require.Nil(t, roles)
+		require.ErrorIs(t, repository.ErrNotFound, err)
+	})
+}
+
+func TestRepository_GroupRoleGetDefault_Success(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+
+		defaultRole, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 1, true)
+		_, _ = r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 2, false)
+
+		role, err := r.GroupRole.GetDefault(t.Context(), account.ID)
+
+		require.Nil(t, err)
+		require.Equal(t, defaultRole.ID, role.ID)
+		require.True(t, role.IsDefault)
+	})
+}
+
+func TestRepository_GroupRoleGetDefault_NotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		_, err := r.GroupRole.GetDefault(t.Context(), uuid.New())
+
+		require.ErrorIs(t, repository.ErrNotFound, err)
+	})
+}

@@ -34,9 +34,9 @@ type VideoMock struct {
 	beforeGetPreflightUploadURLCounter uint64
 	GetPreflightUploadURLMock          mVideoMockGetPreflightUploadURL
 
-	funcUpdate          func(ctx context.Context, videoID uuid.UUID, status *domain.VideoStatus) (v1 domain.Video, err error)
+	funcUpdate          func(ctx context.Context, videoID uuid.UUID, initiatorID *uuid.UUID, status *domain.VideoStatus) (v1 domain.Video, err error)
 	funcUpdateOrigin    string
-	inspectFuncUpdate   func(ctx context.Context, videoID uuid.UUID, status *domain.VideoStatus)
+	inspectFuncUpdate   func(ctx context.Context, videoID uuid.UUID, initiatorID *uuid.UUID, status *domain.VideoStatus)
 	afterUpdateCounter  uint64
 	beforeUpdateCounter uint64
 	UpdateMock          mVideoMockUpdate
@@ -962,16 +962,18 @@ type VideoMockUpdateExpectation struct {
 
 // VideoMockUpdateParams contains parameters of the Video.Update
 type VideoMockUpdateParams struct {
-	ctx     context.Context
-	videoID uuid.UUID
-	status  *domain.VideoStatus
+	ctx         context.Context
+	videoID     uuid.UUID
+	initiatorID *uuid.UUID
+	status      *domain.VideoStatus
 }
 
 // VideoMockUpdateParamPtrs contains pointers to parameters of the Video.Update
 type VideoMockUpdateParamPtrs struct {
-	ctx     *context.Context
-	videoID *uuid.UUID
-	status  **domain.VideoStatus
+	ctx         *context.Context
+	videoID     *uuid.UUID
+	initiatorID **uuid.UUID
+	status      **domain.VideoStatus
 }
 
 // VideoMockUpdateResults contains results of the Video.Update
@@ -982,10 +984,11 @@ type VideoMockUpdateResults struct {
 
 // VideoMockUpdateOrigins contains origins of expectations of the Video.Update
 type VideoMockUpdateExpectationOrigins struct {
-	origin        string
-	originCtx     string
-	originVideoID string
-	originStatus  string
+	origin            string
+	originCtx         string
+	originVideoID     string
+	originInitiatorID string
+	originStatus      string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -999,7 +1002,7 @@ func (mmUpdate *mVideoMockUpdate) Optional() *mVideoMockUpdate {
 }
 
 // Expect sets up expected params for Video.Update
-func (mmUpdate *mVideoMockUpdate) Expect(ctx context.Context, videoID uuid.UUID, status *domain.VideoStatus) *mVideoMockUpdate {
+func (mmUpdate *mVideoMockUpdate) Expect(ctx context.Context, videoID uuid.UUID, initiatorID *uuid.UUID, status *domain.VideoStatus) *mVideoMockUpdate {
 	if mmUpdate.mock.funcUpdate != nil {
 		mmUpdate.mock.t.Fatalf("VideoMock.Update mock is already set by Set")
 	}
@@ -1012,7 +1015,7 @@ func (mmUpdate *mVideoMockUpdate) Expect(ctx context.Context, videoID uuid.UUID,
 		mmUpdate.mock.t.Fatalf("VideoMock.Update mock is already set by ExpectParams functions")
 	}
 
-	mmUpdate.defaultExpectation.params = &VideoMockUpdateParams{ctx, videoID, status}
+	mmUpdate.defaultExpectation.params = &VideoMockUpdateParams{ctx, videoID, initiatorID, status}
 	mmUpdate.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmUpdate.expectations {
 		if minimock.Equal(e.params, mmUpdate.defaultExpectation.params) {
@@ -1069,8 +1072,31 @@ func (mmUpdate *mVideoMockUpdate) ExpectVideoIDParam2(videoID uuid.UUID) *mVideo
 	return mmUpdate
 }
 
-// ExpectStatusParam3 sets up expected param status for Video.Update
-func (mmUpdate *mVideoMockUpdate) ExpectStatusParam3(status *domain.VideoStatus) *mVideoMockUpdate {
+// ExpectInitiatorIDParam3 sets up expected param initiatorID for Video.Update
+func (mmUpdate *mVideoMockUpdate) ExpectInitiatorIDParam3(initiatorID *uuid.UUID) *mVideoMockUpdate {
+	if mmUpdate.mock.funcUpdate != nil {
+		mmUpdate.mock.t.Fatalf("VideoMock.Update mock is already set by Set")
+	}
+
+	if mmUpdate.defaultExpectation == nil {
+		mmUpdate.defaultExpectation = &VideoMockUpdateExpectation{}
+	}
+
+	if mmUpdate.defaultExpectation.params != nil {
+		mmUpdate.mock.t.Fatalf("VideoMock.Update mock is already set by Expect")
+	}
+
+	if mmUpdate.defaultExpectation.paramPtrs == nil {
+		mmUpdate.defaultExpectation.paramPtrs = &VideoMockUpdateParamPtrs{}
+	}
+	mmUpdate.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmUpdate.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmUpdate
+}
+
+// ExpectStatusParam4 sets up expected param status for Video.Update
+func (mmUpdate *mVideoMockUpdate) ExpectStatusParam4(status *domain.VideoStatus) *mVideoMockUpdate {
 	if mmUpdate.mock.funcUpdate != nil {
 		mmUpdate.mock.t.Fatalf("VideoMock.Update mock is already set by Set")
 	}
@@ -1093,7 +1119,7 @@ func (mmUpdate *mVideoMockUpdate) ExpectStatusParam3(status *domain.VideoStatus)
 }
 
 // Inspect accepts an inspector function that has same arguments as the Video.Update
-func (mmUpdate *mVideoMockUpdate) Inspect(f func(ctx context.Context, videoID uuid.UUID, status *domain.VideoStatus)) *mVideoMockUpdate {
+func (mmUpdate *mVideoMockUpdate) Inspect(f func(ctx context.Context, videoID uuid.UUID, initiatorID *uuid.UUID, status *domain.VideoStatus)) *mVideoMockUpdate {
 	if mmUpdate.mock.inspectFuncUpdate != nil {
 		mmUpdate.mock.t.Fatalf("Inspect function is already set for VideoMock.Update")
 	}
@@ -1118,7 +1144,7 @@ func (mmUpdate *mVideoMockUpdate) Return(v1 domain.Video, err error) *VideoMock 
 }
 
 // Set uses given function f to mock the Video.Update method
-func (mmUpdate *mVideoMockUpdate) Set(f func(ctx context.Context, videoID uuid.UUID, status *domain.VideoStatus) (v1 domain.Video, err error)) *VideoMock {
+func (mmUpdate *mVideoMockUpdate) Set(f func(ctx context.Context, videoID uuid.UUID, initiatorID *uuid.UUID, status *domain.VideoStatus) (v1 domain.Video, err error)) *VideoMock {
 	if mmUpdate.defaultExpectation != nil {
 		mmUpdate.mock.t.Fatalf("Default expectation is already set for the Video.Update method")
 	}
@@ -1134,14 +1160,14 @@ func (mmUpdate *mVideoMockUpdate) Set(f func(ctx context.Context, videoID uuid.U
 
 // When sets expectation for the Video.Update which will trigger the result defined by the following
 // Then helper
-func (mmUpdate *mVideoMockUpdate) When(ctx context.Context, videoID uuid.UUID, status *domain.VideoStatus) *VideoMockUpdateExpectation {
+func (mmUpdate *mVideoMockUpdate) When(ctx context.Context, videoID uuid.UUID, initiatorID *uuid.UUID, status *domain.VideoStatus) *VideoMockUpdateExpectation {
 	if mmUpdate.mock.funcUpdate != nil {
 		mmUpdate.mock.t.Fatalf("VideoMock.Update mock is already set by Set")
 	}
 
 	expectation := &VideoMockUpdateExpectation{
 		mock:               mmUpdate.mock,
-		params:             &VideoMockUpdateParams{ctx, videoID, status},
+		params:             &VideoMockUpdateParams{ctx, videoID, initiatorID, status},
 		expectationOrigins: VideoMockUpdateExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmUpdate.expectations = append(mmUpdate.expectations, expectation)
@@ -1176,17 +1202,17 @@ func (mmUpdate *mVideoMockUpdate) invocationsDone() bool {
 }
 
 // Update implements mm_service.Video
-func (mmUpdate *VideoMock) Update(ctx context.Context, videoID uuid.UUID, status *domain.VideoStatus) (v1 domain.Video, err error) {
+func (mmUpdate *VideoMock) Update(ctx context.Context, videoID uuid.UUID, initiatorID *uuid.UUID, status *domain.VideoStatus) (v1 domain.Video, err error) {
 	mm_atomic.AddUint64(&mmUpdate.beforeUpdateCounter, 1)
 	defer mm_atomic.AddUint64(&mmUpdate.afterUpdateCounter, 1)
 
 	mmUpdate.t.Helper()
 
 	if mmUpdate.inspectFuncUpdate != nil {
-		mmUpdate.inspectFuncUpdate(ctx, videoID, status)
+		mmUpdate.inspectFuncUpdate(ctx, videoID, initiatorID, status)
 	}
 
-	mm_params := VideoMockUpdateParams{ctx, videoID, status}
+	mm_params := VideoMockUpdateParams{ctx, videoID, initiatorID, status}
 
 	// Record call args
 	mmUpdate.UpdateMock.mutex.Lock()
@@ -1205,7 +1231,7 @@ func (mmUpdate *VideoMock) Update(ctx context.Context, videoID uuid.UUID, status
 		mm_want := mmUpdate.UpdateMock.defaultExpectation.params
 		mm_want_ptrs := mmUpdate.UpdateMock.defaultExpectation.paramPtrs
 
-		mm_got := VideoMockUpdateParams{ctx, videoID, status}
+		mm_got := VideoMockUpdateParams{ctx, videoID, initiatorID, status}
 
 		if mm_want_ptrs != nil {
 
@@ -1217,6 +1243,11 @@ func (mmUpdate *VideoMock) Update(ctx context.Context, videoID uuid.UUID, status
 			if mm_want_ptrs.videoID != nil && !minimock.Equal(*mm_want_ptrs.videoID, mm_got.videoID) {
 				mmUpdate.t.Errorf("VideoMock.Update got unexpected parameter videoID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originVideoID, *mm_want_ptrs.videoID, mm_got.videoID, minimock.Diff(*mm_want_ptrs.videoID, mm_got.videoID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmUpdate.t.Errorf("VideoMock.Update got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
 			}
 
 			if mm_want_ptrs.status != nil && !minimock.Equal(*mm_want_ptrs.status, mm_got.status) {
@@ -1236,9 +1267,9 @@ func (mmUpdate *VideoMock) Update(ctx context.Context, videoID uuid.UUID, status
 		return (*mm_results).v1, (*mm_results).err
 	}
 	if mmUpdate.funcUpdate != nil {
-		return mmUpdate.funcUpdate(ctx, videoID, status)
+		return mmUpdate.funcUpdate(ctx, videoID, initiatorID, status)
 	}
-	mmUpdate.t.Fatalf("Unexpected call to VideoMock.Update. %v %v %v", ctx, videoID, status)
+	mmUpdate.t.Fatalf("Unexpected call to VideoMock.Update. %v %v %v %v", ctx, videoID, initiatorID, status)
 	return
 }
 

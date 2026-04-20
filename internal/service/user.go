@@ -23,6 +23,7 @@ func (s *UserService) Create(
 	name, surname, email, passwordHash string,
 	roleID uuid.UUID,
 ) (domain.User, error) {
+	// Создание пользователя в базе данных
 	user, err := s.repo.Insert(ctx, name, surname, passwordHash, email, roleID)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -33,6 +34,7 @@ func (s *UserService) Create(
 }
 
 func (s *UserService) GetByEmail(ctx context.Context, email string) ([]domain.User, error) {
+	// Получение пользователей с таким email
 	users, err := s.repo.SelectByEmail(ctx, email)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -52,6 +54,7 @@ func (s *UserService) Update(
 }
 
 func (s *UserService) GetByID(ctx context.Context, userID ...uuid.UUID) ([]domain.User, error) {
+	// Получение пользователей по ID
 	users, err := s.repo.SelectByID(ctx, userID...)
 	if err != nil {
 		zap.L().Error(err.Error())

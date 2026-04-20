@@ -79,7 +79,7 @@ func (h *Handler) GetRouter() *gin.Engine {
 		h.RequireAuthMiddleware,
 		h.UploadVideo,
 	)
-	v1.POST(
+	v1.GET(
 		GetVideoUrl.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
 		h.RequireAuthMiddleware,
 		h.GetVideo,

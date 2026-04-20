@@ -10,6 +10,20 @@ import (
 	"go.uber.org/zap"
 )
 
+// GetVideo godoc
+// @Summary Получение видео
+// @Description Возвращает преподписанный URL для доступа к видео
+// @Tags video
+// @Accept json
+// @Produce json
+// @Param accountId path string true "ID аккаунта"
+// @Param groupId path string true "ID группы пользователей"
+// @Param videoId path string true "ID видео"
+// @Param prefer_original query bool false "Предпочитать оригинальное видео"
+// @Success 200 {object} dto.GetVideoResponse
+// @Failure 400 {object} dto.ErrorMessage
+// @Failure 500 {object} dto.ErrorMessage
+// @Router /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId} [get]
 func (h *Handler) GetVideo(c *gin.Context) {
 	var query dto.GetVideoQuery
 

@@ -27,25 +27,27 @@ func (s *AccessService) IsCheckAccountAction(
 		return err
 	}
 
-	// Имеет ли роль владельца организации
+	// Получение данных инициатора
 	initiator, err := s.srv.User.GetByID(ctx, initiatorID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
 
+	// Получение роли инициатора
 	role, err := s.srv.AccountRole.GetByID(ctx, initiator[0].RoleID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
 
+	// Проверка, является ли пользователь владельцем аккаунта
 	if domain.HasBit(role[0].PermissionMask, domain.AccountPermissionOwner) {
 		return nil
 	}
 
-	// Имеет ли роль разрешение на целевое действие в аккаунте
-	if domain.HasBit(role[0].PermissionMask, domain.AccountPermissionCreateUser) {
+	// Проверка наличия запрашиваемого разрешения
+	if domain.HasBit(role[0].PermissionMask, action) {
 		return nil
 	}
 

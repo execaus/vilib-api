@@ -21,16 +21,19 @@ func NewEmailService(cfg config.EmailConfig, serverMode server.Mode, localMailBo
 }
 
 func (s *EmailService) SendRegisteredMail(ctx context.Context, email, password string) error {
+	// Формирование темы письма
 	subject := "Welcome to ViLib!"
 	return s.send(ctx, []string{email}, subject, password)
 }
 
 func (s *EmailService) SendCreateUserEmail(ctx context.Context, email, password string) error {
+	// Формирование темы письма
 	subject := "Welcome to ViLib!"
 	return s.send(ctx, []string{email}, subject, password)
 }
 
 func (s *EmailService) send(ctx context.Context, to []string, subject string, body string) error {
+	// Отправка в зависимости от режима работы сервера
 	switch s.serverMode {
 	case server.HybridMode:
 		s.sendLocalMail(body)
@@ -46,15 +49,19 @@ func (s *EmailService) send(ctx context.Context, to []string, subject string, bo
 }
 
 func (s *EmailService) sendLocalMail(body string) {
+	// Сохранение письма в локальный почтовый ящик
 	s.localMailBox <- body
 }
 
 func (s *EmailService) sendRealMail(ctx context.Context, to []string, subject string, body string) error {
+	// Формирование SMTP-сообщения
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s", s.cfg.From, to[0], subject, body)
 
+	// Настройка аутентификации
 	auth := smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
 	addr := fmt.Sprintf("%s:%s", s.cfg.Host, s.cfg.Port)
 
+	// Отправка письма
 	if err := smtp.SendMail(addr, auth, s.cfg.From, to, []byte(msg)); err != nil {
 		zap.L().Error(err.Error())
 		return err

@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"vilib-api/internal/s3"
 	"vilib-api/internal/service"
 	mock_service "vilib-api/internal/service/service_mocks"
 )
@@ -17,6 +18,7 @@ type ServiceMock struct {
 	Video       *mock_service.VideoMock
 	VideoAsset  *mock_service.VideoAssetMock
 	Access      *mock_service.AccessMock
+	S3          s3.S3
 }
 
 func (s *ServiceMock) ToServices() *service.Service {

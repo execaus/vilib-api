@@ -10,6 +10,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// CreateAccountRole godoc
+// @Summary Создание роли аккаунта
+// @Description Создаёт новую роль для аккаунта с указанными правами
+// @Tags roles
+// @Accept json
+// @Produce json
+// @Param accountId path string true "ID аккаунта"
+// @Param request body dto.CreateAccountRoleRequest true "Тело запроса для создания роли"
+// @Success 201 {object} dto.CreateAccountRoleResponse
+// @Failure 400 {object} dto.ErrorMessage
+// @Failure 500 {object} dto.ErrorMessage
+// @Router /api/v1/accounts/{accountId}/roles [post]
 func (h *Handler) CreateAccountRole(c *gin.Context) {
 	var req dto.CreateAccountRoleRequest
 

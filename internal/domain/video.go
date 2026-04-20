@@ -20,7 +20,8 @@ const (
 )
 
 const (
-	VideoBucketOriginal VideoBucket = iota
+	VideoBucketOriginal   VideoBucket = iota
+	VideoBucketCompressed VideoBucket = iota
 )
 
 const (

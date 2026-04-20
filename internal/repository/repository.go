@@ -44,6 +44,7 @@ type UserGroup interface {
 
 type GroupMember interface {
 	Insert(ctx context.Context, groupID, roleID uuid.UUID, usersID ...uuid.UUID) ([]domain.GroupMember, error)
+	SelectByUserIDAndGroupID(ctx context.Context, userID, groupID uuid.UUID) (domain.GroupMember, error)
 }
 
 type GroupRole interface {
@@ -55,6 +56,8 @@ type GroupRole interface {
 		isDefault bool,
 	) (domain.GroupRole, error)
 	SelectByAccount(ctx context.Context, accountID uuid.UUID) ([]domain.GroupRole, error)
+	SelectByID(ctx context.Context, roleID uuid.UUID) ([]domain.GroupRole, error)
+	GetDefault(ctx context.Context, groupID uuid.UUID) (domain.GroupRole, error)
 }
 
 type Video interface {

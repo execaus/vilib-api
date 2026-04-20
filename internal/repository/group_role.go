@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/schema"
 
@@ -18,6 +19,30 @@ type GroupRoleRepository struct {
 
 func NewGroupRoleRepository(provider *ExecutorProvider) *GroupRoleRepository {
 	return &GroupRoleRepository{provider: provider}
+}
+
+func (r *GroupRoleRepository) SelectByID(ctx context.Context, roleID uuid.UUID) ([]domain.GroupRole, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	rolesDB, err := schema.GroupRoles.Query(
+		sm.Where(schema.GroupRoles.Columns.GroupRoleID.EQ(psql.Arg(roleID))),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	if rolesDB == nil {
+		return nil, ErrNotFound
+	}
+
+	roles := make([]domain.GroupRole, len(rolesDB))
+	for i, role := range rolesDB {
+		roles[i] = domain.GroupRole{}
+		roles[i].FromDB(role)
+	}
+
+	return roles, nil
 }
 
 func (r *GroupRoleRepository) SelectByAccount(ctx context.Context, accountID uuid.UUID) ([]domain.GroupRole, error) {
@@ -67,6 +92,32 @@ func (r *GroupRoleRepository) Insert(
 
 	role := domain.GroupRole{}
 	role.FromDB(roleDB)
+
+	return role, nil
+}
+
+func (r *GroupRoleRepository) GetDefault(ctx context.Context, accountID uuid.UUID) (domain.GroupRole, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	rolesDB, err := schema.GroupRoles.Query(
+		sm.Where(schema.GroupRoles.Columns.AccountID.EQ(psql.Arg(accountID))),
+		sm.Where(schema.GroupRoles.Columns.IsDefault.EQ(psql.Arg(true))),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.GroupRole{}, err
+	}
+
+	if len(rolesDB) == 0 {
+		return domain.GroupRole{}, ErrNotFound
+	}
+
+	if len(rolesDB) > 1 {
+		return domain.GroupRole{}, fmt.Errorf("%w: multiple default roles found", ErrNotFound)
+	}
+
+	role := domain.GroupRole{}
+	role.FromDB(rolesDB[0])
 
 	return role, nil
 }

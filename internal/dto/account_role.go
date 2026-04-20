@@ -7,10 +7,10 @@ import (
 )
 
 type CreateAccountRoleRequest struct {
-	Name       string                `json:"name"       binding:"required,min=2,max=32"`
-	Permission domain.PermissionMask `json:"permission" binding:"required"`
-	ParentID   *uuid.UUID            `json:"parent_id"  binding:"required"`
-	IsDefault  bool                  `json:"is_default" binding:"required"`
+	Name       string                `json:"name"`
+	Permission domain.PermissionMask `json:"permission"`
+	ParentID   *uuid.UUID            `json:"parent_id"`
+	IsDefault  bool                  `json:"is_default"`
 }
 
 type CreateAccountRoleResponse struct {

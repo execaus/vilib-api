@@ -3,7 +3,6 @@ module vilib-api
 go 1.25.0
 
 require (
-	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/aarondl/opt v0.0.0-20250607033636-982744e1bd65
 	github.com/gin-gonic/gin v1.12.0
 	github.com/gojuno/minimock/v3 v3.4.7

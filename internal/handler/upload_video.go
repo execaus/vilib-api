@@ -10,6 +10,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// UploadVideo godoc
+// @Summary Загрузка видео
+// @Description Возвращает преподписанный URL для загрузки видео в S3
+// @Tags video
+// @Accept json
+// @Produce json
+// @Param accountId path string true "ID аккаунта"
+// @Param groupId path string true "ID группы пользователей"
+// @Success 200 {object} dto.UploadVideoResponse
+// @Failure 400 {object} dto.ErrorMessage
+// @Failure 500 {object} dto.ErrorMessage
+// @Router /api/v1/accounts/{accountId}/user-groups/{groupId}/video [post]
 func (h *Handler) UploadVideo(c *gin.Context) {
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
 	if err != nil {

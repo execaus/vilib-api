@@ -24,16 +24,18 @@ func (s *UserGroupService) Create(
 	accountID, initiatorID uuid.UUID,
 	name string,
 ) (domain.UserGroup, error) {
+	// Проверка прав доступа на создание группы (только владельцы аккаунта могут создавать группы)
 	if err := s.srv.Access.IsCheckAccountAction(
 		ctx,
 		accountID,
 		initiatorID,
-		domain.AccountPermissionCreateUserGroup,
+		domain.AccountPermissionCreateUser,
 	); err != nil {
 		zap.L().Error(err.Error())
 		return domain.UserGroup{}, err
 	}
 
+	// Создание группы пользователей
 	group, err := s.repo.Insert(ctx, accountID, name)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -48,17 +50,20 @@ func (s *UserGroupService) AddMembers(
 	accountID, initiatorID, groupID uuid.UUID,
 	targetsID ...uuid.UUID,
 ) ([]domain.GroupMember, error) {
+	// Проверка прав доступа на добавление участников
 	if err := s.isAccessAddMembers(ctx, accountID, initiatorID, groupID, targetsID...); err != nil {
 		zap.L().Error(err.Error())
 		return nil, err
 	}
 
-	defaultRole, err := s.srv.GetDefault(ctx, accountID)
+	// Получение дефолтной роли группы для аккаунта
+	defaultRole, err := s.srv.GroupRole.GetDefault(ctx, accountID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return nil, err
 	}
 
+	// Добавление участников в группу
 	members, err := s.srv.GroupMember.Create(ctx, groupID, defaultRole.ID, targetsID...)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -115,27 +120,29 @@ func (s *UserGroupService) isAccessAddMembers(
 		}
 	}
 
-	// Имеет ли роль владельца организации
-	initiator, err := s.srv.User.GetByID(ctx, initiatorID)
+	// Получение роли инициатора в группе
+	initiatorGroupMember, err := s.srv.GroupMember.GetByUserIDAndGroupID(ctx, initiatorID, groupID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
 
-	role, err := s.srv.AccountRole.GetByID(ctx, initiator[0].RoleID)
+	// Получение group role инициатора
+	groupRoles, err := s.srv.GroupRole.GetByID(ctx, initiatorGroupMember.RoleID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
 
-	if domain.HasBit(role[0].PermissionMask, domain.AccountPermissionOwner) {
+	// Проверка: является ли владельцем группы
+	if domain.HasBit(groupRoles[0].PermissionMask, domain.GroupPermissionOwner) {
 		return nil
 	}
 
-	// Имеет ли роль разрешение на добавление пользователей в группы в организации
-	if domain.HasBit(role[0].PermissionMask, domain.AccountPermissionUserGroupAddMember) {
+	// Проверка: имеет ли право на добавление участников
+	if domain.HasBit(groupRoles[0].PermissionMask, domain.GroupPermissionAddMember) {
 		return nil
 	}
 
-	return nil
+	return ErrForbidden
 }

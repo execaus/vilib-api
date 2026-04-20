@@ -15,6 +15,7 @@ type VideoAssetService struct {
 }
 
 func (s *VideoAssetService) Get(ctx context.Context, videoID uuid.UUID) ([]domain.VideoAsset, error) {
+	// Получение ассетов видео
 	assets, err := s.repo.Select(ctx, videoID)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -35,6 +36,7 @@ func (s *VideoAssetService) Create(
 	bucketName, contentType string,
 	bytes int,
 ) (domain.VideoAsset, error) {
+	// Создание ассета видео
 	asset, err := s.repo.Create(ctx, videoID, tag, bucketName, contentType, bytes)
 	if err != nil {
 		zap.L().Error(err.Error())

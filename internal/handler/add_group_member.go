@@ -10,6 +10,19 @@ import (
 	"go.uber.org/zap"
 )
 
+// AddGroupMember godoc
+// @Summary Добавление участников в группу
+// @Description Добавляет указанных пользователей в существующую группу
+// @Tags user-groups
+// @Accept json
+// @Produce json
+// @Param accountId path string true "ID аккаунта"
+// @Param groupId path string true "ID группы пользователей"
+// @Param request body dto.AddGroupMemberRequest true "Тело запроса для добавления участников"
+// @Success 201 {object} dto.AddGroupMemberResponse
+// @Failure 400 {object} dto.ErrorMessage
+// @Failure 500 {object} dto.ErrorMessage
+// @Router /api/v1/accounts/{accountId}/user-groups/{groupId}/members [post]
 func (h *Handler) AddGroupMember(c *gin.Context) {
 	var req dto.AddGroupMemberRequest
 
@@ -21,6 +34,11 @@ func (h *Handler) AddGroupMember(c *gin.Context) {
 
 	groupID, err := h.GetPathUUIDValue(c, pathKeyUserGroupID)
 	if err != nil {
+		sendBadRequest(c, err)
+		return
+	}
+
+	if err = c.BindJSON(&req); err != nil {
 		sendBadRequest(c, err)
 		return
 	}

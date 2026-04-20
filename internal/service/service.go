@@ -21,6 +21,7 @@ import (
 //go:generate minimock -i Video -o ./service_mocks/video_mock.go
 //go:generate minimock -i VideoAsset -o ./service_mocks/video_asset_mock.go
 //go:generate minimock -i Access -o ./service_mocks/access_mock.go
+//go:generate minimock -i vilib-api/internal/s3.S3 -o ./service_mocks/s3_mock.go
 
 type Auth interface {
 	GenerateToken(userID uuid.UUID, accounts []uuid.UUID, currentAccountID uuid.UUID) (string, error)
@@ -74,6 +75,7 @@ type UserGroup interface {
 
 type GroupMember interface {
 	Create(ctx context.Context, groupID, roleID uuid.UUID, usersID ...uuid.UUID) ([]domain.GroupMember, error)
+	GetByUserIDAndGroupID(ctx context.Context, userID, groupID uuid.UUID) (domain.GroupMember, error)
 }
 
 type GroupRole interface {
@@ -84,11 +86,13 @@ type GroupRole interface {
 		mask domain.PermissionMask,
 		isDefault bool,
 	) (domain.GroupRole, error)
+	GetByID(ctx context.Context, roleID uuid.UUID) ([]domain.GroupRole, error)
+	GetDefault(ctx context.Context, accountID uuid.UUID) (domain.GroupRole, error)
 }
 
 type Video interface {
 	GetPreflightUploadURL(ctx context.Context, accountID, groupID, userID uuid.UUID) (domain.PreflightURL, error)
-	Update(ctx context.Context, videoID uuid.UUID, status *domain.VideoStatus) (domain.Video, error)
+	Update(ctx context.Context, videoID uuid.UUID, initiatorID *uuid.UUID, status *domain.VideoStatus) (domain.Video, error)
 	Get(
 		ctx context.Context,
 		accountID, groupID, initiatorID, videoID uuid.UUID,

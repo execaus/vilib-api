@@ -7,6 +7,8 @@ import (
 
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
+	"github.com/stephenafamo/bob/dialect/psql"
+	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"go.uber.org/zap"
 )
 
@@ -42,4 +44,24 @@ func (r *GroupMemberRepository) Insert(
 	}
 
 	return members, nil
+}
+
+func (r *GroupMemberRepository) SelectByUserIDAndGroupID(
+	ctx context.Context,
+	userID, groupID uuid.UUID,
+) (domain.GroupMember, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	member, err := schema.GroupMembers.Query(
+		sm.Where(schema.GroupMembers.Columns.UserID.EQ(psql.Arg(userID))),
+		sm.Where(schema.GroupMembers.Columns.GroupID.EQ(psql.Arg(groupID))),
+	).One(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.GroupMember{}, err
+	}
+
+	var dm domain.GroupMember
+	dm.FromDB(member)
+	return dm, nil
 }

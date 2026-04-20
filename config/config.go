@@ -12,6 +12,7 @@ type Config struct {
 	Database DatabaseConfig
 	Auth     AuthConfig
 	Email    EmailConfig
+	S3       S3Config
 }
 
 type ServerConfig struct {
@@ -39,6 +40,14 @@ type EmailConfig struct {
 	Username string
 	Password string
 	From     string
+}
+
+type S3Config struct {
+	Endpoint        string
+	AccessKeyID     string
+	SecretAccessKey string
+	Region          string
+	Bucket          string
 }
 
 const configPath = "config/config.yaml"

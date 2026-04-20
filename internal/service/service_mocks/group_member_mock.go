@@ -26,6 +26,13 @@ type GroupMemberMock struct {
 	afterCreateCounter  uint64
 	beforeCreateCounter uint64
 	CreateMock          mGroupMemberMockCreate
+
+	funcGetByUserIDAndGroupID          func(ctx context.Context, userID uuid.UUID, groupID uuid.UUID) (g1 domain.GroupMember, err error)
+	funcGetByUserIDAndGroupIDOrigin    string
+	inspectFuncGetByUserIDAndGroupID   func(ctx context.Context, userID uuid.UUID, groupID uuid.UUID)
+	afterGetByUserIDAndGroupIDCounter  uint64
+	beforeGetByUserIDAndGroupIDCounter uint64
+	GetByUserIDAndGroupIDMock          mGroupMemberMockGetByUserIDAndGroupID
 }
 
 // NewGroupMemberMock returns a mock for mm_service.GroupMember
@@ -38,6 +45,9 @@ func NewGroupMemberMock(t minimock.Tester) *GroupMemberMock {
 
 	m.CreateMock = mGroupMemberMockCreate{mock: m}
 	m.CreateMock.callArgs = []*GroupMemberMockCreateParams{}
+
+	m.GetByUserIDAndGroupIDMock = mGroupMemberMockGetByUserIDAndGroupID{mock: m}
+	m.GetByUserIDAndGroupIDMock.callArgs = []*GroupMemberMockGetByUserIDAndGroupIDParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -449,11 +459,387 @@ func (m *GroupMemberMock) MinimockCreateInspect() {
 	}
 }
 
+type mGroupMemberMockGetByUserIDAndGroupID struct {
+	optional           bool
+	mock               *GroupMemberMock
+	defaultExpectation *GroupMemberMockGetByUserIDAndGroupIDExpectation
+	expectations       []*GroupMemberMockGetByUserIDAndGroupIDExpectation
+
+	callArgs []*GroupMemberMockGetByUserIDAndGroupIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// GroupMemberMockGetByUserIDAndGroupIDExpectation specifies expectation struct of the GroupMember.GetByUserIDAndGroupID
+type GroupMemberMockGetByUserIDAndGroupIDExpectation struct {
+	mock               *GroupMemberMock
+	params             *GroupMemberMockGetByUserIDAndGroupIDParams
+	paramPtrs          *GroupMemberMockGetByUserIDAndGroupIDParamPtrs
+	expectationOrigins GroupMemberMockGetByUserIDAndGroupIDExpectationOrigins
+	results            *GroupMemberMockGetByUserIDAndGroupIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// GroupMemberMockGetByUserIDAndGroupIDParams contains parameters of the GroupMember.GetByUserIDAndGroupID
+type GroupMemberMockGetByUserIDAndGroupIDParams struct {
+	ctx     context.Context
+	userID  uuid.UUID
+	groupID uuid.UUID
+}
+
+// GroupMemberMockGetByUserIDAndGroupIDParamPtrs contains pointers to parameters of the GroupMember.GetByUserIDAndGroupID
+type GroupMemberMockGetByUserIDAndGroupIDParamPtrs struct {
+	ctx     *context.Context
+	userID  *uuid.UUID
+	groupID *uuid.UUID
+}
+
+// GroupMemberMockGetByUserIDAndGroupIDResults contains results of the GroupMember.GetByUserIDAndGroupID
+type GroupMemberMockGetByUserIDAndGroupIDResults struct {
+	g1  domain.GroupMember
+	err error
+}
+
+// GroupMemberMockGetByUserIDAndGroupIDOrigins contains origins of expectations of the GroupMember.GetByUserIDAndGroupID
+type GroupMemberMockGetByUserIDAndGroupIDExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originUserID  string
+	originGroupID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) Optional() *mGroupMemberMockGetByUserIDAndGroupID {
+	mmGetByUserIDAndGroupID.optional = true
+	return mmGetByUserIDAndGroupID
+}
+
+// Expect sets up expected params for GroupMember.GetByUserIDAndGroupID
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) Expect(ctx context.Context, userID uuid.UUID, groupID uuid.UUID) *mGroupMemberMockGetByUserIDAndGroupID {
+	if mmGetByUserIDAndGroupID.mock.funcGetByUserIDAndGroupID != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("GroupMemberMock.GetByUserIDAndGroupID mock is already set by Set")
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation == nil {
+		mmGetByUserIDAndGroupID.defaultExpectation = &GroupMemberMockGetByUserIDAndGroupIDExpectation{}
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation.paramPtrs != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("GroupMemberMock.GetByUserIDAndGroupID mock is already set by ExpectParams functions")
+	}
+
+	mmGetByUserIDAndGroupID.defaultExpectation.params = &GroupMemberMockGetByUserIDAndGroupIDParams{ctx, userID, groupID}
+	mmGetByUserIDAndGroupID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetByUserIDAndGroupID.expectations {
+		if minimock.Equal(e.params, mmGetByUserIDAndGroupID.defaultExpectation.params) {
+			mmGetByUserIDAndGroupID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetByUserIDAndGroupID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetByUserIDAndGroupID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for GroupMember.GetByUserIDAndGroupID
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) ExpectCtxParam1(ctx context.Context) *mGroupMemberMockGetByUserIDAndGroupID {
+	if mmGetByUserIDAndGroupID.mock.funcGetByUserIDAndGroupID != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("GroupMemberMock.GetByUserIDAndGroupID mock is already set by Set")
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation == nil {
+		mmGetByUserIDAndGroupID.defaultExpectation = &GroupMemberMockGetByUserIDAndGroupIDExpectation{}
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation.params != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("GroupMemberMock.GetByUserIDAndGroupID mock is already set by Expect")
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation.paramPtrs == nil {
+		mmGetByUserIDAndGroupID.defaultExpectation.paramPtrs = &GroupMemberMockGetByUserIDAndGroupIDParamPtrs{}
+	}
+	mmGetByUserIDAndGroupID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetByUserIDAndGroupID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetByUserIDAndGroupID
+}
+
+// ExpectUserIDParam2 sets up expected param userID for GroupMember.GetByUserIDAndGroupID
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) ExpectUserIDParam2(userID uuid.UUID) *mGroupMemberMockGetByUserIDAndGroupID {
+	if mmGetByUserIDAndGroupID.mock.funcGetByUserIDAndGroupID != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("GroupMemberMock.GetByUserIDAndGroupID mock is already set by Set")
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation == nil {
+		mmGetByUserIDAndGroupID.defaultExpectation = &GroupMemberMockGetByUserIDAndGroupIDExpectation{}
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation.params != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("GroupMemberMock.GetByUserIDAndGroupID mock is already set by Expect")
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation.paramPtrs == nil {
+		mmGetByUserIDAndGroupID.defaultExpectation.paramPtrs = &GroupMemberMockGetByUserIDAndGroupIDParamPtrs{}
+	}
+	mmGetByUserIDAndGroupID.defaultExpectation.paramPtrs.userID = &userID
+	mmGetByUserIDAndGroupID.defaultExpectation.expectationOrigins.originUserID = minimock.CallerInfo(1)
+
+	return mmGetByUserIDAndGroupID
+}
+
+// ExpectGroupIDParam3 sets up expected param groupID for GroupMember.GetByUserIDAndGroupID
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) ExpectGroupIDParam3(groupID uuid.UUID) *mGroupMemberMockGetByUserIDAndGroupID {
+	if mmGetByUserIDAndGroupID.mock.funcGetByUserIDAndGroupID != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("GroupMemberMock.GetByUserIDAndGroupID mock is already set by Set")
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation == nil {
+		mmGetByUserIDAndGroupID.defaultExpectation = &GroupMemberMockGetByUserIDAndGroupIDExpectation{}
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation.params != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("GroupMemberMock.GetByUserIDAndGroupID mock is already set by Expect")
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation.paramPtrs == nil {
+		mmGetByUserIDAndGroupID.defaultExpectation.paramPtrs = &GroupMemberMockGetByUserIDAndGroupIDParamPtrs{}
+	}
+	mmGetByUserIDAndGroupID.defaultExpectation.paramPtrs.groupID = &groupID
+	mmGetByUserIDAndGroupID.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmGetByUserIDAndGroupID
+}
+
+// Inspect accepts an inspector function that has same arguments as the GroupMember.GetByUserIDAndGroupID
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) Inspect(f func(ctx context.Context, userID uuid.UUID, groupID uuid.UUID)) *mGroupMemberMockGetByUserIDAndGroupID {
+	if mmGetByUserIDAndGroupID.mock.inspectFuncGetByUserIDAndGroupID != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("Inspect function is already set for GroupMemberMock.GetByUserIDAndGroupID")
+	}
+
+	mmGetByUserIDAndGroupID.mock.inspectFuncGetByUserIDAndGroupID = f
+
+	return mmGetByUserIDAndGroupID
+}
+
+// Return sets up results that will be returned by GroupMember.GetByUserIDAndGroupID
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) Return(g1 domain.GroupMember, err error) *GroupMemberMock {
+	if mmGetByUserIDAndGroupID.mock.funcGetByUserIDAndGroupID != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("GroupMemberMock.GetByUserIDAndGroupID mock is already set by Set")
+	}
+
+	if mmGetByUserIDAndGroupID.defaultExpectation == nil {
+		mmGetByUserIDAndGroupID.defaultExpectation = &GroupMemberMockGetByUserIDAndGroupIDExpectation{mock: mmGetByUserIDAndGroupID.mock}
+	}
+	mmGetByUserIDAndGroupID.defaultExpectation.results = &GroupMemberMockGetByUserIDAndGroupIDResults{g1, err}
+	mmGetByUserIDAndGroupID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetByUserIDAndGroupID.mock
+}
+
+// Set uses given function f to mock the GroupMember.GetByUserIDAndGroupID method
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) Set(f func(ctx context.Context, userID uuid.UUID, groupID uuid.UUID) (g1 domain.GroupMember, err error)) *GroupMemberMock {
+	if mmGetByUserIDAndGroupID.defaultExpectation != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("Default expectation is already set for the GroupMember.GetByUserIDAndGroupID method")
+	}
+
+	if len(mmGetByUserIDAndGroupID.expectations) > 0 {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("Some expectations are already set for the GroupMember.GetByUserIDAndGroupID method")
+	}
+
+	mmGetByUserIDAndGroupID.mock.funcGetByUserIDAndGroupID = f
+	mmGetByUserIDAndGroupID.mock.funcGetByUserIDAndGroupIDOrigin = minimock.CallerInfo(1)
+	return mmGetByUserIDAndGroupID.mock
+}
+
+// When sets expectation for the GroupMember.GetByUserIDAndGroupID which will trigger the result defined by the following
+// Then helper
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) When(ctx context.Context, userID uuid.UUID, groupID uuid.UUID) *GroupMemberMockGetByUserIDAndGroupIDExpectation {
+	if mmGetByUserIDAndGroupID.mock.funcGetByUserIDAndGroupID != nil {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("GroupMemberMock.GetByUserIDAndGroupID mock is already set by Set")
+	}
+
+	expectation := &GroupMemberMockGetByUserIDAndGroupIDExpectation{
+		mock:               mmGetByUserIDAndGroupID.mock,
+		params:             &GroupMemberMockGetByUserIDAndGroupIDParams{ctx, userID, groupID},
+		expectationOrigins: GroupMemberMockGetByUserIDAndGroupIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetByUserIDAndGroupID.expectations = append(mmGetByUserIDAndGroupID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up GroupMember.GetByUserIDAndGroupID return parameters for the expectation previously defined by the When method
+func (e *GroupMemberMockGetByUserIDAndGroupIDExpectation) Then(g1 domain.GroupMember, err error) *GroupMemberMock {
+	e.results = &GroupMemberMockGetByUserIDAndGroupIDResults{g1, err}
+	return e.mock
+}
+
+// Times sets number of times GroupMember.GetByUserIDAndGroupID should be invoked
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) Times(n uint64) *mGroupMemberMockGetByUserIDAndGroupID {
+	if n == 0 {
+		mmGetByUserIDAndGroupID.mock.t.Fatalf("Times of GroupMemberMock.GetByUserIDAndGroupID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetByUserIDAndGroupID.expectedInvocations, n)
+	mmGetByUserIDAndGroupID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetByUserIDAndGroupID
+}
+
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) invocationsDone() bool {
+	if len(mmGetByUserIDAndGroupID.expectations) == 0 && mmGetByUserIDAndGroupID.defaultExpectation == nil && mmGetByUserIDAndGroupID.mock.funcGetByUserIDAndGroupID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetByUserIDAndGroupID.mock.afterGetByUserIDAndGroupIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetByUserIDAndGroupID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetByUserIDAndGroupID implements mm_service.GroupMember
+func (mmGetByUserIDAndGroupID *GroupMemberMock) GetByUserIDAndGroupID(ctx context.Context, userID uuid.UUID, groupID uuid.UUID) (g1 domain.GroupMember, err error) {
+	mm_atomic.AddUint64(&mmGetByUserIDAndGroupID.beforeGetByUserIDAndGroupIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetByUserIDAndGroupID.afterGetByUserIDAndGroupIDCounter, 1)
+
+	mmGetByUserIDAndGroupID.t.Helper()
+
+	if mmGetByUserIDAndGroupID.inspectFuncGetByUserIDAndGroupID != nil {
+		mmGetByUserIDAndGroupID.inspectFuncGetByUserIDAndGroupID(ctx, userID, groupID)
+	}
+
+	mm_params := GroupMemberMockGetByUserIDAndGroupIDParams{ctx, userID, groupID}
+
+	// Record call args
+	mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.mutex.Lock()
+	mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.callArgs = append(mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.callArgs, &mm_params)
+	mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.mutex.Unlock()
+
+	for _, e := range mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.g1, e.results.err
+		}
+	}
+
+	if mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.defaultExpectation.paramPtrs
+
+		mm_got := GroupMemberMockGetByUserIDAndGroupIDParams{ctx, userID, groupID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetByUserIDAndGroupID.t.Errorf("GroupMemberMock.GetByUserIDAndGroupID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.userID != nil && !minimock.Equal(*mm_want_ptrs.userID, mm_got.userID) {
+				mmGetByUserIDAndGroupID.t.Errorf("GroupMemberMock.GetByUserIDAndGroupID got unexpected parameter userID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.defaultExpectation.expectationOrigins.originUserID, *mm_want_ptrs.userID, mm_got.userID, minimock.Diff(*mm_want_ptrs.userID, mm_got.userID))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmGetByUserIDAndGroupID.t.Errorf("GroupMemberMock.GetByUserIDAndGroupID got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetByUserIDAndGroupID.t.Errorf("GroupMemberMock.GetByUserIDAndGroupID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetByUserIDAndGroupID.GetByUserIDAndGroupIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetByUserIDAndGroupID.t.Fatal("No results are set for the GroupMemberMock.GetByUserIDAndGroupID")
+		}
+		return (*mm_results).g1, (*mm_results).err
+	}
+	if mmGetByUserIDAndGroupID.funcGetByUserIDAndGroupID != nil {
+		return mmGetByUserIDAndGroupID.funcGetByUserIDAndGroupID(ctx, userID, groupID)
+	}
+	mmGetByUserIDAndGroupID.t.Fatalf("Unexpected call to GroupMemberMock.GetByUserIDAndGroupID. %v %v %v", ctx, userID, groupID)
+	return
+}
+
+// GetByUserIDAndGroupIDAfterCounter returns a count of finished GroupMemberMock.GetByUserIDAndGroupID invocations
+func (mmGetByUserIDAndGroupID *GroupMemberMock) GetByUserIDAndGroupIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetByUserIDAndGroupID.afterGetByUserIDAndGroupIDCounter)
+}
+
+// GetByUserIDAndGroupIDBeforeCounter returns a count of GroupMemberMock.GetByUserIDAndGroupID invocations
+func (mmGetByUserIDAndGroupID *GroupMemberMock) GetByUserIDAndGroupIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetByUserIDAndGroupID.beforeGetByUserIDAndGroupIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to GroupMemberMock.GetByUserIDAndGroupID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetByUserIDAndGroupID *mGroupMemberMockGetByUserIDAndGroupID) Calls() []*GroupMemberMockGetByUserIDAndGroupIDParams {
+	mmGetByUserIDAndGroupID.mutex.RLock()
+
+	argCopy := make([]*GroupMemberMockGetByUserIDAndGroupIDParams, len(mmGetByUserIDAndGroupID.callArgs))
+	copy(argCopy, mmGetByUserIDAndGroupID.callArgs)
+
+	mmGetByUserIDAndGroupID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetByUserIDAndGroupIDDone returns true if the count of the GetByUserIDAndGroupID invocations corresponds
+// the number of defined expectations
+func (m *GroupMemberMock) MinimockGetByUserIDAndGroupIDDone() bool {
+	if m.GetByUserIDAndGroupIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetByUserIDAndGroupIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetByUserIDAndGroupIDMock.invocationsDone()
+}
+
+// MinimockGetByUserIDAndGroupIDInspect logs each unmet expectation
+func (m *GroupMemberMock) MinimockGetByUserIDAndGroupIDInspect() {
+	for _, e := range m.GetByUserIDAndGroupIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to GroupMemberMock.GetByUserIDAndGroupID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetByUserIDAndGroupIDCounter := mm_atomic.LoadUint64(&m.afterGetByUserIDAndGroupIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetByUserIDAndGroupIDMock.defaultExpectation != nil && afterGetByUserIDAndGroupIDCounter < 1 {
+		if m.GetByUserIDAndGroupIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to GroupMemberMock.GetByUserIDAndGroupID at\n%s", m.GetByUserIDAndGroupIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to GroupMemberMock.GetByUserIDAndGroupID at\n%s with params: %#v", m.GetByUserIDAndGroupIDMock.defaultExpectation.expectationOrigins.origin, *m.GetByUserIDAndGroupIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetByUserIDAndGroupID != nil && afterGetByUserIDAndGroupIDCounter < 1 {
+		m.t.Errorf("Expected call to GroupMemberMock.GetByUserIDAndGroupID at\n%s", m.funcGetByUserIDAndGroupIDOrigin)
+	}
+
+	if !m.GetByUserIDAndGroupIDMock.invocationsDone() && afterGetByUserIDAndGroupIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to GroupMemberMock.GetByUserIDAndGroupID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetByUserIDAndGroupIDMock.expectedInvocations), m.GetByUserIDAndGroupIDMock.expectedInvocationsOrigin, afterGetByUserIDAndGroupIDCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *GroupMemberMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
 			m.MinimockCreateInspect()
+
+			m.MinimockGetByUserIDAndGroupIDInspect()
 		}
 	})
 }
@@ -477,5 +863,6 @@ func (m *GroupMemberMock) MinimockWait(timeout mm_time.Duration) {
 func (m *GroupMemberMock) minimockDone() bool {
 	done := true
 	return done &&
-		m.MinimockCreateDone()
+		m.MinimockCreateDone() &&
+		m.MinimockGetByUserIDAndGroupIDDone()
 }

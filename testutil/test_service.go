@@ -24,10 +24,12 @@ func TestService(
 		Email:       mock_service.NewEmailMock(mc),
 		AccountRole: mock_service.NewAccountRoleMock(mc),
 		UserGroup:   mock_service.NewUserGroupMock(mc),
+		GroupMember: mock_service.NewGroupMemberMock(mc),
 		GroupRole:   mock_service.NewGroupRoleMock(mc),
 		Video:       mock_service.NewVideoMock(mc),
 		VideoAsset:  mock_service.NewVideoAssetMock(mc),
 		Access:      mock_service.NewAccessMock(mc),
+		S3:          mock_service.NewS3Mock(mc),
 	}
 
 	r := &RepositoryMock{

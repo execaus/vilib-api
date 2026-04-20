@@ -25,20 +25,44 @@ func (s *GroupRoleService) Create(
 	permission domain.PermissionMask,
 	isDefault bool,
 ) (domain.GroupRole, error) {
+	// Проверка прав доступа на создание роли группы
 	if err := s.srv.Access.IsCheckAccountAction(
 		ctx,
 		accountID,
 		initiatorID,
-		domain.AccountPermissionCreateGroupRole,
+		domain.AccountPermissionCreateAccountRole,
 	); err != nil {
 		zap.L().Error(err.Error())
 		return domain.GroupRole{}, err
 	}
 
+	// Создание роли группы
 	role, err := s.repo.Insert(ctx, accountID, name, permission, isDefault)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.GroupRole{}, nil
+	}
+
+	return role, nil
+}
+
+func (s *GroupRoleService) GetByID(ctx context.Context, roleID uuid.UUID) ([]domain.GroupRole, error) {
+	// Получение роли группы по ID
+	roles, err := s.repo.SelectByID(ctx, roleID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return roles, nil
+}
+
+func (s *GroupRoleService) GetDefault(ctx context.Context, accountID uuid.UUID) (domain.GroupRole, error) {
+	// Получение дефолтной роли группы для аккаунта
+	role, err := s.repo.GetDefault(ctx, accountID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.GroupRole{}, err
 	}
 
 	return role, nil
