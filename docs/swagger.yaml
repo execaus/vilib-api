@@ -1,5 +1,93 @@
 basePath: /api/v1
 definitions:
+  domain.PermissionMask:
+    enum:
+    - 0
+    format: int64
+    type: integer
+    x-enum-varnames:
+    - DefaultPermissionMask
+  dto.AccountRole:
+    properties:
+      id:
+        type: string
+      is_default:
+        type: boolean
+      name:
+        type: string
+      parent_id:
+        type: string
+      permission:
+        $ref: '#/definitions/domain.PermissionMask'
+    type: object
+  dto.AddGroupMemberRequest:
+    properties:
+      users:
+        items:
+          type: string
+        type: array
+    type: object
+  dto.AddGroupMemberResponse:
+    properties:
+      members:
+        items:
+          $ref: '#/definitions/dto.GroupMember'
+        type: array
+    type: object
+  dto.CreateAccountRoleRequest:
+    properties:
+      is_default:
+        type: boolean
+      name:
+        type: string
+      parent_id:
+        type: string
+      permission:
+        $ref: '#/definitions/domain.PermissionMask'
+    type: object
+  dto.CreateAccountRoleResponse:
+    properties:
+      account_role:
+        $ref: '#/definitions/dto.AccountRole'
+    type: object
+  dto.CreateGroupRoleRequest:
+    properties:
+      is_default:
+        type: boolean
+      name:
+        type: string
+      permission_mask:
+        $ref: '#/definitions/domain.PermissionMask'
+    type: object
+  dto.CreateGroupRoleResponse:
+    properties:
+      role:
+        $ref: '#/definitions/dto.GroupRole'
+    type: object
+  dto.CreateUserGroupRequest:
+    properties:
+      name:
+        maxLength: 64
+        type: string
+      users:
+        items:
+          type: string
+        type: array
+    required:
+    - name
+    - users
+    type: object
+  dto.CreateUserGroupResponse:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      users:
+        items:
+          $ref: '#/definitions/dto.GroupMember'
+        type: array
+    type: object
   dto.CreateUserRequest:
     properties:
       email:
@@ -27,6 +115,33 @@ definitions:
     properties:
       message:
         type: string
+    type: object
+  dto.GetVideoResponse:
+    properties:
+      presigned_url:
+        type: string
+    type: object
+  dto.GroupMember:
+    properties:
+      group_id:
+        type: string
+      role_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  dto.GroupRole:
+    properties:
+      account_id:
+        type: string
+      id:
+        type: string
+      is_default:
+        type: boolean
+      name:
+        type: string
+      permission_mask:
+        $ref: '#/definitions/domain.PermissionMask'
     type: object
   dto.LoginRequest:
     properties:
@@ -63,8 +178,20 @@ definitions:
     - surname
     type: object
   dto.RegisterResponse:
+    type: object
+  dto.UpdateUserRequest:
     properties:
-      token:
+      role_id:
+        type: string
+    type: object
+  dto.UpdateUserResponse:
+    properties:
+      user:
+        $ref: '#/definitions/dto.User'
+    type: object
+  dto.UploadVideoResponse:
+    properties:
+      presigned_url:
         type: string
     type: object
   dto.User:
@@ -74,6 +201,8 @@ definitions:
       id:
         type: string
       name:
+        type: string
+      role_id:
         type: string
       surname:
         type: string
@@ -85,6 +214,229 @@ info:
   title: Vilib API
   version: "1.0"
 paths:
+  /api/v1/accounts/{accountId}/roles:
+    post:
+      consumes:
+      - application/json
+      description: Создаёт новую роль для аккаунта с указанными правами
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: Тело запроса для создания роли
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateAccountRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.CreateAccountRoleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Создание роли аккаунта
+      tags:
+      - roles
+  /api/v1/accounts/{accountId}/user-groups:
+    post:
+      consumes:
+      - application/json
+      description: Создаёт новую группу пользователей и добавляет указанных пользователей
+        в неё
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: Тело запроса для создания группы
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateUserGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.CreateUserGroupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Создание группы пользователей
+      tags:
+      - user-groups
+  /api/v1/accounts/{accountId}/user-groups/{groupId}/members:
+    post:
+      consumes:
+      - application/json
+      description: Добавляет указанных пользователей в существующую группу
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы пользователей
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: Тело запроса для добавления участников
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.AddGroupMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.AddGroupMemberResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Добавление участников в группу
+      tags:
+      - user-groups
+  /api/v1/accounts/{accountId}/user-groups/{groupId}/video:
+    post:
+      consumes:
+      - application/json
+      description: Возвращает преподписанный URL для загрузки видео в S3
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы пользователей
+        in: path
+        name: groupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UploadVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Загрузка видео
+      tags:
+      - video
+  /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает преподписанный URL для доступа к видео
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы пользователей
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: ID видео
+        in: path
+        name: videoId
+        required: true
+        type: string
+      - description: Предпочитать оригинальное видео
+        in: query
+        name: prefer_original
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.GetVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Получение видео
+      tags:
+      - video
+  /api/v1/accounts/{accountId}/user-groups/roles:
+    post:
+      consumes:
+      - application/json
+      description: Создаёт новую роль для группы пользователей с указанными правами
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: Тело запроса для создания роли группы
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateGroupRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.CreateGroupRoleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Создание роли группы
+      tags:
+      - roles
   /api/v1/accounts/{accountId}/users:
     post:
       consumes:
@@ -187,4 +539,39 @@ paths:
       summary: Регистрация нового пользователя
       tags:
       - auth
+  /api/v1/users/{user_id}:
+    put:
+      consumes:
+      - application/json
+      description: Обновляет данные пользователя (например, статус аккаунта)
+      parameters:
+      - description: ID пользователя
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - description: Тело запроса для обновления пользователя
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UpdateUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Обновление пользователя
+      tags:
+      - users
 swagger: "2.0"
