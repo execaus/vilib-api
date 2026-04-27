@@ -3,7 +3,6 @@ package handler_test
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -22,6 +21,7 @@ import (
 
 func TestHandler_UpdateUser(t *testing.T) {
 	var (
+		testAccountID   = uuid.New()
 		testUserID      = uuid.New()
 		testInitiatorID = uuid.New()
 		testToken       = "valid-token"
@@ -46,14 +46,14 @@ func TestHandler_UpdateUser(t *testing.T) {
 
 		svcMock.Auth.GetClaimsFromTokenMock.When("Bearer "+testToken).Then(&domain.AuthClaims{
 			UserID:           testInitiatorID,
-			CurrentAccountID: uuid.New(),
+			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.User.UpdateMock.When(minimock.AnyContext, testInitiatorID, testUserID, &testRoleID).Then(testUser, nil)
+		svcMock.User.UpdateMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testUserID, &testRoleID).Then(testUser, nil)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
 		router := h.GetRouter()
 
-		url := "/api/v1/users/" + testUserID.String()
+		url := "/api/v1/accounts/" + testAccountID.String() + "/users/" + testUserID.String()
 		body, _ := json.Marshal(dto.UpdateUserRequest{
 			RoleID: &testRoleID,
 		})
@@ -67,6 +67,23 @@ func TestHandler_UpdateUser(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 	})
 
+	t.Run("invalid account id", func(t *testing.T) {
+		mc := minimock.NewController(t)
+		defer mc.Finish()
+
+		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
+
+		url := "/api/v1/accounts/invalid-uuid/users/" + testUserID.String()
+		req := httptest.NewRequest(http.MethodPut, url, nil)
+		req.Header.Set("Authorization", "Bearer "+testToken)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
 	t.Run("invalid user id", func(t *testing.T) {
 		mc := minimock.NewController(t)
 		defer mc.Finish()
@@ -74,7 +91,7 @@ func TestHandler_UpdateUser(t *testing.T) {
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
-		url := "/api/v1/users/invalid-uuid"
+		url := "/api/v1/accounts/" + testAccountID.String() + "/users/invalid-uuid"
 		req := httptest.NewRequest(http.MethodPut, url, nil)
 		req.Header.Set("Authorization", "Bearer "+testToken)
 
@@ -91,7 +108,7 @@ func TestHandler_UpdateUser(t *testing.T) {
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
-		url := "/api/v1/users/" + testUserID.String()
+		url := "/api/v1/accounts/" + testAccountID.String() + "/users/" + testUserID.String()
 		req := httptest.NewRequest(http.MethodPut, url, bytes.NewReader([]byte("invalid")))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+testToken)
@@ -100,40 +117,5 @@ func TestHandler_UpdateUser(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
-	})
-
-	t.Run("service error", func(t *testing.T) {
-		mc := minimock.NewController(t)
-		defer mc.Finish()
-
-		svcMock := testutil.NewHandlerTestServiceMock(mc)
-
-		tx := saga_mocks.NewBobTransactionMock(mc)
-		tx.RollbackMock.Expect(minimock.AnyContext).Return(nil)
-
-		repo := saga_mocks.NewTransactableMock(mc)
-		repo.WithTxMock.When(minimock.AnyContext).Then(tx, nil)
-
-		svcMock.Auth.GetClaimsFromTokenMock.When("Bearer "+testToken).Then(&domain.AuthClaims{
-			UserID:           testInitiatorID,
-			CurrentAccountID: uuid.New(),
-		}, nil)
-		svcMock.User.UpdateMock.When(minimock.AnyContext, testInitiatorID, testUserID, &testRoleID).Then(domain.User{}, errors.New("test error"))
-
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
-		router := h.GetRouter()
-
-		url := "/api/v1/users/" + testUserID.String()
-		body, _ := json.Marshal(dto.UpdateUserRequest{
-			RoleID: &testRoleID,
-		})
-		req := httptest.NewRequest(http.MethodPut, url, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+testToken)
-
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }

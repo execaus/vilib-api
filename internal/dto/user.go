@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"time"
 	"vilib-api/internal/domain"
 
 	"github.com/google/uuid"
@@ -21,15 +22,25 @@ type UpdateUserRequest struct {
 }
 
 type UpdateUserResponse struct {
-	User User
+	User User `json:"user"`
+}
+
+type GetAllUsersRequest struct {
+	Status string `form:"status"`
+}
+
+type GetAllUsersResponse struct {
+	Users []User `json:"users"`
 }
 
 type User struct {
-	ID      uuid.UUID `json:"id"`
-	Name    string    `json:"name"`
-	Surname string    `json:"surname"`
-	Email   string    `json:"email"`
-	RoleID  uuid.UUID `json:"role_id"`
+	ID            uuid.UUID  `json:"id"`
+	Name          string     `json:"name"`
+	Surname       string     `json:"surname"`
+	Email         string     `json:"email"`
+	RoleID        uuid.UUID  `json:"role_id"`
+	Status        string     `json:"status"`
+	DeactivatedAt *time.Time `json:"deactivated_at,omitempty"`
 }
 
 func (u *User) FromDomain(user domain.User) {
@@ -38,4 +49,10 @@ func (u *User) FromDomain(user domain.User) {
 	u.Email = user.Email
 	u.Surname = user.Surname
 	u.RoleID = user.RoleID
+	if user.IsActive() {
+		u.Status = "active"
+	} else {
+		u.Status = "deactivated"
+		u.DeactivatedAt = user.DeactivatedAt
+	}
 }

@@ -3,6 +3,7 @@ package service_test
 import (
 	"errors"
 	"testing"
+	"time"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
 	"vilib-api/internal/repository/repository_mocks"
@@ -216,14 +217,16 @@ func TestService_User_Update(t *testing.T) {
 	t.Parallel()
 
 	testInitiatorID := uuid.New()
+	testAccountID := uuid.New()
 	testTargetUserID := uuid.New()
 	testRoleID := uuid.New()
 
 	tests := []struct {
 		name       string
-		setupMocks func(*service_mocks.UserMock)
+		setupMocks func(*service_mocks.AccessMock, *repository_mocks.UserMock, *service_mocks.AccountRoleMock)
 		args       struct {
 			initiatorID  uuid.UUID
+			accountID    uuid.UUID
 			targetUserID uuid.UUID
 			roleID       *uuid.UUID
 		}
@@ -231,16 +234,18 @@ func TestService_User_Update(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "not implemented",
-			setupMocks: func(user *service_mocks.UserMock) {
+			name: "forbidden - no access",
+			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(service.ErrForbidden)
 			},
 			args: struct {
 				initiatorID  uuid.UUID
+				accountID    uuid.UUID
 				targetUserID uuid.UUID
 				roleID       *uuid.UUID
-			}{testInitiatorID, testTargetUserID, &testRoleID},
+			}{testInitiatorID, testAccountID, testTargetUserID, &testRoleID},
 			want:    domain.User{},
-			wantErr: nil,
+			wantErr: service.ErrForbidden,
 		},
 	}
 
@@ -250,13 +255,226 @@ func TestService_User_Update(t *testing.T) {
 
 			testutil.TestService(
 				t,
-				func(mockServices *testutil.ServiceMock, _ *testutil.RepositoryMock) {
-					tt.setupMocks(mockServices.User)
+				func(mockServices *testutil.ServiceMock, mockRepos *testutil.RepositoryMock) {
+					tt.setupMocks(mockServices.Access, mockRepos.User, mockServices.AccountRole)
 				},
 				func(s *service.Service, r *repository.Repository) {
 					srv := service.NewUserService(r.User, s)
 
-					got, err := srv.Update(t.Context(), tt.args.initiatorID, tt.args.targetUserID, tt.args.roleID)
+					got, err := srv.Update(t.Context(), tt.args.initiatorID, tt.args.accountID, tt.args.targetUserID, tt.args.roleID)
+
+					require.Equal(t, tt.want, got)
+					require.Equal(t, tt.wantErr, err)
+				},
+			)
+		})
+	}
+}
+
+func TestService_User_Deactivate(t *testing.T) {
+	t.Parallel()
+
+	testInitiatorID := uuid.New()
+	testAccountID := uuid.New()
+	testTargetID := uuid.New()
+	testRoleID := uuid.New()
+
+	now := time.Now()
+	activeUser := domain.User{ID: testTargetID, RoleID: testRoleID, DeactivatedAt: nil}
+	deactivatedUser := domain.User{ID: testTargetID, RoleID: testRoleID, DeactivatedAt: &now}
+
+	tests := []struct {
+		name       string
+		setupMocks func(*service_mocks.AccessMock, *repository_mocks.UserMock, *service_mocks.AccountRoleMock)
+		wantErr    error
+	}{
+		{
+			name: "success",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{activeUser}, nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).Return([]domain.AccountRole{{ID: testRoleID, IsSystem: false}}, nil)
+				repo.DeactivateMock.Expect(minimock.AnyContext, testTargetID).Return(nil)
+			},
+			wantErr: nil,
+		},
+		{
+			name: "forbidden - no access",
+			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(service.ErrForbidden)
+			},
+			wantErr: service.ErrForbidden,
+		},
+		{
+			name: "conflict - already deactivated",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{deactivatedUser}, nil)
+			},
+			wantErr: service.ErrUserDeactivated,
+		},
+		{
+			name: "conflict - is owner",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{activeUser}, nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).Return([]domain.AccountRole{{ID: testRoleID, IsSystem: true}}, nil)
+			},
+			wantErr: service.ErrIsOwner,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			testutil.TestService(
+				t,
+				func(mockServices *testutil.ServiceMock, mockRepos *testutil.RepositoryMock) {
+					tt.setupMocks(mockServices.Access, mockRepos.User, mockServices.AccountRole)
+				},
+				func(s *service.Service, r *repository.Repository) {
+					srv := service.NewUserService(r.User, s)
+
+					err := srv.Deactivate(t.Context(), testInitiatorID, testAccountID, testTargetID)
+
+					require.Equal(t, tt.wantErr, err)
+				},
+			)
+		})
+	}
+}
+
+func TestService_User_Reactivate(t *testing.T) {
+	t.Parallel()
+
+	testInitiatorID := uuid.New()
+	testAccountID := uuid.New()
+	testTargetID := uuid.New()
+	testRoleID := uuid.New()
+	testDefaultRoleID := uuid.New()
+
+	now := time.Now()
+	activeUser := domain.User{ID: testTargetID, RoleID: testRoleID, DeactivatedAt: nil}
+	deactivatedUser := domain.User{ID: testTargetID, RoleID: testRoleID, DeactivatedAt: &now}
+
+	tests := []struct {
+		name       string
+		setupMocks func(*service_mocks.AccessMock, *repository_mocks.UserMock, *service_mocks.AccountRoleMock)
+		wantErr    error
+	}{
+		{
+			name: "success",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{deactivatedUser}, nil)
+				repo.ReactivateMock.Expect(minimock.AnyContext, testTargetID).Return(nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).Return([]domain.AccountRole{{ID: testRoleID}}, nil)
+			},
+			wantErr: nil,
+		},
+		{
+			name: "success - role not found, assigns default",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{deactivatedUser}, nil)
+				repo.ReactivateMock.Expect(minimock.AnyContext, testTargetID).Return(nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).Return(nil, errors.New("not found"))
+				ar.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).Return(domain.AccountRole{ID: testDefaultRoleID}, nil)
+				repo.UpdateRoleMock.Expect(minimock.AnyContext, testTargetID, testDefaultRoleID).Return(domain.User{}, nil)
+			},
+			wantErr: nil,
+		},
+		{
+			name: "forbidden - no access",
+			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(service.ErrForbidden)
+			},
+			wantErr: service.ErrForbidden,
+		},
+		{
+			name: "conflict - already active",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{activeUser}, nil)
+			},
+			wantErr: service.ErrUserAlreadyActive,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			testutil.TestService(
+				t,
+				func(mockServices *testutil.ServiceMock, mockRepos *testutil.RepositoryMock) {
+					tt.setupMocks(mockServices.Access, mockRepos.User, mockServices.AccountRole)
+				},
+				func(s *service.Service, r *repository.Repository) {
+					srv := service.NewUserService(r.User, s)
+
+					err := srv.Reactivate(t.Context(), testInitiatorID, testAccountID, testTargetID)
+
+					require.Equal(t, tt.wantErr, err)
+				},
+			)
+		})
+	}
+}
+
+func TestService_User_ListByAccount(t *testing.T) {
+	t.Parallel()
+
+	testInitiatorID := uuid.New()
+	testAccountID := uuid.New()
+
+	testUsers := []domain.User{
+		{ID: uuid.New(), Email: "user1@example.com"},
+	}
+
+	tests := []struct {
+		name       string
+		status     repository.UserStatus
+		setupMocks func(*service_mocks.AccessMock, *repository_mocks.UserMock)
+		want       []domain.User
+		wantErr    error
+	}{
+		{
+			name:   "success",
+			status: repository.UserStatusActive,
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByAccountIDMock.Expect(minimock.AnyContext, testAccountID, repository.UserStatusActive).
+					Return(testUsers, nil)
+			},
+			want:    testUsers,
+			wantErr: nil,
+		},
+		{
+			name:   "forbidden",
+			status: repository.UserStatusActive,
+			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.UserMock) {
+				access.IsCheckAccountActionMock.Return(service.ErrForbidden)
+			},
+			want:    nil,
+			wantErr: service.ErrForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			testutil.TestService(
+				t,
+				func(mockServices *testutil.ServiceMock, mockRepos *testutil.RepositoryMock) {
+					tt.setupMocks(mockServices.Access, mockRepos.User)
+				},
+				func(s *service.Service, r *repository.Repository) {
+					srv := service.NewUserService(r.User, s)
+
+					got, err := srv.ListByAccount(t.Context(), testInitiatorID, testAccountID, tt.status)
 
 					require.Equal(t, tt.want, got)
 					require.Equal(t, tt.wantErr, err)

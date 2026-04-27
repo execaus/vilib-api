@@ -36,3 +36,19 @@ type AddGroupMemberRequest struct {
 type AddGroupMemberResponse struct {
 	Members []GroupMember `json:"members"`
 }
+
+type UserGroup struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	AccountID uuid.UUID `json:"account_id"`
+}
+
+func (g *UserGroup) FromDomain(group domain.UserGroup) {
+	g.ID = group.ID
+	g.Name = group.Name
+	g.AccountID = group.AccountID
+}
+
+type GetAllUserGroupsResponse struct {
+	Groups []UserGroup `json:"groups"`
+}

@@ -13,7 +13,7 @@ import (
 // CreateGroupRole godoc
 // @Summary Создание роли группы
 // @Description Создаёт новую роль для группы пользователей с указанными правами
-// @Tags roles
+// @Tags group_roles
 // @Accept json
 // @Produce json
 // @Param accountId path string true "ID аккаунта"

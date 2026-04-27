@@ -42,7 +42,7 @@ func (h *Handler) Login(c *gin.Context) {
 
 		return nil
 	}); err != nil {
-		sendServiceError(c, err)
+		sendServiceErrorWithDeactivated(c, err)
 		return
 	}
 

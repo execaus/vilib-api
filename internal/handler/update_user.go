@@ -12,18 +12,27 @@ import (
 
 // UpdateUser godoc
 // @Summary Обновление пользователя
-// @Description Обновляет данные пользователя (например, статус аккаунта)
+// @Description Обновляет данные пользователя (например, роль)
 // @Tags users
 // @Accept json
 // @Produce json
-// @Param user_id path string true "ID пользователя"
+// @Param accountId path string true "ID аккаунта"
+// @Param userId path string true "ID пользователя"
 // @Param request body dto.UpdateUserRequest true "Тело запроса для обновления пользователя"
 // @Success 200 {object} dto.UpdateUserResponse
 // @Failure 400 {object} dto.ErrorMessage
+// @Failure 403 {object} dto.ErrorMessage
+// @Failure 404 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
-// @Router /api/v1/users/{user_id} [put]
+// @Router /api/v1/accounts/{accountId}/users/{userId} [put]
 func (h *Handler) UpdateUser(c *gin.Context) {
 	var req dto.UpdateUserRequest
+
+	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
+	if err != nil {
+		sendBadRequest(c, err)
+		return
+	}
 
 	targetUserID, err := h.GetPathUUIDValue(c, pathKeyUserID)
 	if err != nil {
@@ -46,7 +55,7 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 			return err
 		}
 
-		user, err = services.User.Update(ctx, claims.UserID, targetUserID, req.RoleID)
+		user, err = services.User.Update(ctx, claims.UserID, accountID, targetUserID, req.RoleID)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err

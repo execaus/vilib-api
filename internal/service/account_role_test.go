@@ -255,7 +255,7 @@ func TestService_AccountRole_Create(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateAccountRole,
+						domain.AccountPermissionManageRoles,
 					).Return(service.ErrForbidden)
 			},
 			args:    args{testAccountID, testInitiatorID, testName, nil, testPermission, false},
@@ -270,7 +270,7 @@ func TestService_AccountRole_Create(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateAccountRole,
+						domain.AccountPermissionManageRoles,
 					).Return(nil)
 				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testName, &testParentID, testPermission, false, false).
 					Return(domain.AccountRole{ID: testRoleID}, nil)
@@ -289,7 +289,7 @@ func TestService_AccountRole_Create(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateAccountRole,
+						domain.AccountPermissionManageRoles,
 					).Return(nil)
 				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testName, &testParentID, testPermission, false, false).
 					Return(domain.AccountRole{ID: testRoleID}, nil)
@@ -308,7 +308,7 @@ func TestService_AccountRole_Create(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateAccountRole,
+						domain.AccountPermissionManageRoles,
 					).Return(nil)
 				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testName, &testParentID, testPermission, false, false).
 					Return(domain.AccountRole{}, errSomeError)

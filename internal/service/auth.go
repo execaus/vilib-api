@@ -41,16 +41,23 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	// Поиск совпадений пароля хотя бы в одном
 	var userID uuid.UUID
 	isValid := false
+	var matchedUser domain.User
 	for _, user := range users {
 		if ok := s.srv.Auth.ComparePassword(user.PasswordHash, password); ok {
 			isValid = true
 			userID = user.ID
+			matchedUser = user
 			break
 		}
 	}
 	if !isValid {
 		zap.L().Warn(ErrNotFound.Error())
 		return "", ErrNotFound
+	}
+
+	// Проверка, что пользователь активен
+	if !matchedUser.IsActive() {
+		return "", ErrUserDeactivated
 	}
 
 	// Получение всех организаций пользователя

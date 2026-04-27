@@ -3,6 +3,7 @@ package service_test
 import (
 	"errors"
 	"testing"
+	"time"
 	"vilib-api/config"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
@@ -63,6 +64,19 @@ func TestService_Auth_Login(t *testing.T) {
 			args:    args{testEmail, testPassword},
 			want:    "",
 			wantErr: service.ErrNotFound,
+		},
+		{
+			name: "deactivated user",
+			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, auth *service_mocks.AuthMock) {
+				deactivatedAt := time.Now()
+				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
+					Return([]domain.User{{ID: testUserID, PasswordHash: testPasswordHash, DeactivatedAt: &deactivatedAt}}, nil)
+				auth.ComparePasswordMock.Expect(testPasswordHash, testPassword).
+					Return(true)
+			},
+			args:    args{testEmail, testPassword},
+			want:    "",
+			wantErr: service.ErrUserDeactivated,
 		},
 		{
 			name: "accounts not found",

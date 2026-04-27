@@ -9,16 +9,12 @@ import (
 const (
 	// GroupPermissionOwner владелец группы (имеет все права).
 	GroupPermissionOwner PermissionFlag = iota
-	// GroupPermissionAddMember разрешено ли добавлять участников в группу.
-	GroupPermissionAddMember
-	// GroupPermissionRemoveMember разрешено ли удалять участников из группы.
-	GroupPermissionRemoveMember
-	// GroupPermissionCreateVideo разрешено ли загружать видео в группу.
-	GroupPermissionCreateVideo
-	// GroupPermissionEditVideo разрешено ли редактировать видео в группе.
-	GroupPermissionEditVideo
-	// GroupPermissionDeleteVideo разрешено ли удалять видео из группы.
-	GroupPermissionDeleteVideo
+	// GroupPermissionManageMembers разрешено ли управлять участниками группы.
+	GroupPermissionManageMembers
+	// GroupPermissionVideoWatch разрешено ли смотреть видео в группе.
+	GroupPermissionVideoWatch
+	// GroupPermissionManageVideo разрешено ли загружать, редактировать и удалять видео в группе.
+	GroupPermissionManageVideo
 )
 
 type GroupRole struct {

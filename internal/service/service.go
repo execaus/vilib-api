@@ -50,13 +50,18 @@ type AccountRole interface {
 	CreateSystemAccountOwner(ctx context.Context, accountID uuid.UUID) (domain.AccountRole, error)
 	GetDefault(ctx context.Context, accountID uuid.UUID) (domain.AccountRole, error)
 	GetByID(ctx context.Context, rolesID ...uuid.UUID) ([]domain.AccountRole, error)
+	GetAll(ctx context.Context, initiatorID, accountID uuid.UUID) ([]domain.AccountRole, error)
+	Delete(ctx context.Context, initiatorID, accountID, roleID uuid.UUID) error
 }
 
 type User interface {
 	Create(ctx context.Context, name, surname, email, password string, roleID uuid.UUID) (domain.User, error)
 	GetByEmail(ctx context.Context, email string) ([]domain.User, error)
-	Update(ctx context.Context, initiatorID, targetID uuid.UUID, roleID *uuid.UUID) (domain.User, error)
+	Update(ctx context.Context, initiatorID, accountID, targetID uuid.UUID, roleID *uuid.UUID) (domain.User, error)
 	GetByID(ctx context.Context, userID ...uuid.UUID) ([]domain.User, error)
+	Deactivate(ctx context.Context, initiatorID, accountID, targetID uuid.UUID) error
+	Reactivate(ctx context.Context, initiatorID, accountID, targetID uuid.UUID) error
+	ListByAccount(ctx context.Context, initiatorID, accountID uuid.UUID, status repository.UserStatus) ([]domain.User, error)
 }
 
 type Email interface {
@@ -71,11 +76,14 @@ type UserGroup interface {
 		accountID, initiatorID, groupID uuid.UUID,
 		targetsID ...uuid.UUID,
 	) ([]domain.GroupMember, error)
+	GetAll(ctx context.Context, initiatorID, accountID uuid.UUID) ([]domain.UserGroup, error)
+	Delete(ctx context.Context, initiatorID, accountID, groupID uuid.UUID) error
 }
 
 type GroupMember interface {
 	Create(ctx context.Context, groupID, roleID uuid.UUID, usersID ...uuid.UUID) ([]domain.GroupMember, error)
 	GetByUserIDAndGroupID(ctx context.Context, userID, groupID uuid.UUID) (domain.GroupMember, error)
+	RemoveMember(ctx context.Context, initiatorID, groupID, targetID uuid.UUID) error
 }
 
 type GroupRole interface {
@@ -88,6 +96,8 @@ type GroupRole interface {
 	) (domain.GroupRole, error)
 	GetByID(ctx context.Context, roleID uuid.UUID) ([]domain.GroupRole, error)
 	GetDefault(ctx context.Context, accountID uuid.UUID) (domain.GroupRole, error)
+	GetAll(ctx context.Context, initiatorID, accountID uuid.UUID) ([]domain.GroupRole, error)
+	Delete(ctx context.Context, initiatorID, accountID, roleID uuid.UUID) error
 }
 
 type Video interface {
@@ -98,6 +108,9 @@ type Video interface {
 		accountID, groupID, initiatorID, videoID uuid.UUID,
 		isPreferOriginal bool,
 	) (domain.PreflightURL, error)
+	GetAll(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) ([]domain.Video, error)
+	Rename(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID, name string) (domain.Video, error)
+	Delete(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID) error
 }
 
 type VideoAsset interface {

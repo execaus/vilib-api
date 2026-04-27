@@ -46,7 +46,7 @@ func TestService_UserGroup_Create(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateUser,
+						domain.AccountPermissionManageUsers,
 					).Return(service.ErrForbidden)
 			},
 			args:    args{testAccountID, testInitiatorID, testGroupName},
@@ -61,7 +61,7 @@ func TestService_UserGroup_Create(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateUser,
+						domain.AccountPermissionManageUsers,
 					).Return(nil)
 				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testGroupName).
 					Return(domain.UserGroup{ID: testGroupID}, nil)

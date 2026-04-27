@@ -20,6 +20,13 @@ type VideoMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
+	funcDelete          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID) (err error)
+	funcDeleteOrigin    string
+	inspectFuncDelete   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID)
+	afterDeleteCounter  uint64
+	beforeDeleteCounter uint64
+	DeleteMock          mVideoMockDelete
+
 	funcGet          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, isPreferOriginal bool) (p1 domain.PreflightURL, err error)
 	funcGetOrigin    string
 	inspectFuncGet   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, isPreferOriginal bool)
@@ -27,12 +34,26 @@ type VideoMock struct {
 	beforeGetCounter uint64
 	GetMock          mVideoMockGet
 
+	funcGetAll          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (va1 []domain.Video, err error)
+	funcGetAllOrigin    string
+	inspectFuncGetAll   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID)
+	afterGetAllCounter  uint64
+	beforeGetAllCounter uint64
+	GetAllMock          mVideoMockGetAll
+
 	funcGetPreflightUploadURL          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID) (p1 domain.PreflightURL, err error)
 	funcGetPreflightUploadURLOrigin    string
 	inspectFuncGetPreflightUploadURL   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID)
 	afterGetPreflightUploadURLCounter  uint64
 	beforeGetPreflightUploadURLCounter uint64
 	GetPreflightUploadURLMock          mVideoMockGetPreflightUploadURL
+
+	funcRename          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) (v1 domain.Video, err error)
+	funcRenameOrigin    string
+	inspectFuncRename   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string)
+	afterRenameCounter  uint64
+	beforeRenameCounter uint64
+	RenameMock          mVideoMockRename
 
 	funcUpdate          func(ctx context.Context, videoID uuid.UUID, initiatorID *uuid.UUID, status *domain.VideoStatus) (v1 domain.Video, err error)
 	funcUpdateOrigin    string
@@ -50,11 +71,20 @@ func NewVideoMock(t minimock.Tester) *VideoMock {
 		controller.RegisterMocker(m)
 	}
 
+	m.DeleteMock = mVideoMockDelete{mock: m}
+	m.DeleteMock.callArgs = []*VideoMockDeleteParams{}
+
 	m.GetMock = mVideoMockGet{mock: m}
 	m.GetMock.callArgs = []*VideoMockGetParams{}
 
+	m.GetAllMock = mVideoMockGetAll{mock: m}
+	m.GetAllMock.callArgs = []*VideoMockGetAllParams{}
+
 	m.GetPreflightUploadURLMock = mVideoMockGetPreflightUploadURL{mock: m}
 	m.GetPreflightUploadURLMock.callArgs = []*VideoMockGetPreflightUploadURLParams{}
+
+	m.RenameMock = mVideoMockRename{mock: m}
+	m.RenameMock.callArgs = []*VideoMockRenameParams{}
 
 	m.UpdateMock = mVideoMockUpdate{mock: m}
 	m.UpdateMock.callArgs = []*VideoMockUpdateParams{}
@@ -62,6 +92,441 @@ func NewVideoMock(t minimock.Tester) *VideoMock {
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mVideoMockDelete struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockDeleteExpectation
+	expectations       []*VideoMockDeleteExpectation
+
+	callArgs []*VideoMockDeleteParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockDeleteExpectation specifies expectation struct of the Video.Delete
+type VideoMockDeleteExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockDeleteParams
+	paramPtrs          *VideoMockDeleteParamPtrs
+	expectationOrigins VideoMockDeleteExpectationOrigins
+	results            *VideoMockDeleteResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockDeleteParams contains parameters of the Video.Delete
+type VideoMockDeleteParams struct {
+	ctx         context.Context
+	accountID   uuid.UUID
+	groupID     uuid.UUID
+	initiatorID uuid.UUID
+	videoID     uuid.UUID
+}
+
+// VideoMockDeleteParamPtrs contains pointers to parameters of the Video.Delete
+type VideoMockDeleteParamPtrs struct {
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	groupID     *uuid.UUID
+	initiatorID *uuid.UUID
+	videoID     *uuid.UUID
+}
+
+// VideoMockDeleteResults contains results of the Video.Delete
+type VideoMockDeleteResults struct {
+	err error
+}
+
+// VideoMockDeleteOrigins contains origins of expectations of the Video.Delete
+type VideoMockDeleteExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originGroupID     string
+	originInitiatorID string
+	originVideoID     string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDelete *mVideoMockDelete) Optional() *mVideoMockDelete {
+	mmDelete.optional = true
+	return mmDelete
+}
+
+// Expect sets up expected params for Video.Delete
+func (mmDelete *mVideoMockDelete) Expect(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID) *mVideoMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by ExpectParams functions")
+	}
+
+	mmDelete.defaultExpectation.params = &VideoMockDeleteParams{ctx, accountID, groupID, initiatorID, videoID}
+	mmDelete.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDelete.expectations {
+		if minimock.Equal(e.params, mmDelete.defaultExpectation.params) {
+			mmDelete.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDelete.defaultExpectation.params)
+		}
+	}
+
+	return mmDelete
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.Delete
+func (mmDelete *mVideoMockDelete) ExpectCtxParam1(ctx context.Context) *mVideoMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &VideoMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDelete.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Video.Delete
+func (mmDelete *mVideoMockDelete) ExpectAccountIDParam2(accountID uuid.UUID) *mVideoMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &VideoMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.accountID = &accountID
+	mmDelete.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectGroupIDParam3 sets up expected param groupID for Video.Delete
+func (mmDelete *mVideoMockDelete) ExpectGroupIDParam3(groupID uuid.UUID) *mVideoMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &VideoMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.groupID = &groupID
+	mmDelete.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectInitiatorIDParam4 sets up expected param initiatorID for Video.Delete
+func (mmDelete *mVideoMockDelete) ExpectInitiatorIDParam4(initiatorID uuid.UUID) *mVideoMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &VideoMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmDelete.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectVideoIDParam5 sets up expected param videoID for Video.Delete
+func (mmDelete *mVideoMockDelete) ExpectVideoIDParam5(videoID uuid.UUID) *mVideoMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &VideoMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.videoID = &videoID
+	mmDelete.defaultExpectation.expectationOrigins.originVideoID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.Delete
+func (mmDelete *mVideoMockDelete) Inspect(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID)) *mVideoMockDelete {
+	if mmDelete.mock.inspectFuncDelete != nil {
+		mmDelete.mock.t.Fatalf("Inspect function is already set for VideoMock.Delete")
+	}
+
+	mmDelete.mock.inspectFuncDelete = f
+
+	return mmDelete
+}
+
+// Return sets up results that will be returned by Video.Delete
+func (mmDelete *mVideoMockDelete) Return(err error) *VideoMock {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{mock: mmDelete.mock}
+	}
+	mmDelete.defaultExpectation.results = &VideoMockDeleteResults{err}
+	mmDelete.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDelete.mock
+}
+
+// Set uses given function f to mock the Video.Delete method
+func (mmDelete *mVideoMockDelete) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID) (err error)) *VideoMock {
+	if mmDelete.defaultExpectation != nil {
+		mmDelete.mock.t.Fatalf("Default expectation is already set for the Video.Delete method")
+	}
+
+	if len(mmDelete.expectations) > 0 {
+		mmDelete.mock.t.Fatalf("Some expectations are already set for the Video.Delete method")
+	}
+
+	mmDelete.mock.funcDelete = f
+	mmDelete.mock.funcDeleteOrigin = minimock.CallerInfo(1)
+	return mmDelete.mock
+}
+
+// When sets expectation for the Video.Delete which will trigger the result defined by the following
+// Then helper
+func (mmDelete *mVideoMockDelete) When(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID) *VideoMockDeleteExpectation {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	expectation := &VideoMockDeleteExpectation{
+		mock:               mmDelete.mock,
+		params:             &VideoMockDeleteParams{ctx, accountID, groupID, initiatorID, videoID},
+		expectationOrigins: VideoMockDeleteExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDelete.expectations = append(mmDelete.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.Delete return parameters for the expectation previously defined by the When method
+func (e *VideoMockDeleteExpectation) Then(err error) *VideoMock {
+	e.results = &VideoMockDeleteResults{err}
+	return e.mock
+}
+
+// Times sets number of times Video.Delete should be invoked
+func (mmDelete *mVideoMockDelete) Times(n uint64) *mVideoMockDelete {
+	if n == 0 {
+		mmDelete.mock.t.Fatalf("Times of VideoMock.Delete mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDelete.expectedInvocations, n)
+	mmDelete.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDelete
+}
+
+func (mmDelete *mVideoMockDelete) invocationsDone() bool {
+	if len(mmDelete.expectations) == 0 && mmDelete.defaultExpectation == nil && mmDelete.mock.funcDelete == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDelete.mock.afterDeleteCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDelete.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// Delete implements mm_service.Video
+func (mmDelete *VideoMock) Delete(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDelete.beforeDeleteCounter, 1)
+	defer mm_atomic.AddUint64(&mmDelete.afterDeleteCounter, 1)
+
+	mmDelete.t.Helper()
+
+	if mmDelete.inspectFuncDelete != nil {
+		mmDelete.inspectFuncDelete(ctx, accountID, groupID, initiatorID, videoID)
+	}
+
+	mm_params := VideoMockDeleteParams{ctx, accountID, groupID, initiatorID, videoID}
+
+	// Record call args
+	mmDelete.DeleteMock.mutex.Lock()
+	mmDelete.DeleteMock.callArgs = append(mmDelete.DeleteMock.callArgs, &mm_params)
+	mmDelete.DeleteMock.mutex.Unlock()
+
+	for _, e := range mmDelete.DeleteMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDelete.DeleteMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDelete.DeleteMock.defaultExpectation.Counter, 1)
+		mm_want := mmDelete.DeleteMock.defaultExpectation.params
+		mm_want_ptrs := mmDelete.DeleteMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockDeleteParams{ctx, accountID, groupID, initiatorID, videoID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDelete.t.Errorf("VideoMock.Delete got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmDelete.t.Errorf("VideoMock.Delete got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmDelete.t.Errorf("VideoMock.Delete got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmDelete.t.Errorf("VideoMock.Delete got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.videoID != nil && !minimock.Equal(*mm_want_ptrs.videoID, mm_got.videoID) {
+				mmDelete.t.Errorf("VideoMock.Delete got unexpected parameter videoID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originVideoID, *mm_want_ptrs.videoID, mm_got.videoID, minimock.Diff(*mm_want_ptrs.videoID, mm_got.videoID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDelete.t.Errorf("VideoMock.Delete got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDelete.DeleteMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDelete.DeleteMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDelete.t.Fatal("No results are set for the VideoMock.Delete")
+		}
+		return (*mm_results).err
+	}
+	if mmDelete.funcDelete != nil {
+		return mmDelete.funcDelete(ctx, accountID, groupID, initiatorID, videoID)
+	}
+	mmDelete.t.Fatalf("Unexpected call to VideoMock.Delete. %v %v %v %v %v", ctx, accountID, groupID, initiatorID, videoID)
+	return
+}
+
+// DeleteAfterCounter returns a count of finished VideoMock.Delete invocations
+func (mmDelete *VideoMock) DeleteAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDelete.afterDeleteCounter)
+}
+
+// DeleteBeforeCounter returns a count of VideoMock.Delete invocations
+func (mmDelete *VideoMock) DeleteBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDelete.beforeDeleteCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.Delete.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDelete *mVideoMockDelete) Calls() []*VideoMockDeleteParams {
+	mmDelete.mutex.RLock()
+
+	argCopy := make([]*VideoMockDeleteParams, len(mmDelete.callArgs))
+	copy(argCopy, mmDelete.callArgs)
+
+	mmDelete.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteDone returns true if the count of the Delete invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockDeleteDone() bool {
+	if m.DeleteMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteMock.invocationsDone()
+}
+
+// MinimockDeleteInspect logs each unmet expectation
+func (m *VideoMock) MinimockDeleteInspect() {
+	for _, e := range m.DeleteMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.Delete at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteCounter := mm_atomic.LoadUint64(&m.afterDeleteCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteMock.defaultExpectation != nil && afterDeleteCounter < 1 {
+		if m.DeleteMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.Delete at\n%s", m.DeleteMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.Delete at\n%s with params: %#v", m.DeleteMock.defaultExpectation.expectationOrigins.origin, *m.DeleteMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDelete != nil && afterDeleteCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.Delete at\n%s", m.funcDeleteOrigin)
+	}
+
+	if !m.DeleteMock.invocationsDone() && afterDeleteCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.Delete at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteMock.expectedInvocations), m.DeleteMock.expectedInvocationsOrigin, afterDeleteCounter)
+	}
 }
 
 type mVideoMockGet struct {
@@ -531,6 +996,411 @@ func (m *VideoMock) MinimockGetInspect() {
 	}
 }
 
+type mVideoMockGetAll struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockGetAllExpectation
+	expectations       []*VideoMockGetAllExpectation
+
+	callArgs []*VideoMockGetAllParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockGetAllExpectation specifies expectation struct of the Video.GetAll
+type VideoMockGetAllExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockGetAllParams
+	paramPtrs          *VideoMockGetAllParamPtrs
+	expectationOrigins VideoMockGetAllExpectationOrigins
+	results            *VideoMockGetAllResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockGetAllParams contains parameters of the Video.GetAll
+type VideoMockGetAllParams struct {
+	ctx         context.Context
+	accountID   uuid.UUID
+	groupID     uuid.UUID
+	initiatorID uuid.UUID
+}
+
+// VideoMockGetAllParamPtrs contains pointers to parameters of the Video.GetAll
+type VideoMockGetAllParamPtrs struct {
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	groupID     *uuid.UUID
+	initiatorID *uuid.UUID
+}
+
+// VideoMockGetAllResults contains results of the Video.GetAll
+type VideoMockGetAllResults struct {
+	va1 []domain.Video
+	err error
+}
+
+// VideoMockGetAllOrigins contains origins of expectations of the Video.GetAll
+type VideoMockGetAllExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originGroupID     string
+	originInitiatorID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetAll *mVideoMockGetAll) Optional() *mVideoMockGetAll {
+	mmGetAll.optional = true
+	return mmGetAll
+}
+
+// Expect sets up expected params for Video.GetAll
+func (mmGetAll *mVideoMockGetAll) Expect(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) *mVideoMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &VideoMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by ExpectParams functions")
+	}
+
+	mmGetAll.defaultExpectation.params = &VideoMockGetAllParams{ctx, accountID, groupID, initiatorID}
+	mmGetAll.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetAll.expectations {
+		if minimock.Equal(e.params, mmGetAll.defaultExpectation.params) {
+			mmGetAll.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetAll.defaultExpectation.params)
+		}
+	}
+
+	return mmGetAll
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.GetAll
+func (mmGetAll *mVideoMockGetAll) ExpectCtxParam1(ctx context.Context) *mVideoMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &VideoMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.params != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Expect")
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs == nil {
+		mmGetAll.defaultExpectation.paramPtrs = &VideoMockGetAllParamPtrs{}
+	}
+	mmGetAll.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetAll.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetAll
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Video.GetAll
+func (mmGetAll *mVideoMockGetAll) ExpectAccountIDParam2(accountID uuid.UUID) *mVideoMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &VideoMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.params != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Expect")
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs == nil {
+		mmGetAll.defaultExpectation.paramPtrs = &VideoMockGetAllParamPtrs{}
+	}
+	mmGetAll.defaultExpectation.paramPtrs.accountID = &accountID
+	mmGetAll.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmGetAll
+}
+
+// ExpectGroupIDParam3 sets up expected param groupID for Video.GetAll
+func (mmGetAll *mVideoMockGetAll) ExpectGroupIDParam3(groupID uuid.UUID) *mVideoMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &VideoMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.params != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Expect")
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs == nil {
+		mmGetAll.defaultExpectation.paramPtrs = &VideoMockGetAllParamPtrs{}
+	}
+	mmGetAll.defaultExpectation.paramPtrs.groupID = &groupID
+	mmGetAll.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmGetAll
+}
+
+// ExpectInitiatorIDParam4 sets up expected param initiatorID for Video.GetAll
+func (mmGetAll *mVideoMockGetAll) ExpectInitiatorIDParam4(initiatorID uuid.UUID) *mVideoMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &VideoMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.params != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Expect")
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs == nil {
+		mmGetAll.defaultExpectation.paramPtrs = &VideoMockGetAllParamPtrs{}
+	}
+	mmGetAll.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmGetAll.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmGetAll
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.GetAll
+func (mmGetAll *mVideoMockGetAll) Inspect(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID)) *mVideoMockGetAll {
+	if mmGetAll.mock.inspectFuncGetAll != nil {
+		mmGetAll.mock.t.Fatalf("Inspect function is already set for VideoMock.GetAll")
+	}
+
+	mmGetAll.mock.inspectFuncGetAll = f
+
+	return mmGetAll
+}
+
+// Return sets up results that will be returned by Video.GetAll
+func (mmGetAll *mVideoMockGetAll) Return(va1 []domain.Video, err error) *VideoMock {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &VideoMockGetAllExpectation{mock: mmGetAll.mock}
+	}
+	mmGetAll.defaultExpectation.results = &VideoMockGetAllResults{va1, err}
+	mmGetAll.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetAll.mock
+}
+
+// Set uses given function f to mock the Video.GetAll method
+func (mmGetAll *mVideoMockGetAll) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (va1 []domain.Video, err error)) *VideoMock {
+	if mmGetAll.defaultExpectation != nil {
+		mmGetAll.mock.t.Fatalf("Default expectation is already set for the Video.GetAll method")
+	}
+
+	if len(mmGetAll.expectations) > 0 {
+		mmGetAll.mock.t.Fatalf("Some expectations are already set for the Video.GetAll method")
+	}
+
+	mmGetAll.mock.funcGetAll = f
+	mmGetAll.mock.funcGetAllOrigin = minimock.CallerInfo(1)
+	return mmGetAll.mock
+}
+
+// When sets expectation for the Video.GetAll which will trigger the result defined by the following
+// Then helper
+func (mmGetAll *mVideoMockGetAll) When(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) *VideoMockGetAllExpectation {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Set")
+	}
+
+	expectation := &VideoMockGetAllExpectation{
+		mock:               mmGetAll.mock,
+		params:             &VideoMockGetAllParams{ctx, accountID, groupID, initiatorID},
+		expectationOrigins: VideoMockGetAllExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetAll.expectations = append(mmGetAll.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.GetAll return parameters for the expectation previously defined by the When method
+func (e *VideoMockGetAllExpectation) Then(va1 []domain.Video, err error) *VideoMock {
+	e.results = &VideoMockGetAllResults{va1, err}
+	return e.mock
+}
+
+// Times sets number of times Video.GetAll should be invoked
+func (mmGetAll *mVideoMockGetAll) Times(n uint64) *mVideoMockGetAll {
+	if n == 0 {
+		mmGetAll.mock.t.Fatalf("Times of VideoMock.GetAll mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetAll.expectedInvocations, n)
+	mmGetAll.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetAll
+}
+
+func (mmGetAll *mVideoMockGetAll) invocationsDone() bool {
+	if len(mmGetAll.expectations) == 0 && mmGetAll.defaultExpectation == nil && mmGetAll.mock.funcGetAll == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetAll.mock.afterGetAllCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetAll.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetAll implements mm_service.Video
+func (mmGetAll *VideoMock) GetAll(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (va1 []domain.Video, err error) {
+	mm_atomic.AddUint64(&mmGetAll.beforeGetAllCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetAll.afterGetAllCounter, 1)
+
+	mmGetAll.t.Helper()
+
+	if mmGetAll.inspectFuncGetAll != nil {
+		mmGetAll.inspectFuncGetAll(ctx, accountID, groupID, initiatorID)
+	}
+
+	mm_params := VideoMockGetAllParams{ctx, accountID, groupID, initiatorID}
+
+	// Record call args
+	mmGetAll.GetAllMock.mutex.Lock()
+	mmGetAll.GetAllMock.callArgs = append(mmGetAll.GetAllMock.callArgs, &mm_params)
+	mmGetAll.GetAllMock.mutex.Unlock()
+
+	for _, e := range mmGetAll.GetAllMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.va1, e.results.err
+		}
+	}
+
+	if mmGetAll.GetAllMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetAll.GetAllMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetAll.GetAllMock.defaultExpectation.params
+		mm_want_ptrs := mmGetAll.GetAllMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockGetAllParams{ctx, accountID, groupID, initiatorID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetAll.t.Errorf("VideoMock.GetAll got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmGetAll.t.Errorf("VideoMock.GetAll got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmGetAll.t.Errorf("VideoMock.GetAll got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmGetAll.t.Errorf("VideoMock.GetAll got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetAll.t.Errorf("VideoMock.GetAll got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetAll.GetAllMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetAll.t.Fatal("No results are set for the VideoMock.GetAll")
+		}
+		return (*mm_results).va1, (*mm_results).err
+	}
+	if mmGetAll.funcGetAll != nil {
+		return mmGetAll.funcGetAll(ctx, accountID, groupID, initiatorID)
+	}
+	mmGetAll.t.Fatalf("Unexpected call to VideoMock.GetAll. %v %v %v %v", ctx, accountID, groupID, initiatorID)
+	return
+}
+
+// GetAllAfterCounter returns a count of finished VideoMock.GetAll invocations
+func (mmGetAll *VideoMock) GetAllAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetAll.afterGetAllCounter)
+}
+
+// GetAllBeforeCounter returns a count of VideoMock.GetAll invocations
+func (mmGetAll *VideoMock) GetAllBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetAll.beforeGetAllCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.GetAll.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetAll *mVideoMockGetAll) Calls() []*VideoMockGetAllParams {
+	mmGetAll.mutex.RLock()
+
+	argCopy := make([]*VideoMockGetAllParams, len(mmGetAll.callArgs))
+	copy(argCopy, mmGetAll.callArgs)
+
+	mmGetAll.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetAllDone returns true if the count of the GetAll invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockGetAllDone() bool {
+	if m.GetAllMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetAllMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetAllMock.invocationsDone()
+}
+
+// MinimockGetAllInspect logs each unmet expectation
+func (m *VideoMock) MinimockGetAllInspect() {
+	for _, e := range m.GetAllMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.GetAll at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetAllCounter := mm_atomic.LoadUint64(&m.afterGetAllCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetAllMock.defaultExpectation != nil && afterGetAllCounter < 1 {
+		if m.GetAllMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.GetAll at\n%s", m.GetAllMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.GetAll at\n%s with params: %#v", m.GetAllMock.defaultExpectation.expectationOrigins.origin, *m.GetAllMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetAll != nil && afterGetAllCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.GetAll at\n%s", m.funcGetAllOrigin)
+	}
+
+	if !m.GetAllMock.invocationsDone() && afterGetAllCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.GetAll at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetAllMock.expectedInvocations), m.GetAllMock.expectedInvocationsOrigin, afterGetAllCounter)
+	}
+}
+
 type mVideoMockGetPreflightUploadURL struct {
 	optional           bool
 	mock               *VideoMock
@@ -933,6 +1803,473 @@ func (m *VideoMock) MinimockGetPreflightUploadURLInspect() {
 	if !m.GetPreflightUploadURLMock.invocationsDone() && afterGetPreflightUploadURLCounter > 0 {
 		m.t.Errorf("Expected %d calls to VideoMock.GetPreflightUploadURL at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetPreflightUploadURLMock.expectedInvocations), m.GetPreflightUploadURLMock.expectedInvocationsOrigin, afterGetPreflightUploadURLCounter)
+	}
+}
+
+type mVideoMockRename struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockRenameExpectation
+	expectations       []*VideoMockRenameExpectation
+
+	callArgs []*VideoMockRenameParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockRenameExpectation specifies expectation struct of the Video.Rename
+type VideoMockRenameExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockRenameParams
+	paramPtrs          *VideoMockRenameParamPtrs
+	expectationOrigins VideoMockRenameExpectationOrigins
+	results            *VideoMockRenameResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockRenameParams contains parameters of the Video.Rename
+type VideoMockRenameParams struct {
+	ctx         context.Context
+	accountID   uuid.UUID
+	groupID     uuid.UUID
+	initiatorID uuid.UUID
+	videoID     uuid.UUID
+	name        string
+}
+
+// VideoMockRenameParamPtrs contains pointers to parameters of the Video.Rename
+type VideoMockRenameParamPtrs struct {
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	groupID     *uuid.UUID
+	initiatorID *uuid.UUID
+	videoID     *uuid.UUID
+	name        *string
+}
+
+// VideoMockRenameResults contains results of the Video.Rename
+type VideoMockRenameResults struct {
+	v1  domain.Video
+	err error
+}
+
+// VideoMockRenameOrigins contains origins of expectations of the Video.Rename
+type VideoMockRenameExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originGroupID     string
+	originInitiatorID string
+	originVideoID     string
+	originName        string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmRename *mVideoMockRename) Optional() *mVideoMockRename {
+	mmRename.optional = true
+	return mmRename
+}
+
+// Expect sets up expected params for Video.Rename
+func (mmRename *mVideoMockRename) Expect(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) *mVideoMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &VideoMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.paramPtrs != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by ExpectParams functions")
+	}
+
+	mmRename.defaultExpectation.params = &VideoMockRenameParams{ctx, accountID, groupID, initiatorID, videoID, name}
+	mmRename.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmRename.expectations {
+		if minimock.Equal(e.params, mmRename.defaultExpectation.params) {
+			mmRename.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmRename.defaultExpectation.params)
+		}
+	}
+
+	return mmRename
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.Rename
+func (mmRename *mVideoMockRename) ExpectCtxParam1(ctx context.Context) *mVideoMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &VideoMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &VideoMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.ctx = &ctx
+	mmRename.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Video.Rename
+func (mmRename *mVideoMockRename) ExpectAccountIDParam2(accountID uuid.UUID) *mVideoMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &VideoMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &VideoMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.accountID = &accountID
+	mmRename.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// ExpectGroupIDParam3 sets up expected param groupID for Video.Rename
+func (mmRename *mVideoMockRename) ExpectGroupIDParam3(groupID uuid.UUID) *mVideoMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &VideoMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &VideoMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.groupID = &groupID
+	mmRename.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// ExpectInitiatorIDParam4 sets up expected param initiatorID for Video.Rename
+func (mmRename *mVideoMockRename) ExpectInitiatorIDParam4(initiatorID uuid.UUID) *mVideoMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &VideoMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &VideoMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmRename.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// ExpectVideoIDParam5 sets up expected param videoID for Video.Rename
+func (mmRename *mVideoMockRename) ExpectVideoIDParam5(videoID uuid.UUID) *mVideoMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &VideoMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &VideoMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.videoID = &videoID
+	mmRename.defaultExpectation.expectationOrigins.originVideoID = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// ExpectNameParam6 sets up expected param name for Video.Rename
+func (mmRename *mVideoMockRename) ExpectNameParam6(name string) *mVideoMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &VideoMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &VideoMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.name = &name
+	mmRename.defaultExpectation.expectationOrigins.originName = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.Rename
+func (mmRename *mVideoMockRename) Inspect(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string)) *mVideoMockRename {
+	if mmRename.mock.inspectFuncRename != nil {
+		mmRename.mock.t.Fatalf("Inspect function is already set for VideoMock.Rename")
+	}
+
+	mmRename.mock.inspectFuncRename = f
+
+	return mmRename
+}
+
+// Return sets up results that will be returned by Video.Rename
+func (mmRename *mVideoMockRename) Return(v1 domain.Video, err error) *VideoMock {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &VideoMockRenameExpectation{mock: mmRename.mock}
+	}
+	mmRename.defaultExpectation.results = &VideoMockRenameResults{v1, err}
+	mmRename.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmRename.mock
+}
+
+// Set uses given function f to mock the Video.Rename method
+func (mmRename *mVideoMockRename) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) (v1 domain.Video, err error)) *VideoMock {
+	if mmRename.defaultExpectation != nil {
+		mmRename.mock.t.Fatalf("Default expectation is already set for the Video.Rename method")
+	}
+
+	if len(mmRename.expectations) > 0 {
+		mmRename.mock.t.Fatalf("Some expectations are already set for the Video.Rename method")
+	}
+
+	mmRename.mock.funcRename = f
+	mmRename.mock.funcRenameOrigin = minimock.CallerInfo(1)
+	return mmRename.mock
+}
+
+// When sets expectation for the Video.Rename which will trigger the result defined by the following
+// Then helper
+func (mmRename *mVideoMockRename) When(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) *VideoMockRenameExpectation {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Set")
+	}
+
+	expectation := &VideoMockRenameExpectation{
+		mock:               mmRename.mock,
+		params:             &VideoMockRenameParams{ctx, accountID, groupID, initiatorID, videoID, name},
+		expectationOrigins: VideoMockRenameExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmRename.expectations = append(mmRename.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.Rename return parameters for the expectation previously defined by the When method
+func (e *VideoMockRenameExpectation) Then(v1 domain.Video, err error) *VideoMock {
+	e.results = &VideoMockRenameResults{v1, err}
+	return e.mock
+}
+
+// Times sets number of times Video.Rename should be invoked
+func (mmRename *mVideoMockRename) Times(n uint64) *mVideoMockRename {
+	if n == 0 {
+		mmRename.mock.t.Fatalf("Times of VideoMock.Rename mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmRename.expectedInvocations, n)
+	mmRename.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmRename
+}
+
+func (mmRename *mVideoMockRename) invocationsDone() bool {
+	if len(mmRename.expectations) == 0 && mmRename.defaultExpectation == nil && mmRename.mock.funcRename == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmRename.mock.afterRenameCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmRename.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// Rename implements mm_service.Video
+func (mmRename *VideoMock) Rename(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) (v1 domain.Video, err error) {
+	mm_atomic.AddUint64(&mmRename.beforeRenameCounter, 1)
+	defer mm_atomic.AddUint64(&mmRename.afterRenameCounter, 1)
+
+	mmRename.t.Helper()
+
+	if mmRename.inspectFuncRename != nil {
+		mmRename.inspectFuncRename(ctx, accountID, groupID, initiatorID, videoID, name)
+	}
+
+	mm_params := VideoMockRenameParams{ctx, accountID, groupID, initiatorID, videoID, name}
+
+	// Record call args
+	mmRename.RenameMock.mutex.Lock()
+	mmRename.RenameMock.callArgs = append(mmRename.RenameMock.callArgs, &mm_params)
+	mmRename.RenameMock.mutex.Unlock()
+
+	for _, e := range mmRename.RenameMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.v1, e.results.err
+		}
+	}
+
+	if mmRename.RenameMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmRename.RenameMock.defaultExpectation.Counter, 1)
+		mm_want := mmRename.RenameMock.defaultExpectation.params
+		mm_want_ptrs := mmRename.RenameMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockRenameParams{ctx, accountID, groupID, initiatorID, videoID, name}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmRename.t.Errorf("VideoMock.Rename got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmRename.t.Errorf("VideoMock.Rename got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmRename.t.Errorf("VideoMock.Rename got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmRename.t.Errorf("VideoMock.Rename got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.videoID != nil && !minimock.Equal(*mm_want_ptrs.videoID, mm_got.videoID) {
+				mmRename.t.Errorf("VideoMock.Rename got unexpected parameter videoID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originVideoID, *mm_want_ptrs.videoID, mm_got.videoID, minimock.Diff(*mm_want_ptrs.videoID, mm_got.videoID))
+			}
+
+			if mm_want_ptrs.name != nil && !minimock.Equal(*mm_want_ptrs.name, mm_got.name) {
+				mmRename.t.Errorf("VideoMock.Rename got unexpected parameter name, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originName, *mm_want_ptrs.name, mm_got.name, minimock.Diff(*mm_want_ptrs.name, mm_got.name))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmRename.t.Errorf("VideoMock.Rename got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmRename.RenameMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmRename.RenameMock.defaultExpectation.results
+		if mm_results == nil {
+			mmRename.t.Fatal("No results are set for the VideoMock.Rename")
+		}
+		return (*mm_results).v1, (*mm_results).err
+	}
+	if mmRename.funcRename != nil {
+		return mmRename.funcRename(ctx, accountID, groupID, initiatorID, videoID, name)
+	}
+	mmRename.t.Fatalf("Unexpected call to VideoMock.Rename. %v %v %v %v %v %v", ctx, accountID, groupID, initiatorID, videoID, name)
+	return
+}
+
+// RenameAfterCounter returns a count of finished VideoMock.Rename invocations
+func (mmRename *VideoMock) RenameAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmRename.afterRenameCounter)
+}
+
+// RenameBeforeCounter returns a count of VideoMock.Rename invocations
+func (mmRename *VideoMock) RenameBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmRename.beforeRenameCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.Rename.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmRename *mVideoMockRename) Calls() []*VideoMockRenameParams {
+	mmRename.mutex.RLock()
+
+	argCopy := make([]*VideoMockRenameParams, len(mmRename.callArgs))
+	copy(argCopy, mmRename.callArgs)
+
+	mmRename.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockRenameDone returns true if the count of the Rename invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockRenameDone() bool {
+	if m.RenameMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.RenameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.RenameMock.invocationsDone()
+}
+
+// MinimockRenameInspect logs each unmet expectation
+func (m *VideoMock) MinimockRenameInspect() {
+	for _, e := range m.RenameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.Rename at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterRenameCounter := mm_atomic.LoadUint64(&m.afterRenameCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.RenameMock.defaultExpectation != nil && afterRenameCounter < 1 {
+		if m.RenameMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.Rename at\n%s", m.RenameMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.Rename at\n%s with params: %#v", m.RenameMock.defaultExpectation.expectationOrigins.origin, *m.RenameMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcRename != nil && afterRenameCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.Rename at\n%s", m.funcRenameOrigin)
+	}
+
+	if !m.RenameMock.invocationsDone() && afterRenameCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.Rename at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.RenameMock.expectedInvocations), m.RenameMock.expectedInvocationsOrigin, afterRenameCounter)
 	}
 }
 
@@ -1345,9 +2682,15 @@ func (m *VideoMock) MinimockUpdateInspect() {
 func (m *VideoMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockDeleteInspect()
+
 			m.MinimockGetInspect()
 
+			m.MinimockGetAllInspect()
+
 			m.MinimockGetPreflightUploadURLInspect()
+
+			m.MinimockRenameInspect()
 
 			m.MinimockUpdateInspect()
 		}
@@ -1373,7 +2716,10 @@ func (m *VideoMock) MinimockWait(timeout mm_time.Duration) {
 func (m *VideoMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockDeleteDone() &&
 		m.MinimockGetDone() &&
+		m.MinimockGetAllDone() &&
 		m.MinimockGetPreflightUploadURLDone() &&
+		m.MinimockRenameDone() &&
 		m.MinimockUpdateDone()
 }

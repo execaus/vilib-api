@@ -9,7 +9,9 @@ import (
 	"io"
 	"time"
 
+	"github.com/aarondl/opt/null"
 	"github.com/aarondl/opt/omit"
+	"github.com/aarondl/opt/omitnull"
 	"github.com/google/uuid"
 	"github.com/stephenafamo/bob"
 	"github.com/stephenafamo/bob/dialect/psql"
@@ -34,8 +36,9 @@ type User struct {
 	// Контактный email, связанный с пользователем
 	Email string `db:"email" `
 	// Время создания записи пользователя
-	CreatedAt time.Time `db:"created_at" `
-	RoleID    uuid.UUID `db:"role_id" `
+	CreatedAt     time.Time           `db:"created_at" `
+	RoleID        uuid.UUID           `db:"role_id" `
+	DeactivatedAt null.Val[time.Time] `db:"deactivated_at" `
 
 	R userR `db:"-" `
 }
@@ -60,29 +63,31 @@ type userR struct {
 func buildUserColumns(alias string) userColumns {
 	return userColumns{
 		ColumnsExpr: expr.NewColumnsExpr(
-			"user_id", "name", "surname", "password_hash", "email", "created_at", "role_id",
+			"user_id", "name", "surname", "password_hash", "email", "created_at", "role_id", "deactivated_at",
 		).WithParent("users"),
-		tableAlias:   alias,
-		UserID:       psql.Quote(alias, "user_id"),
-		Name:         psql.Quote(alias, "name"),
-		Surname:      psql.Quote(alias, "surname"),
-		PasswordHash: psql.Quote(alias, "password_hash"),
-		Email:        psql.Quote(alias, "email"),
-		CreatedAt:    psql.Quote(alias, "created_at"),
-		RoleID:       psql.Quote(alias, "role_id"),
+		tableAlias:    alias,
+		UserID:        psql.Quote(alias, "user_id"),
+		Name:          psql.Quote(alias, "name"),
+		Surname:       psql.Quote(alias, "surname"),
+		PasswordHash:  psql.Quote(alias, "password_hash"),
+		Email:         psql.Quote(alias, "email"),
+		CreatedAt:     psql.Quote(alias, "created_at"),
+		RoleID:        psql.Quote(alias, "role_id"),
+		DeactivatedAt: psql.Quote(alias, "deactivated_at"),
 	}
 }
 
 type userColumns struct {
 	expr.ColumnsExpr
-	tableAlias   string
-	UserID       psql.Expression
-	Name         psql.Expression
-	Surname      psql.Expression
-	PasswordHash psql.Expression
-	Email        psql.Expression
-	CreatedAt    psql.Expression
-	RoleID       psql.Expression
+	tableAlias    string
+	UserID        psql.Expression
+	Name          psql.Expression
+	Surname       psql.Expression
+	PasswordHash  psql.Expression
+	Email         psql.Expression
+	CreatedAt     psql.Expression
+	RoleID        psql.Expression
+	DeactivatedAt psql.Expression
 }
 
 func (c userColumns) Alias() string {
@@ -97,17 +102,18 @@ func (userColumns) AliasedAs(alias string) userColumns {
 // All values are optional, and do not have to be set
 // Generated columns are not included
 type UserSetter struct {
-	UserID       omit.Val[uuid.UUID] `db:"user_id,pk" `
-	Name         omit.Val[string]    `db:"name" `
-	Surname      omit.Val[string]    `db:"surname" `
-	PasswordHash omit.Val[string]    `db:"password_hash" `
-	Email        omit.Val[string]    `db:"email" `
-	CreatedAt    omit.Val[time.Time] `db:"created_at" `
-	RoleID       omit.Val[uuid.UUID] `db:"role_id" `
+	UserID        omit.Val[uuid.UUID]     `db:"user_id,pk" `
+	Name          omit.Val[string]        `db:"name" `
+	Surname       omit.Val[string]        `db:"surname" `
+	PasswordHash  omit.Val[string]        `db:"password_hash" `
+	Email         omit.Val[string]        `db:"email" `
+	CreatedAt     omit.Val[time.Time]     `db:"created_at" `
+	RoleID        omit.Val[uuid.UUID]     `db:"role_id" `
+	DeactivatedAt omitnull.Val[time.Time] `db:"deactivated_at" `
 }
 
 func (s UserSetter) SetColumns() []string {
-	vals := make([]string, 0, 7)
+	vals := make([]string, 0, 8)
 	if s.UserID.IsValue() {
 		vals = append(vals, "user_id")
 	}
@@ -128,6 +134,9 @@ func (s UserSetter) SetColumns() []string {
 	}
 	if s.RoleID.IsValue() {
 		vals = append(vals, "role_id")
+	}
+	if !s.DeactivatedAt.IsUnset() {
+		vals = append(vals, "deactivated_at")
 	}
 	return vals
 }
@@ -154,6 +163,9 @@ func (s UserSetter) Overwrite(t *User) {
 	if s.RoleID.IsValue() {
 		t.RoleID = s.RoleID.MustGet()
 	}
+	if !s.DeactivatedAt.IsUnset() {
+		t.DeactivatedAt = s.DeactivatedAt.MustGetNull()
+	}
 }
 
 func (s *UserSetter) Apply(q *dialect.InsertQuery) {
@@ -162,7 +174,7 @@ func (s *UserSetter) Apply(q *dialect.InsertQuery) {
 	})
 
 	q.AppendValues(bob.ExpressionFunc(func(ctx context.Context, w io.StringWriter, d bob.Dialect, start int) ([]any, error) {
-		vals := make([]bob.Expression, 7)
+		vals := make([]bob.Expression, 8)
 		if s.UserID.IsValue() {
 			vals[0] = psql.Arg(s.UserID.MustGet())
 		} else {
@@ -205,6 +217,12 @@ func (s *UserSetter) Apply(q *dialect.InsertQuery) {
 			vals[6] = psql.Raw("DEFAULT")
 		}
 
+		if !s.DeactivatedAt.IsUnset() {
+			vals[7] = psql.Arg(s.DeactivatedAt.MustGetNull())
+		} else {
+			vals[7] = psql.Raw("DEFAULT")
+		}
+
 		return bob.ExpressSlice(ctx, w, d, start, vals, "", ", ", "")
 	}))
 }
@@ -214,7 +232,7 @@ func (s UserSetter) UpdateMod() bob.Mod[*dialect.UpdateQuery] {
 }
 
 func (s UserSetter) Expressions(prefix ...string) []bob.Expression {
-	exprs := make([]bob.Expression, 0, 7)
+	exprs := make([]bob.Expression, 0, 8)
 
 	if s.UserID.IsValue() {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
@@ -262,6 +280,13 @@ func (s UserSetter) Expressions(prefix ...string) []bob.Expression {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
 			psql.Quote(append(prefix, "role_id")...),
 			psql.Arg(s.RoleID),
+		}})
+	}
+
+	if !s.DeactivatedAt.IsUnset() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "deactivated_at")...),
+			psql.Arg(s.DeactivatedAt),
 		}})
 	}
 

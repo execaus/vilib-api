@@ -16,6 +16,54 @@ const docTemplate = `{
     "basePath": "{{.BasePath}}",
     "paths": {
         "/api/v1/accounts/{accountId}/roles": {
+            "get": {
+                "description": "Возвращает список всех ролей аккаунта",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "account_roles"
+                ],
+                "summary": "Список ролей аккаунта",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.AccountRole"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            },
             "post": {
                 "description": "Создаёт новую роль для аккаунта с указанными правами",
                 "consumes": [
@@ -25,7 +73,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "roles"
+                    "account_roles"
                 ],
                 "summary": "Создание роли аккаунта",
                 "parameters": [
@@ -68,7 +116,109 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/accounts/{accountId}/roles/{roleId}": {
+            "delete": {
+                "description": "Удаляет роль аккаунта. Нельзя удалить системную роль или роль, назначенную активным пользователям.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "account_roles"
+                ],
+                "summary": "Удаление роли аккаунта",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID роли",
+                        "name": "roleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/accounts/{accountId}/user-groups": {
+            "get": {
+                "description": "Возвращает список групп пользователей аккаунта",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user_groups"
+                ],
+                "summary": "Список групп пользователей",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.GetAllUserGroupsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            },
             "post": {
                 "description": "Создаёт новую группу пользователей и добавляет указанных пользователей в неё",
                 "consumes": [
@@ -78,7 +228,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user-groups"
+                    "user_groups"
                 ],
                 "summary": "Создание группы пользователей",
                 "parameters": [
@@ -122,6 +272,54 @@ const docTemplate = `{
             }
         },
         "/api/v1/accounts/{accountId}/user-groups/roles": {
+            "get": {
+                "description": "Возвращает список всех ролей групп для аккаунта",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_roles"
+                ],
+                "summary": "Список ролей групп",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/dto.GroupRole"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            },
             "post": {
                 "description": "Создаёт новую роль для группы пользователей с указанными правами",
                 "consumes": [
@@ -131,7 +329,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "roles"
+                    "group_roles"
                 ],
                 "summary": "Создание роли группы",
                 "parameters": [
@@ -174,6 +372,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/accounts/{accountId}/user-groups/roles/{groupRoleId}": {
+            "delete": {
+                "description": "Удаляет роль группы. Нельзя удалить роль, назначенную участникам.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_roles"
+                ],
+                "summary": "Удаление роли группы",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID роли группы",
+                        "name": "groupRoleId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/accounts/{accountId}/user-groups/{groupId}/members": {
             "post": {
                 "description": "Добавляет указанных пользователей в существующую группу",
@@ -184,7 +439,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "user-groups"
+                    "user_groups"
                 ],
                 "summary": "Добавление участников в группу",
                 "parameters": [
@@ -244,7 +499,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "video"
+                    "videos"
                 ],
                 "summary": "Загрузка видео",
                 "parameters": [
@@ -295,7 +550,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "video"
+                    "videos"
                 ],
                 "summary": "Получение видео",
                 "parameters": [
@@ -349,7 +604,374 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/accounts/{accountId}/user-groups/{userGroupId}": {
+            "delete": {
+                "description": "Каскадно удаляет группу вместе со всеми видео, участниками и ассетами",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user_groups"
+                ],
+                "summary": "Удаление группы пользователей",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/members/{memberId}": {
+            "delete": {
+                "description": "Удаляет пользователя из группы",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "group_members"
+                ],
+                "summary": "Удаление участника группы",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID пользователя-участника",
+                        "name": "memberId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}": {
+            "put": {
+                "description": "Переименовывает видео в группе",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "Переименование видео",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Тело запроса",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.RenameVideoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.RenameVideoResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Удаляет видео из группы",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "Удаление видео",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/videos": {
+            "get": {
+                "description": "Возвращает список видео в группе пользователей",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "Список видео группы",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.GetAllVideosResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/accounts/{accountId}/users": {
+            "get": {
+                "description": "Возвращает список пользователей, привязанных к аккаунту, с опциональной фильтрацией по статусу",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Список пользователей аккаунта",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Фильтр по статусу: active, deactivated, all (по умолчанию: active)",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.GetAllUsersResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            },
             "post": {
                 "description": "Создает нового пользователя с указанными данными, привязывает его к аккаунту и отправляет email с паролем",
                 "consumes": [
@@ -389,6 +1011,193 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{accountId}/users/{userId}": {
+            "put": {
+                "description": "Обновляет данные пользователя (например, роль)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Обновление пользователя",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID пользователя",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Тело запроса для обновления пользователя",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateUserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Деактивирует пользователя в аккаунте (мягкое удаление)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Деактивация пользователя",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID пользователя",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{accountId}/users/{userId}/reactivate": {
+            "post": {
+                "description": "Реактивирует ранее деактивированного пользователя в аккаунте",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Реактивация пользователя",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID пользователя",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateUserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorMessage"
                         }
@@ -483,59 +1292,6 @@ const docTemplate = `{
                         "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/dto.RegisterResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/users/{user_id}": {
-            "put": {
-                "description": "Обновляет данные пользователя (например, статус аккаунта)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "users"
-                ],
-                "summary": "Обновление пользователя",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "ID пользователя",
-                        "name": "user_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Тело запроса для обновления пользователя",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/dto.UpdateUserRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/dto.UpdateUserResponse"
                         }
                     },
                     "400": {
@@ -772,6 +1528,28 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.GetAllUsersResponse": {
+            "type": "object",
+            "properties": {
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.User"
+                    }
+                }
+            }
+        },
+        "dto.GetAllVideosResponse": {
+            "type": "object",
+            "properties": {
+                "videos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.Video"
+                    }
+                }
+            }
+        },
         "dto.LoginRequest": {
             "type": "object",
             "required": [
@@ -823,6 +1601,27 @@ const docTemplate = `{
         "dto.RegisterResponse": {
             "type": "object"
         },
+        "dto.RenameVideoRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                }
+            }
+        },
+        "dto.RenameVideoResponse": {
+            "type": "object",
+            "properties": {
+                "video": {
+                    "$ref": "#/definitions/dto.Video"
+                }
+            }
+        },
         "dto.UpdateUserRequest": {
             "type": "object",
             "properties": {
@@ -850,6 +1649,9 @@ const docTemplate = `{
         "dto.User": {
             "type": "object",
             "properties": {
+                "deactivated_at": {
+                    "type": "string"
+                },
                 "email": {
                     "type": "string"
                 },
@@ -862,7 +1664,58 @@ const docTemplate = `{
                 "role_id": {
                     "type": "string"
                 },
+                "status": {
+                    "type": "string"
+                },
                 "surname": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.Video": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.GetAllUserGroupsResponse": {
+            "type": "object",
+            "properties": {
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.UserGroup"
+                    }
+                }
+            }
+        },
+        "dto.UserGroup": {
+            "type": "object",
+            "properties": {
+                "account_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 }
             }

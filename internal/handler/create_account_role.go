@@ -13,7 +13,7 @@ import (
 // CreateAccountRole godoc
 // @Summary Создание роли аккаунта
 // @Description Создаёт новую роль для аккаунта с указанными правами
-// @Tags roles
+// @Tags account_roles
 // @Accept json
 // @Produce json
 // @Param accountId path string true "ID аккаунта"

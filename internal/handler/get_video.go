@@ -13,7 +13,7 @@ import (
 // GetVideo godoc
 // @Summary Получение видео
 // @Description Возвращает преподписанный URL для доступа к видео
-// @Tags video
+// @Tags videos
 // @Accept json
 // @Produce json
 // @Param accountId path string true "ID аккаунта"

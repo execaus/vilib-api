@@ -20,6 +20,9 @@ const (
 	pathKeyUserID
 	pathKeyUserGroupID
 	pathKeyVideoID
+	pathKeyRoleID
+	pathKeyGroupRoleID
+	pathKeyGroupMemberUserID
 )
 
 var (
@@ -28,12 +31,23 @@ var (
 	LoginURL             = "auth/login"
 	CreateUserURL        = NewURLSupplier("accounts/%s/users")
 	CreateAccountRoleURL = NewURLSupplier("accounts/%s/roles")
-	UpdateUserURL        = NewURLSupplier("users/%s")
+	UpdateUserURL        = NewURLSupplier("accounts/%s/users/%s")
 	CreateUserGroupURL   = NewURLSupplier("accounts/%s/user-groups")
 	AddGroupMemberURL    = NewURLSupplier("accounts/%s/user-groups/%s/members")
 	CreateGroupRoleURL   = NewURLSupplier("accounts/%s/user-groups/roles")
 	UploadVideoUrl       = NewURLSupplier("accounts/%s/user-groups/%s/video")
 	GetVideoUrl          = NewURLSupplier("accounts/%s/user-groups/%s/video/%s")
+
+	ListUsersURL         = NewURLSupplier("accounts/%s/users")
+	ReactivateUserURL    = NewURLSupplier("accounts/%s/users/%s/reactivate")
+	ListAccountRolesURL  = NewURLSupplier("accounts/%s/roles")
+	DeleteAccountRoleURL = NewURLSupplier("accounts/%s/roles/%s")
+	ListUserGroupsURL    = NewURLSupplier("accounts/%s/user-groups")
+	DeleteUserGroupURL   = NewURLSupplier("accounts/%s/user-groups/%s")
+	DeleteGroupMemberURL = NewURLSupplier("accounts/%s/user-groups/%s/members/%s")
+	ListGroupRolesURL    = NewURLSupplier("accounts/%s/user-groups/roles")
+	DeleteGroupRoleURL   = NewURLSupplier("accounts/%s/user-groups/roles/%s")
+	ListVideosURL        = NewURLSupplier("accounts/%s/user-groups/%s/videos")
 )
 
 type Handler struct {
@@ -64,25 +78,66 @@ func (h *Handler) GetRouter() *gin.Engine {
 
 	v1.POST(RegisterURL, h.Register)
 	v1.POST(LoginURL, h.Login)
-	v1.POST(CreateUserURL.WithPathParams(pathKeyAccountID), h.CreateUser)
+
+	// Users
+	v1.POST(CreateUserURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateUser)
+	v1.GET(ListUsersURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllUsers)
+	v1.PUT(UpdateUserURL.WithPathParams(pathKeyAccountID, pathKeyUserID), h.RequireAuthMiddleware, h.UpdateUser)
+	v1.DELETE(UpdateUserURL.WithPathParams(pathKeyAccountID, pathKeyUserID), h.RequireAuthMiddleware, h.DeactivateUser)
+	v1.POST(ReactivateUserURL.WithPathParams(pathKeyAccountID, pathKeyUserID), h.RequireAuthMiddleware, h.ReactivateUser)
+
+	// Account roles
 	v1.POST(CreateAccountRoleURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateAccountRole)
-	v1.PUT(UpdateUserURL.WithPathParams(pathKeyUserID), h.RequireAuthMiddleware, h.UpdateUser)
+	v1.GET(ListAccountRolesURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllAccountRoles)
+	v1.DELETE(DeleteAccountRoleURL.WithPathParams(pathKeyAccountID, pathKeyRoleID), h.RequireAuthMiddleware, h.DeleteAccountRole)
+
+	// User groups
 	v1.POST(CreateUserGroupURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateUserGroup)
+	v1.GET(ListUserGroupsURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllUserGroups)
+	v1.DELETE(DeleteUserGroupURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID), h.RequireAuthMiddleware, h.DeleteUserGroup)
+
+	// Group members
 	v1.POST(
 		AddGroupMemberURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
 		h.RequireAuthMiddleware,
 		h.AddGroupMember,
 	)
+	v1.DELETE(
+		DeleteGroupMemberURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyGroupMemberUserID),
+		h.RequireAuthMiddleware,
+		h.DeleteGroupMember,
+	)
+
+	// Group roles
 	v1.POST(CreateGroupRoleURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateGroupRole)
+	v1.GET(ListGroupRolesURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllGroupRoles)
+	v1.DELETE(DeleteGroupRoleURL.WithPathParams(pathKeyAccountID, pathKeyGroupRoleID), h.RequireAuthMiddleware, h.DeleteGroupRole)
+
+	// Videos
 	v1.POST(
 		UploadVideoUrl.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
 		h.RequireAuthMiddleware,
 		h.UploadVideo,
 	)
 	v1.GET(
+		ListVideosURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
+		h.RequireAuthMiddleware,
+		h.GetAllVideos,
+	)
+	v1.GET(
 		GetVideoUrl.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
 		h.RequireAuthMiddleware,
 		h.GetVideo,
+	)
+	v1.PUT(
+		GetVideoUrl.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		h.RequireAuthMiddleware,
+		h.RenameVideo,
+	)
+	v1.DELETE(
+		GetVideoUrl.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		h.RequireAuthMiddleware,
+		h.DeleteVideo,
 	)
 
 	return engine

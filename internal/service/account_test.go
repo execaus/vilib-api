@@ -298,12 +298,13 @@ func TestService_Account_CreateUser(t *testing.T) {
 	t.Parallel()
 
 	var (
-		testName        = testutil.Faker.Person().FirstName()
-		testSurname     = testutil.Faker.Person().LastName()
-		testEmail       = testutil.Faker.Person().Contact().Email
-		testAccountID   = uuid.New()
-		testInitiatorID = uuid.New()
-		testPassword    = testutil.Faker.Person().Name()
+		testName         = testutil.Faker.Person().FirstName()
+		testSurname      = testutil.Faker.Person().LastName()
+		testEmail        = testutil.Faker.Person().Contact().Email
+		testAccountID    = uuid.New()
+		testInitiatorID  = uuid.New()
+		testPassword     = testutil.Faker.Person().Name()
+		testPasswordHash = testutil.Faker.Person().Name()
 	)
 
 	var errSomeError = errors.New("some error")
@@ -347,7 +348,7 @@ func TestService_Account_CreateUser(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateUser,
+						domain.AccountPermissionManageUsers,
 					).Return(nil)
 				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
 					Return(true, nil)
@@ -371,11 +372,39 @@ func TestService_Account_CreateUser(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateUser,
+						domain.AccountPermissionManageUsers,
 					).Return(nil)
 				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
 					Return(false, nil)
 				auth.GeneratePasswordMock.Expect().
+					Return("", errSomeError)
+			},
+			args:    args{testAccountID, testInitiatorID, testName, testSurname, testEmail},
+			wantErr: errSomeError,
+		},
+		{
+			name: "hash password error",
+			setupMocks: func(
+				acc *service_mocks.AccountMock,
+				auth *service_mocks.AuthMock,
+				ar *service_mocks.AccountRoleMock,
+				user *service_mocks.UserMock,
+				email *service_mocks.EmailMock,
+				access *service_mocks.AccessMock,
+				repoAcc *repository_mocks.AccountMock,
+			) {
+				access.IsCheckAccountActionMock.
+					Expect(
+						minimock.AnyContext,
+						testAccountID,
+						testInitiatorID,
+						domain.AccountPermissionManageUsers,
+					).Return(nil)
+				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
+					Return(false, nil)
+				auth.GeneratePasswordMock.Expect().
+					Return(testPassword, nil)
+				auth.HashPasswordMock.Expect(testPassword).
 					Return("", errSomeError)
 			},
 			args:    args{testAccountID, testInitiatorID, testName, testSurname, testEmail},
@@ -397,12 +426,14 @@ func TestService_Account_CreateUser(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateUser,
+						domain.AccountPermissionManageUsers,
 					).Return(nil)
 				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
 					Return(false, nil)
 				auth.GeneratePasswordMock.Expect().
 					Return(testPassword, nil)
+				auth.HashPasswordMock.Expect(testPassword).
+					Return(testPasswordHash, nil)
 				ar.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).
 					Return(domain.AccountRole{}, errSomeError)
 			},
@@ -425,7 +456,7 @@ func TestService_Account_CreateUser(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateUser,
+						domain.AccountPermissionManageUsers,
 					).Return(nil)
 
 				role := domain.AccountRole{ID: uuid.New()}
@@ -434,9 +465,11 @@ func TestService_Account_CreateUser(t *testing.T) {
 					Return(false, nil)
 				auth.GeneratePasswordMock.Expect().
 					Return(testPassword, nil)
+				auth.HashPasswordMock.Expect(testPassword).
+					Return(testPasswordHash, nil)
 				ar.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).
 					Return(role, nil)
-				user.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail, testPassword, role.ID).
+				user.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail, testPasswordHash, role.ID).
 					Return(domain.User{}, errSomeError)
 			},
 			args:    args{testAccountID, testInitiatorID, testName, testSurname, testEmail},
@@ -458,7 +491,7 @@ func TestService_Account_CreateUser(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateUser,
+						domain.AccountPermissionManageUsers,
 					).Return(nil)
 
 				role := domain.AccountRole{ID: uuid.New()}
@@ -467,9 +500,11 @@ func TestService_Account_CreateUser(t *testing.T) {
 					Return(false, nil)
 				auth.GeneratePasswordMock.Expect().
 					Return(testPassword, nil)
+				auth.HashPasswordMock.Expect(testPassword).
+					Return(testPasswordHash, nil)
 				ar.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).
 					Return(role, nil)
-				user.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail, testPassword, role.ID).
+				user.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail, testPasswordHash, role.ID).
 					Return(domain.User{Email: testEmail}, nil)
 				email.SendCreateUserEmailMock.Expect(minimock.AnyContext, testEmail, testPassword).
 					Return(errSomeError)
@@ -489,7 +524,7 @@ func TestService_Account_CreateUser(t *testing.T) {
 				repoAcc *repository_mocks.AccountMock,
 			) {
 				access.IsCheckAccountActionMock.
-					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionCreateUser).
+					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageUsers).
 					Return(service.ErrForbidden)
 			},
 			args:    args{testAccountID, testInitiatorID, testName, testSurname, testEmail},
@@ -511,7 +546,7 @@ func TestService_Account_CreateUser(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateUser,
+						domain.AccountPermissionManageUsers,
 					).Return(nil)
 
 				role := domain.AccountRole{ID: uuid.New()}
@@ -521,9 +556,11 @@ func TestService_Account_CreateUser(t *testing.T) {
 					Return(false, nil)
 				auth.GeneratePasswordMock.Expect().
 					Return(testPassword, nil)
+				auth.HashPasswordMock.Expect(testPassword).
+					Return(testPasswordHash, nil)
 				ar.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).
 					Return(role, nil)
-				user.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail, testPassword, role.ID).
+				user.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail, testPasswordHash, role.ID).
 					Return(resultUser, nil)
 				email.SendCreateUserEmailMock.Expect(minimock.AnyContext, testEmail, testPassword).
 					Return(nil)

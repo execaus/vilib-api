@@ -29,7 +29,7 @@ func (s *UserGroupService) Create(
 		ctx,
 		accountID,
 		initiatorID,
-		domain.AccountPermissionCreateUser,
+		domain.AccountPermissionManageUsers,
 	); err != nil {
 		zap.L().Error(err.Error())
 		return domain.UserGroup{}, err
@@ -71,6 +71,45 @@ func (s *UserGroupService) AddMembers(
 	}
 
 	return members, nil
+}
+
+func (s *UserGroupService) GetAll(
+	ctx context.Context,
+	initiatorID, accountID uuid.UUID,
+) ([]domain.UserGroup, error) {
+	// Проверка, что инициатор является участником аккаунта
+	if err := s.srv.Account.IsHasUser(ctx, accountID, initiatorID); err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	// Получение всех групп аккаунта
+	groups, err := s.repo.SelectByAccountID(ctx, accountID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return groups, nil
+}
+
+func (s *UserGroupService) Delete(
+	ctx context.Context,
+	initiatorID, accountID, groupID uuid.UUID,
+) error {
+	// Проверка прав на управление группами
+	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageGroups); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	// Удаление группы каскадно
+	if err := s.repo.DeleteCascade(ctx, groupID); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
 }
 
 func (s *UserGroupService) isAccessAddMembers(
@@ -140,7 +179,7 @@ func (s *UserGroupService) isAccessAddMembers(
 	}
 
 	// Проверка: имеет ли право на добавление участников
-	if domain.HasBit(groupRoles[0].PermissionMask, domain.GroupPermissionAddMember) {
+	if domain.HasBit(groupRoles[0].PermissionMask, domain.GroupPermissionManageMembers) {
 		return nil
 	}
 

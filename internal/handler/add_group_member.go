@@ -13,7 +13,7 @@ import (
 // AddGroupMember godoc
 // @Summary Добавление участников в группу
 // @Description Добавляет указанных пользователей в существующую группу
-// @Tags user-groups
+// @Tags user_groups
 // @Accept json
 // @Produce json
 // @Param accountId path string true "ID аккаунта"

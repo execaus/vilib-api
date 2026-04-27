@@ -49,7 +49,7 @@ func TestService_GroupRole_Create(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateAccountRole,
+						domain.AccountPermissionManageRoles,
 					).Return(service.ErrForbidden)
 			},
 			args:    args{testAccountID, testInitiatorID, testName, testPermission, false},
@@ -64,7 +64,7 @@ func TestService_GroupRole_Create(t *testing.T) {
 						minimock.AnyContext,
 						testAccountID,
 						testInitiatorID,
-						domain.AccountPermissionCreateAccountRole,
+						domain.AccountPermissionManageRoles,
 					).Return(nil)
 				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testName, testPermission, false).
 					Return(domain.GroupRole{ID: testRoleID}, nil)

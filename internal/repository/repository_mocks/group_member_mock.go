@@ -20,6 +20,13 @@ type GroupMemberMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
+	funcDelete          func(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (err error)
+	funcDeleteOrigin    string
+	inspectFuncDelete   func(ctx context.Context, groupID uuid.UUID, userID uuid.UUID)
+	afterDeleteCounter  uint64
+	beforeDeleteCounter uint64
+	DeleteMock          mGroupMemberMockDelete
+
 	funcInsert          func(ctx context.Context, groupID uuid.UUID, roleID uuid.UUID, usersID ...uuid.UUID) (ga1 []domain.GroupMember, err error)
 	funcInsertOrigin    string
 	inspectFuncInsert   func(ctx context.Context, groupID uuid.UUID, roleID uuid.UUID, usersID ...uuid.UUID)
@@ -43,6 +50,9 @@ func NewGroupMemberMock(t minimock.Tester) *GroupMemberMock {
 		controller.RegisterMocker(m)
 	}
 
+	m.DeleteMock = mGroupMemberMockDelete{mock: m}
+	m.DeleteMock.callArgs = []*GroupMemberMockDeleteParams{}
+
 	m.InsertMock = mGroupMemberMockInsert{mock: m}
 	m.InsertMock.callArgs = []*GroupMemberMockInsertParams{}
 
@@ -52,6 +62,379 @@ func NewGroupMemberMock(t minimock.Tester) *GroupMemberMock {
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mGroupMemberMockDelete struct {
+	optional           bool
+	mock               *GroupMemberMock
+	defaultExpectation *GroupMemberMockDeleteExpectation
+	expectations       []*GroupMemberMockDeleteExpectation
+
+	callArgs []*GroupMemberMockDeleteParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// GroupMemberMockDeleteExpectation specifies expectation struct of the GroupMember.Delete
+type GroupMemberMockDeleteExpectation struct {
+	mock               *GroupMemberMock
+	params             *GroupMemberMockDeleteParams
+	paramPtrs          *GroupMemberMockDeleteParamPtrs
+	expectationOrigins GroupMemberMockDeleteExpectationOrigins
+	results            *GroupMemberMockDeleteResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// GroupMemberMockDeleteParams contains parameters of the GroupMember.Delete
+type GroupMemberMockDeleteParams struct {
+	ctx     context.Context
+	groupID uuid.UUID
+	userID  uuid.UUID
+}
+
+// GroupMemberMockDeleteParamPtrs contains pointers to parameters of the GroupMember.Delete
+type GroupMemberMockDeleteParamPtrs struct {
+	ctx     *context.Context
+	groupID *uuid.UUID
+	userID  *uuid.UUID
+}
+
+// GroupMemberMockDeleteResults contains results of the GroupMember.Delete
+type GroupMemberMockDeleteResults struct {
+	err error
+}
+
+// GroupMemberMockDeleteOrigins contains origins of expectations of the GroupMember.Delete
+type GroupMemberMockDeleteExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originGroupID string
+	originUserID  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDelete *mGroupMemberMockDelete) Optional() *mGroupMemberMockDelete {
+	mmDelete.optional = true
+	return mmDelete
+}
+
+// Expect sets up expected params for GroupMember.Delete
+func (mmDelete *mGroupMemberMockDelete) Expect(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) *mGroupMemberMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupMemberMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupMemberMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs != nil {
+		mmDelete.mock.t.Fatalf("GroupMemberMock.Delete mock is already set by ExpectParams functions")
+	}
+
+	mmDelete.defaultExpectation.params = &GroupMemberMockDeleteParams{ctx, groupID, userID}
+	mmDelete.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDelete.expectations {
+		if minimock.Equal(e.params, mmDelete.defaultExpectation.params) {
+			mmDelete.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDelete.defaultExpectation.params)
+		}
+	}
+
+	return mmDelete
+}
+
+// ExpectCtxParam1 sets up expected param ctx for GroupMember.Delete
+func (mmDelete *mGroupMemberMockDelete) ExpectCtxParam1(ctx context.Context) *mGroupMemberMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupMemberMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupMemberMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("GroupMemberMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &GroupMemberMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDelete.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectGroupIDParam2 sets up expected param groupID for GroupMember.Delete
+func (mmDelete *mGroupMemberMockDelete) ExpectGroupIDParam2(groupID uuid.UUID) *mGroupMemberMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupMemberMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupMemberMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("GroupMemberMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &GroupMemberMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.groupID = &groupID
+	mmDelete.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectUserIDParam3 sets up expected param userID for GroupMember.Delete
+func (mmDelete *mGroupMemberMockDelete) ExpectUserIDParam3(userID uuid.UUID) *mGroupMemberMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupMemberMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupMemberMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("GroupMemberMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &GroupMemberMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.userID = &userID
+	mmDelete.defaultExpectation.expectationOrigins.originUserID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// Inspect accepts an inspector function that has same arguments as the GroupMember.Delete
+func (mmDelete *mGroupMemberMockDelete) Inspect(f func(ctx context.Context, groupID uuid.UUID, userID uuid.UUID)) *mGroupMemberMockDelete {
+	if mmDelete.mock.inspectFuncDelete != nil {
+		mmDelete.mock.t.Fatalf("Inspect function is already set for GroupMemberMock.Delete")
+	}
+
+	mmDelete.mock.inspectFuncDelete = f
+
+	return mmDelete
+}
+
+// Return sets up results that will be returned by GroupMember.Delete
+func (mmDelete *mGroupMemberMockDelete) Return(err error) *GroupMemberMock {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupMemberMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupMemberMockDeleteExpectation{mock: mmDelete.mock}
+	}
+	mmDelete.defaultExpectation.results = &GroupMemberMockDeleteResults{err}
+	mmDelete.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDelete.mock
+}
+
+// Set uses given function f to mock the GroupMember.Delete method
+func (mmDelete *mGroupMemberMockDelete) Set(f func(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (err error)) *GroupMemberMock {
+	if mmDelete.defaultExpectation != nil {
+		mmDelete.mock.t.Fatalf("Default expectation is already set for the GroupMember.Delete method")
+	}
+
+	if len(mmDelete.expectations) > 0 {
+		mmDelete.mock.t.Fatalf("Some expectations are already set for the GroupMember.Delete method")
+	}
+
+	mmDelete.mock.funcDelete = f
+	mmDelete.mock.funcDeleteOrigin = minimock.CallerInfo(1)
+	return mmDelete.mock
+}
+
+// When sets expectation for the GroupMember.Delete which will trigger the result defined by the following
+// Then helper
+func (mmDelete *mGroupMemberMockDelete) When(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) *GroupMemberMockDeleteExpectation {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupMemberMock.Delete mock is already set by Set")
+	}
+
+	expectation := &GroupMemberMockDeleteExpectation{
+		mock:               mmDelete.mock,
+		params:             &GroupMemberMockDeleteParams{ctx, groupID, userID},
+		expectationOrigins: GroupMemberMockDeleteExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDelete.expectations = append(mmDelete.expectations, expectation)
+	return expectation
+}
+
+// Then sets up GroupMember.Delete return parameters for the expectation previously defined by the When method
+func (e *GroupMemberMockDeleteExpectation) Then(err error) *GroupMemberMock {
+	e.results = &GroupMemberMockDeleteResults{err}
+	return e.mock
+}
+
+// Times sets number of times GroupMember.Delete should be invoked
+func (mmDelete *mGroupMemberMockDelete) Times(n uint64) *mGroupMemberMockDelete {
+	if n == 0 {
+		mmDelete.mock.t.Fatalf("Times of GroupMemberMock.Delete mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDelete.expectedInvocations, n)
+	mmDelete.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDelete
+}
+
+func (mmDelete *mGroupMemberMockDelete) invocationsDone() bool {
+	if len(mmDelete.expectations) == 0 && mmDelete.defaultExpectation == nil && mmDelete.mock.funcDelete == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDelete.mock.afterDeleteCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDelete.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// Delete implements mm_repository.GroupMember
+func (mmDelete *GroupMemberMock) Delete(ctx context.Context, groupID uuid.UUID, userID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDelete.beforeDeleteCounter, 1)
+	defer mm_atomic.AddUint64(&mmDelete.afterDeleteCounter, 1)
+
+	mmDelete.t.Helper()
+
+	if mmDelete.inspectFuncDelete != nil {
+		mmDelete.inspectFuncDelete(ctx, groupID, userID)
+	}
+
+	mm_params := GroupMemberMockDeleteParams{ctx, groupID, userID}
+
+	// Record call args
+	mmDelete.DeleteMock.mutex.Lock()
+	mmDelete.DeleteMock.callArgs = append(mmDelete.DeleteMock.callArgs, &mm_params)
+	mmDelete.DeleteMock.mutex.Unlock()
+
+	for _, e := range mmDelete.DeleteMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDelete.DeleteMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDelete.DeleteMock.defaultExpectation.Counter, 1)
+		mm_want := mmDelete.DeleteMock.defaultExpectation.params
+		mm_want_ptrs := mmDelete.DeleteMock.defaultExpectation.paramPtrs
+
+		mm_got := GroupMemberMockDeleteParams{ctx, groupID, userID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDelete.t.Errorf("GroupMemberMock.Delete got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmDelete.t.Errorf("GroupMemberMock.Delete got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+			if mm_want_ptrs.userID != nil && !minimock.Equal(*mm_want_ptrs.userID, mm_got.userID) {
+				mmDelete.t.Errorf("GroupMemberMock.Delete got unexpected parameter userID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originUserID, *mm_want_ptrs.userID, mm_got.userID, minimock.Diff(*mm_want_ptrs.userID, mm_got.userID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDelete.t.Errorf("GroupMemberMock.Delete got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDelete.DeleteMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDelete.DeleteMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDelete.t.Fatal("No results are set for the GroupMemberMock.Delete")
+		}
+		return (*mm_results).err
+	}
+	if mmDelete.funcDelete != nil {
+		return mmDelete.funcDelete(ctx, groupID, userID)
+	}
+	mmDelete.t.Fatalf("Unexpected call to GroupMemberMock.Delete. %v %v %v", ctx, groupID, userID)
+	return
+}
+
+// DeleteAfterCounter returns a count of finished GroupMemberMock.Delete invocations
+func (mmDelete *GroupMemberMock) DeleteAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDelete.afterDeleteCounter)
+}
+
+// DeleteBeforeCounter returns a count of GroupMemberMock.Delete invocations
+func (mmDelete *GroupMemberMock) DeleteBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDelete.beforeDeleteCounter)
+}
+
+// Calls returns a list of arguments used in each call to GroupMemberMock.Delete.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDelete *mGroupMemberMockDelete) Calls() []*GroupMemberMockDeleteParams {
+	mmDelete.mutex.RLock()
+
+	argCopy := make([]*GroupMemberMockDeleteParams, len(mmDelete.callArgs))
+	copy(argCopy, mmDelete.callArgs)
+
+	mmDelete.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteDone returns true if the count of the Delete invocations corresponds
+// the number of defined expectations
+func (m *GroupMemberMock) MinimockDeleteDone() bool {
+	if m.DeleteMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteMock.invocationsDone()
+}
+
+// MinimockDeleteInspect logs each unmet expectation
+func (m *GroupMemberMock) MinimockDeleteInspect() {
+	for _, e := range m.DeleteMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to GroupMemberMock.Delete at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteCounter := mm_atomic.LoadUint64(&m.afterDeleteCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteMock.defaultExpectation != nil && afterDeleteCounter < 1 {
+		if m.DeleteMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to GroupMemberMock.Delete at\n%s", m.DeleteMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to GroupMemberMock.Delete at\n%s with params: %#v", m.DeleteMock.defaultExpectation.expectationOrigins.origin, *m.DeleteMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDelete != nil && afterDeleteCounter < 1 {
+		m.t.Errorf("Expected call to GroupMemberMock.Delete at\n%s", m.funcDeleteOrigin)
+	}
+
+	if !m.DeleteMock.invocationsDone() && afterDeleteCounter > 0 {
+		m.t.Errorf("Expected %d calls to GroupMemberMock.Delete at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteMock.expectedInvocations), m.DeleteMock.expectedInvocationsOrigin, afterDeleteCounter)
+	}
 }
 
 type mGroupMemberMockInsert struct {
@@ -837,6 +1220,8 @@ func (m *GroupMemberMock) MinimockSelectByUserIDAndGroupIDInspect() {
 func (m *GroupMemberMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockDeleteInspect()
+
 			m.MinimockInsertInspect()
 
 			m.MinimockSelectByUserIDAndGroupIDInspect()
@@ -863,6 +1248,7 @@ func (m *GroupMemberMock) MinimockWait(timeout mm_time.Duration) {
 func (m *GroupMemberMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockDeleteDone() &&
 		m.MinimockInsertDone() &&
 		m.MinimockSelectByUserIDAndGroupIDDone()
 }

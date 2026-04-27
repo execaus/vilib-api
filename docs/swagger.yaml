@@ -143,6 +143,20 @@ definitions:
       permission_mask:
         $ref: '#/definitions/domain.PermissionMask'
     type: object
+  dto.GetAllUsersResponse:
+    properties:
+      users:
+        items:
+          $ref: '#/definitions/dto.User'
+        type: array
+    type: object
+  dto.GetAllVideosResponse:
+    properties:
+      videos:
+        items:
+          $ref: '#/definitions/dto.Video'
+        type: array
+    type: object
   dto.LoginRequest:
     properties:
       email:
@@ -179,6 +193,20 @@ definitions:
     type: object
   dto.RegisterResponse:
     type: object
+  dto.RenameVideoRequest:
+    properties:
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+    required:
+    - name
+    type: object
+  dto.RenameVideoResponse:
+    properties:
+      video:
+        $ref: '#/definitions/dto.Video'
+    type: object
   dto.UpdateUserRequest:
     properties:
       role_id:
@@ -196,6 +224,8 @@ definitions:
     type: object
   dto.User:
     properties:
+      deactivated_at:
+        type: string
       email:
         type: string
       id:
@@ -204,7 +234,40 @@ definitions:
         type: string
       role_id:
         type: string
+      status:
+        type: string
       surname:
+        type: string
+    type: object
+  dto.Video:
+    properties:
+      author:
+        type: string
+      created_at:
+        type: string
+      group_id:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      status:
+        type: integer
+    type: object
+  dto.GetAllUserGroupsResponse:
+    properties:
+      groups:
+        items:
+          $ref: '#/definitions/dto.UserGroup'
+        type: array
+    type: object
+  dto.UserGroup:
+    properties:
+      account_id:
+        type: string
+      id:
+        type: string
+      name:
         type: string
     type: object
 host: localhost:8080
@@ -215,6 +278,38 @@ info:
   version: "1.0"
 paths:
   /api/v1/accounts/{accountId}/roles:
+    get:
+      description: Возвращает список всех ролей аккаунта
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.AccountRole'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Список ролей аккаунта
+      tags:
+      - account_roles
     post:
       consumes:
       - application/json
@@ -248,8 +343,77 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
       summary: Создание роли аккаунта
       tags:
-      - roles
+      - account_roles
+  /api/v1/accounts/{accountId}/roles/{roleId}:
+    delete:
+      description: Удаляет роль аккаунта. Нельзя удалить системную роль или роль,
+        назначенную активным пользователям.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID роли
+        in: path
+        name: roleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Удаление роли аккаунта
+      tags:
+      - account_roles
   /api/v1/accounts/{accountId}/user-groups:
+    get:
+      description: Возвращает список групп пользователей аккаунта
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.GetAllUserGroupsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Список групп пользователей
+      tags:
+      - user_groups
     post:
       consumes:
       - application/json
@@ -284,7 +448,7 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
       summary: Создание группы пользователей
       tags:
-      - user-groups
+      - user_groups
   /api/v1/accounts/{accountId}/user-groups/{groupId}/members:
     post:
       consumes:
@@ -324,7 +488,7 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
       summary: Добавление участников в группу
       tags:
-      - user-groups
+      - user_groups
   /api/v1/accounts/{accountId}/user-groups/{groupId}/video:
     post:
       consumes:
@@ -358,7 +522,7 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
       summary: Загрузка видео
       tags:
-      - video
+      - videos
   /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}:
     get:
       consumes:
@@ -401,8 +565,252 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
       summary: Получение видео
       tags:
-      - video
+      - videos
+  /api/v1/accounts/{accountId}/user-groups/{userGroupId}:
+    delete:
+      description: Каскадно удаляет группу вместе со всеми видео, участниками и ассетами
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Удаление группы пользователей
+      tags:
+      - user_groups
+  /api/v1/accounts/{accountId}/user-groups/{userGroupId}/members/{memberId}:
+    delete:
+      description: Удаляет пользователя из группы
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      - description: ID пользователя-участника
+        in: path
+        name: memberId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Удаление участника группы
+      tags:
+      - group_members
+  /api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}:
+    delete:
+      description: Удаляет видео из группы
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      - description: ID видео
+        in: path
+        name: videoId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Удаление видео
+      tags:
+      - videos
+    put:
+      consumes:
+      - application/json
+      description: Переименовывает видео в группе
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      - description: ID видео
+        in: path
+        name: videoId
+        required: true
+        type: string
+      - description: Тело запроса
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.RenameVideoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.RenameVideoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Переименование видео
+      tags:
+      - videos
+  /api/v1/accounts/{accountId}/user-groups/{userGroupId}/videos:
+    get:
+      description: Возвращает список видео в группе пользователей
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.GetAllVideosResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Список видео группы
+      tags:
+      - videos
   /api/v1/accounts/{accountId}/user-groups/roles:
+    get:
+      description: Возвращает список всех ролей групп для аккаунта
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/dto.GroupRole'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Список ролей групп
+      tags:
+      - group_roles
     post:
       consumes:
       - application/json
@@ -436,8 +844,81 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
       summary: Создание роли группы
       tags:
-      - roles
+      - group_roles
+  /api/v1/accounts/{accountId}/user-groups/roles/{groupRoleId}:
+    delete:
+      description: Удаляет роль группы. Нельзя удалить роль, назначенную участникам.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID роли группы
+        in: path
+        name: groupRoleId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Удаление роли группы
+      tags:
+      - group_roles
   /api/v1/accounts/{accountId}/users:
+    get:
+      description: Возвращает список пользователей, привязанных к аккаунту, с опциональной
+        фильтрацией по статусу
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: 'Фильтр по статусу: active, deactivated, all (по умолчанию: active)'
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.GetAllUsersResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Список пользователей аккаунта
+      tags:
+      - users
     post:
       consumes:
       - application/json
@@ -471,6 +952,131 @@ paths:
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
       summary: Создание пользователя
+      tags:
+      - users
+  /api/v1/accounts/{accountId}/users/{userId}:
+    delete:
+      description: Деактивирует пользователя в аккаунте (мягкое удаление)
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID пользователя
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Деактивация пользователя
+      tags:
+      - users
+    put:
+      consumes:
+      - application/json
+      description: Обновляет данные пользователя (например, роль)
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID пользователя
+        in: path
+        name: userId
+        required: true
+        type: string
+      - description: Тело запроса для обновления пользователя
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UpdateUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Обновление пользователя
+      tags:
+      - users
+  /api/v1/accounts/{accountId}/users/{userId}/reactivate:
+    post:
+      description: Реактивирует ранее деактивированного пользователя в аккаунте
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID пользователя
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UpdateUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Реактивация пользователя
       tags:
       - users
   /api/v1/auth/login:
@@ -539,39 +1145,4 @@ paths:
       summary: Регистрация нового пользователя
       tags:
       - auth
-  /api/v1/users/{user_id}:
-    put:
-      consumes:
-      - application/json
-      description: Обновляет данные пользователя (например, статус аккаунта)
-      parameters:
-      - description: ID пользователя
-        in: path
-        name: user_id
-        required: true
-        type: string
-      - description: Тело запроса для обновления пользователя
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/dto.UpdateUserRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/dto.UpdateUserResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/dto.ErrorMessage'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/dto.ErrorMessage'
-      summary: Обновление пользователя
-      tags:
-      - users
 swagger: "2.0"

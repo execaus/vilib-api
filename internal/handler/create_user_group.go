@@ -13,7 +13,7 @@ import (
 // CreateUserGroup godoc
 // @Summary Создание группы пользователей
 // @Description Создаёт новую группу пользователей и добавляет указанных пользователей в неё
-// @Tags user-groups
+// @Tags user_groups
 // @Accept json
 // @Produce json
 // @Param accountId path string true "ID аккаунта"

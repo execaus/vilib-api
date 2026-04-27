@@ -84,7 +84,7 @@ func (s *AccountService) CreateUser(
 	name, surname, email string,
 ) (domain.User, error) {
 	// Разрешено ли пользователю создавать пользователей
-	err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionCreateUser)
+	err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageUsers)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.User{}, err
@@ -104,6 +104,13 @@ func (s *AccountService) CreateUser(
 		return domain.User{}, err
 	}
 
+	// Хеширование пароля
+	passwordHash, err := s.srv.Auth.HashPassword(password)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+
 	// Получение дефолтной роли организации
 	defaultRole, err := s.srv.AccountRole.GetDefault(ctx, accountID)
 	if err != nil {
@@ -112,7 +119,7 @@ func (s *AccountService) CreateUser(
 	}
 
 	// Создание пользователя в базе данных
-	user, err := s.srv.User.Create(ctx, name, surname, email, password, defaultRole.ID)
+	user, err := s.srv.User.Create(ctx, name, surname, email, passwordHash, defaultRole.ID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.User{}, err

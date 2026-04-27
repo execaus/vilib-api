@@ -13,7 +13,7 @@ import (
 // UploadVideo godoc
 // @Summary Загрузка видео
 // @Description Возвращает преподписанный URL для загрузки видео в S3
-// @Tags video
+// @Tags videos
 // @Accept json
 // @Produce json
 // @Param accountId path string true "ID аккаунта"

@@ -14,16 +14,16 @@ const (
 const (
 	// AccountPermissionOwner владелец аккаунта.
 	AccountPermissionOwner PermissionFlag = iota
-	// AccountPermissionCreateUser разрешено ли создавать пользователей внутри организации.
-	AccountPermissionCreateUser
-	// AccountPermissionCreateAccountRole разрешено ли создавать роли аккаунта.
-	AccountPermissionCreateAccountRole
+	// AccountPermissionManageUsers разрешено ли управлять пользователями аккаунта.
+	AccountPermissionManageUsers
+	// AccountPermissionManageRoles разрешено ли управлять ролями аккаунта.
+	AccountPermissionManageRoles
+	// AccountPermissionManageGroups разрешено ли управлять группами аккаунта.
+	AccountPermissionManageGroups
 	// AccountPermissionVideoWatch разрешено ли смотреть видео.
 	AccountPermissionVideoWatch
-	// AccountPermissionVideoUpload разрешено ли загружать видео.
-	AccountPermissionVideoUpload
-	// AccountPermissionVideoEdit разрешено ли редактировать видео.
-	AccountPermissionVideoEdit
+	// AccountPermissionManageVideo разрешено ли загружать, редактировать и удалять видео.
+	AccountPermissionManageVideo
 )
 
 type AccountRole struct {

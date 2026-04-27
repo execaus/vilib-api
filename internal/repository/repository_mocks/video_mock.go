@@ -20,6 +20,13 @@ type VideoMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
+	funcDelete          func(ctx context.Context, videoID uuid.UUID) (err error)
+	funcDeleteOrigin    string
+	inspectFuncDelete   func(ctx context.Context, videoID uuid.UUID)
+	afterDeleteCounter  uint64
+	beforeDeleteCounter uint64
+	DeleteMock          mVideoMockDelete
+
 	funcInsert          func(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus) (v1 domain.Video, err error)
 	funcInsertOrigin    string
 	inspectFuncInsert   func(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus)
@@ -27,12 +34,19 @@ type VideoMock struct {
 	beforeInsertCounter uint64
 	InsertMock          mVideoMockInsert
 
-	funcSelect          func(ctx context.Context, id uuid.UUID) (v1 *domain.Video, err error)
+	funcSelect          func(ctx context.Context, id uuid.UUID) (vp1 *domain.Video, err error)
 	funcSelectOrigin    string
 	inspectFuncSelect   func(ctx context.Context, id uuid.UUID)
 	afterSelectCounter  uint64
 	beforeSelectCounter uint64
 	SelectMock          mVideoMockSelect
+
+	funcSelectByGroupID          func(ctx context.Context, groupID uuid.UUID) (va1 []domain.Video, err error)
+	funcSelectByGroupIDOrigin    string
+	inspectFuncSelectByGroupID   func(ctx context.Context, groupID uuid.UUID)
+	afterSelectByGroupIDCounter  uint64
+	beforeSelectByGroupIDCounter uint64
+	SelectByGroupIDMock          mVideoMockSelectByGroupID
 
 	funcUpdate          func(ctx context.Context, id uuid.UUID, status *domain.VideoStatus) (v1 domain.Video, err error)
 	funcUpdateOrigin    string
@@ -40,6 +54,13 @@ type VideoMock struct {
 	afterUpdateCounter  uint64
 	beforeUpdateCounter uint64
 	UpdateMock          mVideoMockUpdate
+
+	funcUpdateName          func(ctx context.Context, videoID uuid.UUID, name string) (v1 domain.Video, err error)
+	funcUpdateNameOrigin    string
+	inspectFuncUpdateName   func(ctx context.Context, videoID uuid.UUID, name string)
+	afterUpdateNameCounter  uint64
+	beforeUpdateNameCounter uint64
+	UpdateNameMock          mVideoMockUpdateName
 }
 
 // NewVideoMock returns a mock for mm_repository.Video
@@ -50,18 +71,369 @@ func NewVideoMock(t minimock.Tester) *VideoMock {
 		controller.RegisterMocker(m)
 	}
 
+	m.DeleteMock = mVideoMockDelete{mock: m}
+	m.DeleteMock.callArgs = []*VideoMockDeleteParams{}
+
 	m.InsertMock = mVideoMockInsert{mock: m}
 	m.InsertMock.callArgs = []*VideoMockInsertParams{}
 
 	m.SelectMock = mVideoMockSelect{mock: m}
 	m.SelectMock.callArgs = []*VideoMockSelectParams{}
 
+	m.SelectByGroupIDMock = mVideoMockSelectByGroupID{mock: m}
+	m.SelectByGroupIDMock.callArgs = []*VideoMockSelectByGroupIDParams{}
+
 	m.UpdateMock = mVideoMockUpdate{mock: m}
 	m.UpdateMock.callArgs = []*VideoMockUpdateParams{}
+
+	m.UpdateNameMock = mVideoMockUpdateName{mock: m}
+	m.UpdateNameMock.callArgs = []*VideoMockUpdateNameParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mVideoMockDelete struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockDeleteExpectation
+	expectations       []*VideoMockDeleteExpectation
+
+	callArgs []*VideoMockDeleteParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockDeleteExpectation specifies expectation struct of the Video.Delete
+type VideoMockDeleteExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockDeleteParams
+	paramPtrs          *VideoMockDeleteParamPtrs
+	expectationOrigins VideoMockDeleteExpectationOrigins
+	results            *VideoMockDeleteResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockDeleteParams contains parameters of the Video.Delete
+type VideoMockDeleteParams struct {
+	ctx     context.Context
+	videoID uuid.UUID
+}
+
+// VideoMockDeleteParamPtrs contains pointers to parameters of the Video.Delete
+type VideoMockDeleteParamPtrs struct {
+	ctx     *context.Context
+	videoID *uuid.UUID
+}
+
+// VideoMockDeleteResults contains results of the Video.Delete
+type VideoMockDeleteResults struct {
+	err error
+}
+
+// VideoMockDeleteOrigins contains origins of expectations of the Video.Delete
+type VideoMockDeleteExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originVideoID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDelete *mVideoMockDelete) Optional() *mVideoMockDelete {
+	mmDelete.optional = true
+	return mmDelete
+}
+
+// Expect sets up expected params for Video.Delete
+func (mmDelete *mVideoMockDelete) Expect(ctx context.Context, videoID uuid.UUID) *mVideoMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by ExpectParams functions")
+	}
+
+	mmDelete.defaultExpectation.params = &VideoMockDeleteParams{ctx, videoID}
+	mmDelete.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDelete.expectations {
+		if minimock.Equal(e.params, mmDelete.defaultExpectation.params) {
+			mmDelete.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDelete.defaultExpectation.params)
+		}
+	}
+
+	return mmDelete
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.Delete
+func (mmDelete *mVideoMockDelete) ExpectCtxParam1(ctx context.Context) *mVideoMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &VideoMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDelete.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectVideoIDParam2 sets up expected param videoID for Video.Delete
+func (mmDelete *mVideoMockDelete) ExpectVideoIDParam2(videoID uuid.UUID) *mVideoMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &VideoMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.videoID = &videoID
+	mmDelete.defaultExpectation.expectationOrigins.originVideoID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.Delete
+func (mmDelete *mVideoMockDelete) Inspect(f func(ctx context.Context, videoID uuid.UUID)) *mVideoMockDelete {
+	if mmDelete.mock.inspectFuncDelete != nil {
+		mmDelete.mock.t.Fatalf("Inspect function is already set for VideoMock.Delete")
+	}
+
+	mmDelete.mock.inspectFuncDelete = f
+
+	return mmDelete
+}
+
+// Return sets up results that will be returned by Video.Delete
+func (mmDelete *mVideoMockDelete) Return(err error) *VideoMock {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &VideoMockDeleteExpectation{mock: mmDelete.mock}
+	}
+	mmDelete.defaultExpectation.results = &VideoMockDeleteResults{err}
+	mmDelete.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDelete.mock
+}
+
+// Set uses given function f to mock the Video.Delete method
+func (mmDelete *mVideoMockDelete) Set(f func(ctx context.Context, videoID uuid.UUID) (err error)) *VideoMock {
+	if mmDelete.defaultExpectation != nil {
+		mmDelete.mock.t.Fatalf("Default expectation is already set for the Video.Delete method")
+	}
+
+	if len(mmDelete.expectations) > 0 {
+		mmDelete.mock.t.Fatalf("Some expectations are already set for the Video.Delete method")
+	}
+
+	mmDelete.mock.funcDelete = f
+	mmDelete.mock.funcDeleteOrigin = minimock.CallerInfo(1)
+	return mmDelete.mock
+}
+
+// When sets expectation for the Video.Delete which will trigger the result defined by the following
+// Then helper
+func (mmDelete *mVideoMockDelete) When(ctx context.Context, videoID uuid.UUID) *VideoMockDeleteExpectation {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("VideoMock.Delete mock is already set by Set")
+	}
+
+	expectation := &VideoMockDeleteExpectation{
+		mock:               mmDelete.mock,
+		params:             &VideoMockDeleteParams{ctx, videoID},
+		expectationOrigins: VideoMockDeleteExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDelete.expectations = append(mmDelete.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.Delete return parameters for the expectation previously defined by the When method
+func (e *VideoMockDeleteExpectation) Then(err error) *VideoMock {
+	e.results = &VideoMockDeleteResults{err}
+	return e.mock
+}
+
+// Times sets number of times Video.Delete should be invoked
+func (mmDelete *mVideoMockDelete) Times(n uint64) *mVideoMockDelete {
+	if n == 0 {
+		mmDelete.mock.t.Fatalf("Times of VideoMock.Delete mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDelete.expectedInvocations, n)
+	mmDelete.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDelete
+}
+
+func (mmDelete *mVideoMockDelete) invocationsDone() bool {
+	if len(mmDelete.expectations) == 0 && mmDelete.defaultExpectation == nil && mmDelete.mock.funcDelete == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDelete.mock.afterDeleteCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDelete.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// Delete implements mm_repository.Video
+func (mmDelete *VideoMock) Delete(ctx context.Context, videoID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDelete.beforeDeleteCounter, 1)
+	defer mm_atomic.AddUint64(&mmDelete.afterDeleteCounter, 1)
+
+	mmDelete.t.Helper()
+
+	if mmDelete.inspectFuncDelete != nil {
+		mmDelete.inspectFuncDelete(ctx, videoID)
+	}
+
+	mm_params := VideoMockDeleteParams{ctx, videoID}
+
+	// Record call args
+	mmDelete.DeleteMock.mutex.Lock()
+	mmDelete.DeleteMock.callArgs = append(mmDelete.DeleteMock.callArgs, &mm_params)
+	mmDelete.DeleteMock.mutex.Unlock()
+
+	for _, e := range mmDelete.DeleteMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDelete.DeleteMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDelete.DeleteMock.defaultExpectation.Counter, 1)
+		mm_want := mmDelete.DeleteMock.defaultExpectation.params
+		mm_want_ptrs := mmDelete.DeleteMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockDeleteParams{ctx, videoID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDelete.t.Errorf("VideoMock.Delete got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.videoID != nil && !minimock.Equal(*mm_want_ptrs.videoID, mm_got.videoID) {
+				mmDelete.t.Errorf("VideoMock.Delete got unexpected parameter videoID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originVideoID, *mm_want_ptrs.videoID, mm_got.videoID, minimock.Diff(*mm_want_ptrs.videoID, mm_got.videoID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDelete.t.Errorf("VideoMock.Delete got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDelete.DeleteMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDelete.DeleteMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDelete.t.Fatal("No results are set for the VideoMock.Delete")
+		}
+		return (*mm_results).err
+	}
+	if mmDelete.funcDelete != nil {
+		return mmDelete.funcDelete(ctx, videoID)
+	}
+	mmDelete.t.Fatalf("Unexpected call to VideoMock.Delete. %v %v", ctx, videoID)
+	return
+}
+
+// DeleteAfterCounter returns a count of finished VideoMock.Delete invocations
+func (mmDelete *VideoMock) DeleteAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDelete.afterDeleteCounter)
+}
+
+// DeleteBeforeCounter returns a count of VideoMock.Delete invocations
+func (mmDelete *VideoMock) DeleteBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDelete.beforeDeleteCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.Delete.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDelete *mVideoMockDelete) Calls() []*VideoMockDeleteParams {
+	mmDelete.mutex.RLock()
+
+	argCopy := make([]*VideoMockDeleteParams, len(mmDelete.callArgs))
+	copy(argCopy, mmDelete.callArgs)
+
+	mmDelete.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteDone returns true if the count of the Delete invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockDeleteDone() bool {
+	if m.DeleteMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteMock.invocationsDone()
+}
+
+// MinimockDeleteInspect logs each unmet expectation
+func (m *VideoMock) MinimockDeleteInspect() {
+	for _, e := range m.DeleteMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.Delete at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteCounter := mm_atomic.LoadUint64(&m.afterDeleteCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteMock.defaultExpectation != nil && afterDeleteCounter < 1 {
+		if m.DeleteMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.Delete at\n%s", m.DeleteMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.Delete at\n%s with params: %#v", m.DeleteMock.defaultExpectation.expectationOrigins.origin, *m.DeleteMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDelete != nil && afterDeleteCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.Delete at\n%s", m.funcDeleteOrigin)
+	}
+
+	if !m.DeleteMock.invocationsDone() && afterDeleteCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.Delete at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteMock.expectedInvocations), m.DeleteMock.expectedInvocationsOrigin, afterDeleteCounter)
+	}
 }
 
 type mVideoMockInsert struct {
@@ -538,7 +910,7 @@ type VideoMockSelectParamPtrs struct {
 
 // VideoMockSelectResults contains results of the Video.Select
 type VideoMockSelectResults struct {
-	v1  *domain.Video
+	vp1 *domain.Video
 	err error
 }
 
@@ -642,7 +1014,7 @@ func (mmSelect *mVideoMockSelect) Inspect(f func(ctx context.Context, id uuid.UU
 }
 
 // Return sets up results that will be returned by Video.Select
-func (mmSelect *mVideoMockSelect) Return(v1 *domain.Video, err error) *VideoMock {
+func (mmSelect *mVideoMockSelect) Return(vp1 *domain.Video, err error) *VideoMock {
 	if mmSelect.mock.funcSelect != nil {
 		mmSelect.mock.t.Fatalf("VideoMock.Select mock is already set by Set")
 	}
@@ -650,13 +1022,13 @@ func (mmSelect *mVideoMockSelect) Return(v1 *domain.Video, err error) *VideoMock
 	if mmSelect.defaultExpectation == nil {
 		mmSelect.defaultExpectation = &VideoMockSelectExpectation{mock: mmSelect.mock}
 	}
-	mmSelect.defaultExpectation.results = &VideoMockSelectResults{v1, err}
+	mmSelect.defaultExpectation.results = &VideoMockSelectResults{vp1, err}
 	mmSelect.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
 	return mmSelect.mock
 }
 
 // Set uses given function f to mock the Video.Select method
-func (mmSelect *mVideoMockSelect) Set(f func(ctx context.Context, id uuid.UUID) (v1 *domain.Video, err error)) *VideoMock {
+func (mmSelect *mVideoMockSelect) Set(f func(ctx context.Context, id uuid.UUID) (vp1 *domain.Video, err error)) *VideoMock {
 	if mmSelect.defaultExpectation != nil {
 		mmSelect.mock.t.Fatalf("Default expectation is already set for the Video.Select method")
 	}
@@ -687,8 +1059,8 @@ func (mmSelect *mVideoMockSelect) When(ctx context.Context, id uuid.UUID) *Video
 }
 
 // Then sets up Video.Select return parameters for the expectation previously defined by the When method
-func (e *VideoMockSelectExpectation) Then(v1 *domain.Video, err error) *VideoMock {
-	e.results = &VideoMockSelectResults{v1, err}
+func (e *VideoMockSelectExpectation) Then(vp1 *domain.Video, err error) *VideoMock {
+	e.results = &VideoMockSelectResults{vp1, err}
 	return e.mock
 }
 
@@ -714,7 +1086,7 @@ func (mmSelect *mVideoMockSelect) invocationsDone() bool {
 }
 
 // Select implements mm_repository.Video
-func (mmSelect *VideoMock) Select(ctx context.Context, id uuid.UUID) (v1 *domain.Video, err error) {
+func (mmSelect *VideoMock) Select(ctx context.Context, id uuid.UUID) (vp1 *domain.Video, err error) {
 	mm_atomic.AddUint64(&mmSelect.beforeSelectCounter, 1)
 	defer mm_atomic.AddUint64(&mmSelect.afterSelectCounter, 1)
 
@@ -734,7 +1106,7 @@ func (mmSelect *VideoMock) Select(ctx context.Context, id uuid.UUID) (v1 *domain
 	for _, e := range mmSelect.SelectMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.v1, e.results.err
+			return e.results.vp1, e.results.err
 		}
 	}
 
@@ -766,7 +1138,7 @@ func (mmSelect *VideoMock) Select(ctx context.Context, id uuid.UUID) (v1 *domain
 		if mm_results == nil {
 			mmSelect.t.Fatal("No results are set for the VideoMock.Select")
 		}
-		return (*mm_results).v1, (*mm_results).err
+		return (*mm_results).vp1, (*mm_results).err
 	}
 	if mmSelect.funcSelect != nil {
 		return mmSelect.funcSelect(ctx, id)
@@ -840,6 +1212,349 @@ func (m *VideoMock) MinimockSelectInspect() {
 	if !m.SelectMock.invocationsDone() && afterSelectCounter > 0 {
 		m.t.Errorf("Expected %d calls to VideoMock.Select at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.SelectMock.expectedInvocations), m.SelectMock.expectedInvocationsOrigin, afterSelectCounter)
+	}
+}
+
+type mVideoMockSelectByGroupID struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockSelectByGroupIDExpectation
+	expectations       []*VideoMockSelectByGroupIDExpectation
+
+	callArgs []*VideoMockSelectByGroupIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockSelectByGroupIDExpectation specifies expectation struct of the Video.SelectByGroupID
+type VideoMockSelectByGroupIDExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockSelectByGroupIDParams
+	paramPtrs          *VideoMockSelectByGroupIDParamPtrs
+	expectationOrigins VideoMockSelectByGroupIDExpectationOrigins
+	results            *VideoMockSelectByGroupIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockSelectByGroupIDParams contains parameters of the Video.SelectByGroupID
+type VideoMockSelectByGroupIDParams struct {
+	ctx     context.Context
+	groupID uuid.UUID
+}
+
+// VideoMockSelectByGroupIDParamPtrs contains pointers to parameters of the Video.SelectByGroupID
+type VideoMockSelectByGroupIDParamPtrs struct {
+	ctx     *context.Context
+	groupID *uuid.UUID
+}
+
+// VideoMockSelectByGroupIDResults contains results of the Video.SelectByGroupID
+type VideoMockSelectByGroupIDResults struct {
+	va1 []domain.Video
+	err error
+}
+
+// VideoMockSelectByGroupIDOrigins contains origins of expectations of the Video.SelectByGroupID
+type VideoMockSelectByGroupIDExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originGroupID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) Optional() *mVideoMockSelectByGroupID {
+	mmSelectByGroupID.optional = true
+	return mmSelectByGroupID
+}
+
+// Expect sets up expected params for Video.SelectByGroupID
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) Expect(ctx context.Context, groupID uuid.UUID) *mVideoMockSelectByGroupID {
+	if mmSelectByGroupID.mock.funcSelectByGroupID != nil {
+		mmSelectByGroupID.mock.t.Fatalf("VideoMock.SelectByGroupID mock is already set by Set")
+	}
+
+	if mmSelectByGroupID.defaultExpectation == nil {
+		mmSelectByGroupID.defaultExpectation = &VideoMockSelectByGroupIDExpectation{}
+	}
+
+	if mmSelectByGroupID.defaultExpectation.paramPtrs != nil {
+		mmSelectByGroupID.mock.t.Fatalf("VideoMock.SelectByGroupID mock is already set by ExpectParams functions")
+	}
+
+	mmSelectByGroupID.defaultExpectation.params = &VideoMockSelectByGroupIDParams{ctx, groupID}
+	mmSelectByGroupID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSelectByGroupID.expectations {
+		if minimock.Equal(e.params, mmSelectByGroupID.defaultExpectation.params) {
+			mmSelectByGroupID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSelectByGroupID.defaultExpectation.params)
+		}
+	}
+
+	return mmSelectByGroupID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.SelectByGroupID
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) ExpectCtxParam1(ctx context.Context) *mVideoMockSelectByGroupID {
+	if mmSelectByGroupID.mock.funcSelectByGroupID != nil {
+		mmSelectByGroupID.mock.t.Fatalf("VideoMock.SelectByGroupID mock is already set by Set")
+	}
+
+	if mmSelectByGroupID.defaultExpectation == nil {
+		mmSelectByGroupID.defaultExpectation = &VideoMockSelectByGroupIDExpectation{}
+	}
+
+	if mmSelectByGroupID.defaultExpectation.params != nil {
+		mmSelectByGroupID.mock.t.Fatalf("VideoMock.SelectByGroupID mock is already set by Expect")
+	}
+
+	if mmSelectByGroupID.defaultExpectation.paramPtrs == nil {
+		mmSelectByGroupID.defaultExpectation.paramPtrs = &VideoMockSelectByGroupIDParamPtrs{}
+	}
+	mmSelectByGroupID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSelectByGroupID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSelectByGroupID
+}
+
+// ExpectGroupIDParam2 sets up expected param groupID for Video.SelectByGroupID
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) ExpectGroupIDParam2(groupID uuid.UUID) *mVideoMockSelectByGroupID {
+	if mmSelectByGroupID.mock.funcSelectByGroupID != nil {
+		mmSelectByGroupID.mock.t.Fatalf("VideoMock.SelectByGroupID mock is already set by Set")
+	}
+
+	if mmSelectByGroupID.defaultExpectation == nil {
+		mmSelectByGroupID.defaultExpectation = &VideoMockSelectByGroupIDExpectation{}
+	}
+
+	if mmSelectByGroupID.defaultExpectation.params != nil {
+		mmSelectByGroupID.mock.t.Fatalf("VideoMock.SelectByGroupID mock is already set by Expect")
+	}
+
+	if mmSelectByGroupID.defaultExpectation.paramPtrs == nil {
+		mmSelectByGroupID.defaultExpectation.paramPtrs = &VideoMockSelectByGroupIDParamPtrs{}
+	}
+	mmSelectByGroupID.defaultExpectation.paramPtrs.groupID = &groupID
+	mmSelectByGroupID.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmSelectByGroupID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.SelectByGroupID
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) Inspect(f func(ctx context.Context, groupID uuid.UUID)) *mVideoMockSelectByGroupID {
+	if mmSelectByGroupID.mock.inspectFuncSelectByGroupID != nil {
+		mmSelectByGroupID.mock.t.Fatalf("Inspect function is already set for VideoMock.SelectByGroupID")
+	}
+
+	mmSelectByGroupID.mock.inspectFuncSelectByGroupID = f
+
+	return mmSelectByGroupID
+}
+
+// Return sets up results that will be returned by Video.SelectByGroupID
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) Return(va1 []domain.Video, err error) *VideoMock {
+	if mmSelectByGroupID.mock.funcSelectByGroupID != nil {
+		mmSelectByGroupID.mock.t.Fatalf("VideoMock.SelectByGroupID mock is already set by Set")
+	}
+
+	if mmSelectByGroupID.defaultExpectation == nil {
+		mmSelectByGroupID.defaultExpectation = &VideoMockSelectByGroupIDExpectation{mock: mmSelectByGroupID.mock}
+	}
+	mmSelectByGroupID.defaultExpectation.results = &VideoMockSelectByGroupIDResults{va1, err}
+	mmSelectByGroupID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSelectByGroupID.mock
+}
+
+// Set uses given function f to mock the Video.SelectByGroupID method
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) Set(f func(ctx context.Context, groupID uuid.UUID) (va1 []domain.Video, err error)) *VideoMock {
+	if mmSelectByGroupID.defaultExpectation != nil {
+		mmSelectByGroupID.mock.t.Fatalf("Default expectation is already set for the Video.SelectByGroupID method")
+	}
+
+	if len(mmSelectByGroupID.expectations) > 0 {
+		mmSelectByGroupID.mock.t.Fatalf("Some expectations are already set for the Video.SelectByGroupID method")
+	}
+
+	mmSelectByGroupID.mock.funcSelectByGroupID = f
+	mmSelectByGroupID.mock.funcSelectByGroupIDOrigin = minimock.CallerInfo(1)
+	return mmSelectByGroupID.mock
+}
+
+// When sets expectation for the Video.SelectByGroupID which will trigger the result defined by the following
+// Then helper
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) When(ctx context.Context, groupID uuid.UUID) *VideoMockSelectByGroupIDExpectation {
+	if mmSelectByGroupID.mock.funcSelectByGroupID != nil {
+		mmSelectByGroupID.mock.t.Fatalf("VideoMock.SelectByGroupID mock is already set by Set")
+	}
+
+	expectation := &VideoMockSelectByGroupIDExpectation{
+		mock:               mmSelectByGroupID.mock,
+		params:             &VideoMockSelectByGroupIDParams{ctx, groupID},
+		expectationOrigins: VideoMockSelectByGroupIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSelectByGroupID.expectations = append(mmSelectByGroupID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.SelectByGroupID return parameters for the expectation previously defined by the When method
+func (e *VideoMockSelectByGroupIDExpectation) Then(va1 []domain.Video, err error) *VideoMock {
+	e.results = &VideoMockSelectByGroupIDResults{va1, err}
+	return e.mock
+}
+
+// Times sets number of times Video.SelectByGroupID should be invoked
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) Times(n uint64) *mVideoMockSelectByGroupID {
+	if n == 0 {
+		mmSelectByGroupID.mock.t.Fatalf("Times of VideoMock.SelectByGroupID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSelectByGroupID.expectedInvocations, n)
+	mmSelectByGroupID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSelectByGroupID
+}
+
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) invocationsDone() bool {
+	if len(mmSelectByGroupID.expectations) == 0 && mmSelectByGroupID.defaultExpectation == nil && mmSelectByGroupID.mock.funcSelectByGroupID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSelectByGroupID.mock.afterSelectByGroupIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSelectByGroupID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SelectByGroupID implements mm_repository.Video
+func (mmSelectByGroupID *VideoMock) SelectByGroupID(ctx context.Context, groupID uuid.UUID) (va1 []domain.Video, err error) {
+	mm_atomic.AddUint64(&mmSelectByGroupID.beforeSelectByGroupIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmSelectByGroupID.afterSelectByGroupIDCounter, 1)
+
+	mmSelectByGroupID.t.Helper()
+
+	if mmSelectByGroupID.inspectFuncSelectByGroupID != nil {
+		mmSelectByGroupID.inspectFuncSelectByGroupID(ctx, groupID)
+	}
+
+	mm_params := VideoMockSelectByGroupIDParams{ctx, groupID}
+
+	// Record call args
+	mmSelectByGroupID.SelectByGroupIDMock.mutex.Lock()
+	mmSelectByGroupID.SelectByGroupIDMock.callArgs = append(mmSelectByGroupID.SelectByGroupIDMock.callArgs, &mm_params)
+	mmSelectByGroupID.SelectByGroupIDMock.mutex.Unlock()
+
+	for _, e := range mmSelectByGroupID.SelectByGroupIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.va1, e.results.err
+		}
+	}
+
+	if mmSelectByGroupID.SelectByGroupIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSelectByGroupID.SelectByGroupIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmSelectByGroupID.SelectByGroupIDMock.defaultExpectation.params
+		mm_want_ptrs := mmSelectByGroupID.SelectByGroupIDMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockSelectByGroupIDParams{ctx, groupID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSelectByGroupID.t.Errorf("VideoMock.SelectByGroupID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectByGroupID.SelectByGroupIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmSelectByGroupID.t.Errorf("VideoMock.SelectByGroupID got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectByGroupID.SelectByGroupIDMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSelectByGroupID.t.Errorf("VideoMock.SelectByGroupID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSelectByGroupID.SelectByGroupIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSelectByGroupID.SelectByGroupIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSelectByGroupID.t.Fatal("No results are set for the VideoMock.SelectByGroupID")
+		}
+		return (*mm_results).va1, (*mm_results).err
+	}
+	if mmSelectByGroupID.funcSelectByGroupID != nil {
+		return mmSelectByGroupID.funcSelectByGroupID(ctx, groupID)
+	}
+	mmSelectByGroupID.t.Fatalf("Unexpected call to VideoMock.SelectByGroupID. %v %v", ctx, groupID)
+	return
+}
+
+// SelectByGroupIDAfterCounter returns a count of finished VideoMock.SelectByGroupID invocations
+func (mmSelectByGroupID *VideoMock) SelectByGroupIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectByGroupID.afterSelectByGroupIDCounter)
+}
+
+// SelectByGroupIDBeforeCounter returns a count of VideoMock.SelectByGroupID invocations
+func (mmSelectByGroupID *VideoMock) SelectByGroupIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectByGroupID.beforeSelectByGroupIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.SelectByGroupID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSelectByGroupID *mVideoMockSelectByGroupID) Calls() []*VideoMockSelectByGroupIDParams {
+	mmSelectByGroupID.mutex.RLock()
+
+	argCopy := make([]*VideoMockSelectByGroupIDParams, len(mmSelectByGroupID.callArgs))
+	copy(argCopy, mmSelectByGroupID.callArgs)
+
+	mmSelectByGroupID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSelectByGroupIDDone returns true if the count of the SelectByGroupID invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockSelectByGroupIDDone() bool {
+	if m.SelectByGroupIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SelectByGroupIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SelectByGroupIDMock.invocationsDone()
+}
+
+// MinimockSelectByGroupIDInspect logs each unmet expectation
+func (m *VideoMock) MinimockSelectByGroupIDInspect() {
+	for _, e := range m.SelectByGroupIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.SelectByGroupID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSelectByGroupIDCounter := mm_atomic.LoadUint64(&m.afterSelectByGroupIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SelectByGroupIDMock.defaultExpectation != nil && afterSelectByGroupIDCounter < 1 {
+		if m.SelectByGroupIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.SelectByGroupID at\n%s", m.SelectByGroupIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.SelectByGroupID at\n%s with params: %#v", m.SelectByGroupIDMock.defaultExpectation.expectationOrigins.origin, *m.SelectByGroupIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSelectByGroupID != nil && afterSelectByGroupIDCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.SelectByGroupID at\n%s", m.funcSelectByGroupIDOrigin)
+	}
+
+	if !m.SelectByGroupIDMock.invocationsDone() && afterSelectByGroupIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.SelectByGroupID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SelectByGroupIDMock.expectedInvocations), m.SelectByGroupIDMock.expectedInvocationsOrigin, afterSelectByGroupIDCounter)
 	}
 }
 
@@ -1217,15 +1932,395 @@ func (m *VideoMock) MinimockUpdateInspect() {
 	}
 }
 
+type mVideoMockUpdateName struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockUpdateNameExpectation
+	expectations       []*VideoMockUpdateNameExpectation
+
+	callArgs []*VideoMockUpdateNameParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockUpdateNameExpectation specifies expectation struct of the Video.UpdateName
+type VideoMockUpdateNameExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockUpdateNameParams
+	paramPtrs          *VideoMockUpdateNameParamPtrs
+	expectationOrigins VideoMockUpdateNameExpectationOrigins
+	results            *VideoMockUpdateNameResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockUpdateNameParams contains parameters of the Video.UpdateName
+type VideoMockUpdateNameParams struct {
+	ctx     context.Context
+	videoID uuid.UUID
+	name    string
+}
+
+// VideoMockUpdateNameParamPtrs contains pointers to parameters of the Video.UpdateName
+type VideoMockUpdateNameParamPtrs struct {
+	ctx     *context.Context
+	videoID *uuid.UUID
+	name    *string
+}
+
+// VideoMockUpdateNameResults contains results of the Video.UpdateName
+type VideoMockUpdateNameResults struct {
+	v1  domain.Video
+	err error
+}
+
+// VideoMockUpdateNameOrigins contains origins of expectations of the Video.UpdateName
+type VideoMockUpdateNameExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originVideoID string
+	originName    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateName *mVideoMockUpdateName) Optional() *mVideoMockUpdateName {
+	mmUpdateName.optional = true
+	return mmUpdateName
+}
+
+// Expect sets up expected params for Video.UpdateName
+func (mmUpdateName *mVideoMockUpdateName) Expect(ctx context.Context, videoID uuid.UUID, name string) *mVideoMockUpdateName {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("VideoMock.UpdateName mock is already set by Set")
+	}
+
+	if mmUpdateName.defaultExpectation == nil {
+		mmUpdateName.defaultExpectation = &VideoMockUpdateNameExpectation{}
+	}
+
+	if mmUpdateName.defaultExpectation.paramPtrs != nil {
+		mmUpdateName.mock.t.Fatalf("VideoMock.UpdateName mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateName.defaultExpectation.params = &VideoMockUpdateNameParams{ctx, videoID, name}
+	mmUpdateName.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateName.expectations {
+		if minimock.Equal(e.params, mmUpdateName.defaultExpectation.params) {
+			mmUpdateName.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateName.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateName
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.UpdateName
+func (mmUpdateName *mVideoMockUpdateName) ExpectCtxParam1(ctx context.Context) *mVideoMockUpdateName {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("VideoMock.UpdateName mock is already set by Set")
+	}
+
+	if mmUpdateName.defaultExpectation == nil {
+		mmUpdateName.defaultExpectation = &VideoMockUpdateNameExpectation{}
+	}
+
+	if mmUpdateName.defaultExpectation.params != nil {
+		mmUpdateName.mock.t.Fatalf("VideoMock.UpdateName mock is already set by Expect")
+	}
+
+	if mmUpdateName.defaultExpectation.paramPtrs == nil {
+		mmUpdateName.defaultExpectation.paramPtrs = &VideoMockUpdateNameParamPtrs{}
+	}
+	mmUpdateName.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateName.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateName
+}
+
+// ExpectVideoIDParam2 sets up expected param videoID for Video.UpdateName
+func (mmUpdateName *mVideoMockUpdateName) ExpectVideoIDParam2(videoID uuid.UUID) *mVideoMockUpdateName {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("VideoMock.UpdateName mock is already set by Set")
+	}
+
+	if mmUpdateName.defaultExpectation == nil {
+		mmUpdateName.defaultExpectation = &VideoMockUpdateNameExpectation{}
+	}
+
+	if mmUpdateName.defaultExpectation.params != nil {
+		mmUpdateName.mock.t.Fatalf("VideoMock.UpdateName mock is already set by Expect")
+	}
+
+	if mmUpdateName.defaultExpectation.paramPtrs == nil {
+		mmUpdateName.defaultExpectation.paramPtrs = &VideoMockUpdateNameParamPtrs{}
+	}
+	mmUpdateName.defaultExpectation.paramPtrs.videoID = &videoID
+	mmUpdateName.defaultExpectation.expectationOrigins.originVideoID = minimock.CallerInfo(1)
+
+	return mmUpdateName
+}
+
+// ExpectNameParam3 sets up expected param name for Video.UpdateName
+func (mmUpdateName *mVideoMockUpdateName) ExpectNameParam3(name string) *mVideoMockUpdateName {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("VideoMock.UpdateName mock is already set by Set")
+	}
+
+	if mmUpdateName.defaultExpectation == nil {
+		mmUpdateName.defaultExpectation = &VideoMockUpdateNameExpectation{}
+	}
+
+	if mmUpdateName.defaultExpectation.params != nil {
+		mmUpdateName.mock.t.Fatalf("VideoMock.UpdateName mock is already set by Expect")
+	}
+
+	if mmUpdateName.defaultExpectation.paramPtrs == nil {
+		mmUpdateName.defaultExpectation.paramPtrs = &VideoMockUpdateNameParamPtrs{}
+	}
+	mmUpdateName.defaultExpectation.paramPtrs.name = &name
+	mmUpdateName.defaultExpectation.expectationOrigins.originName = minimock.CallerInfo(1)
+
+	return mmUpdateName
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.UpdateName
+func (mmUpdateName *mVideoMockUpdateName) Inspect(f func(ctx context.Context, videoID uuid.UUID, name string)) *mVideoMockUpdateName {
+	if mmUpdateName.mock.inspectFuncUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("Inspect function is already set for VideoMock.UpdateName")
+	}
+
+	mmUpdateName.mock.inspectFuncUpdateName = f
+
+	return mmUpdateName
+}
+
+// Return sets up results that will be returned by Video.UpdateName
+func (mmUpdateName *mVideoMockUpdateName) Return(v1 domain.Video, err error) *VideoMock {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("VideoMock.UpdateName mock is already set by Set")
+	}
+
+	if mmUpdateName.defaultExpectation == nil {
+		mmUpdateName.defaultExpectation = &VideoMockUpdateNameExpectation{mock: mmUpdateName.mock}
+	}
+	mmUpdateName.defaultExpectation.results = &VideoMockUpdateNameResults{v1, err}
+	mmUpdateName.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateName.mock
+}
+
+// Set uses given function f to mock the Video.UpdateName method
+func (mmUpdateName *mVideoMockUpdateName) Set(f func(ctx context.Context, videoID uuid.UUID, name string) (v1 domain.Video, err error)) *VideoMock {
+	if mmUpdateName.defaultExpectation != nil {
+		mmUpdateName.mock.t.Fatalf("Default expectation is already set for the Video.UpdateName method")
+	}
+
+	if len(mmUpdateName.expectations) > 0 {
+		mmUpdateName.mock.t.Fatalf("Some expectations are already set for the Video.UpdateName method")
+	}
+
+	mmUpdateName.mock.funcUpdateName = f
+	mmUpdateName.mock.funcUpdateNameOrigin = minimock.CallerInfo(1)
+	return mmUpdateName.mock
+}
+
+// When sets expectation for the Video.UpdateName which will trigger the result defined by the following
+// Then helper
+func (mmUpdateName *mVideoMockUpdateName) When(ctx context.Context, videoID uuid.UUID, name string) *VideoMockUpdateNameExpectation {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("VideoMock.UpdateName mock is already set by Set")
+	}
+
+	expectation := &VideoMockUpdateNameExpectation{
+		mock:               mmUpdateName.mock,
+		params:             &VideoMockUpdateNameParams{ctx, videoID, name},
+		expectationOrigins: VideoMockUpdateNameExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateName.expectations = append(mmUpdateName.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.UpdateName return parameters for the expectation previously defined by the When method
+func (e *VideoMockUpdateNameExpectation) Then(v1 domain.Video, err error) *VideoMock {
+	e.results = &VideoMockUpdateNameResults{v1, err}
+	return e.mock
+}
+
+// Times sets number of times Video.UpdateName should be invoked
+func (mmUpdateName *mVideoMockUpdateName) Times(n uint64) *mVideoMockUpdateName {
+	if n == 0 {
+		mmUpdateName.mock.t.Fatalf("Times of VideoMock.UpdateName mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateName.expectedInvocations, n)
+	mmUpdateName.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateName
+}
+
+func (mmUpdateName *mVideoMockUpdateName) invocationsDone() bool {
+	if len(mmUpdateName.expectations) == 0 && mmUpdateName.defaultExpectation == nil && mmUpdateName.mock.funcUpdateName == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateName.mock.afterUpdateNameCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateName.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateName implements mm_repository.Video
+func (mmUpdateName *VideoMock) UpdateName(ctx context.Context, videoID uuid.UUID, name string) (v1 domain.Video, err error) {
+	mm_atomic.AddUint64(&mmUpdateName.beforeUpdateNameCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateName.afterUpdateNameCounter, 1)
+
+	mmUpdateName.t.Helper()
+
+	if mmUpdateName.inspectFuncUpdateName != nil {
+		mmUpdateName.inspectFuncUpdateName(ctx, videoID, name)
+	}
+
+	mm_params := VideoMockUpdateNameParams{ctx, videoID, name}
+
+	// Record call args
+	mmUpdateName.UpdateNameMock.mutex.Lock()
+	mmUpdateName.UpdateNameMock.callArgs = append(mmUpdateName.UpdateNameMock.callArgs, &mm_params)
+	mmUpdateName.UpdateNameMock.mutex.Unlock()
+
+	for _, e := range mmUpdateName.UpdateNameMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.v1, e.results.err
+		}
+	}
+
+	if mmUpdateName.UpdateNameMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateName.UpdateNameMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateName.UpdateNameMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateName.UpdateNameMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockUpdateNameParams{ctx, videoID, name}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateName.t.Errorf("VideoMock.UpdateName got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateName.UpdateNameMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.videoID != nil && !minimock.Equal(*mm_want_ptrs.videoID, mm_got.videoID) {
+				mmUpdateName.t.Errorf("VideoMock.UpdateName got unexpected parameter videoID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateName.UpdateNameMock.defaultExpectation.expectationOrigins.originVideoID, *mm_want_ptrs.videoID, mm_got.videoID, minimock.Diff(*mm_want_ptrs.videoID, mm_got.videoID))
+			}
+
+			if mm_want_ptrs.name != nil && !minimock.Equal(*mm_want_ptrs.name, mm_got.name) {
+				mmUpdateName.t.Errorf("VideoMock.UpdateName got unexpected parameter name, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateName.UpdateNameMock.defaultExpectation.expectationOrigins.originName, *mm_want_ptrs.name, mm_got.name, minimock.Diff(*mm_want_ptrs.name, mm_got.name))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateName.t.Errorf("VideoMock.UpdateName got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateName.UpdateNameMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateName.UpdateNameMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateName.t.Fatal("No results are set for the VideoMock.UpdateName")
+		}
+		return (*mm_results).v1, (*mm_results).err
+	}
+	if mmUpdateName.funcUpdateName != nil {
+		return mmUpdateName.funcUpdateName(ctx, videoID, name)
+	}
+	mmUpdateName.t.Fatalf("Unexpected call to VideoMock.UpdateName. %v %v %v", ctx, videoID, name)
+	return
+}
+
+// UpdateNameAfterCounter returns a count of finished VideoMock.UpdateName invocations
+func (mmUpdateName *VideoMock) UpdateNameAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateName.afterUpdateNameCounter)
+}
+
+// UpdateNameBeforeCounter returns a count of VideoMock.UpdateName invocations
+func (mmUpdateName *VideoMock) UpdateNameBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateName.beforeUpdateNameCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.UpdateName.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateName *mVideoMockUpdateName) Calls() []*VideoMockUpdateNameParams {
+	mmUpdateName.mutex.RLock()
+
+	argCopy := make([]*VideoMockUpdateNameParams, len(mmUpdateName.callArgs))
+	copy(argCopy, mmUpdateName.callArgs)
+
+	mmUpdateName.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateNameDone returns true if the count of the UpdateName invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockUpdateNameDone() bool {
+	if m.UpdateNameMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateNameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateNameMock.invocationsDone()
+}
+
+// MinimockUpdateNameInspect logs each unmet expectation
+func (m *VideoMock) MinimockUpdateNameInspect() {
+	for _, e := range m.UpdateNameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.UpdateName at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateNameCounter := mm_atomic.LoadUint64(&m.afterUpdateNameCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateNameMock.defaultExpectation != nil && afterUpdateNameCounter < 1 {
+		if m.UpdateNameMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.UpdateName at\n%s", m.UpdateNameMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.UpdateName at\n%s with params: %#v", m.UpdateNameMock.defaultExpectation.expectationOrigins.origin, *m.UpdateNameMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateName != nil && afterUpdateNameCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.UpdateName at\n%s", m.funcUpdateNameOrigin)
+	}
+
+	if !m.UpdateNameMock.invocationsDone() && afterUpdateNameCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.UpdateName at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateNameMock.expectedInvocations), m.UpdateNameMock.expectedInvocationsOrigin, afterUpdateNameCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *VideoMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockDeleteInspect()
+
 			m.MinimockInsertInspect()
 
 			m.MinimockSelectInspect()
 
+			m.MinimockSelectByGroupIDInspect()
+
 			m.MinimockUpdateInspect()
+
+			m.MinimockUpdateNameInspect()
 		}
 	})
 }
@@ -1249,7 +2344,10 @@ func (m *VideoMock) MinimockWait(timeout mm_time.Duration) {
 func (m *VideoMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockDeleteDone() &&
 		m.MinimockInsertDone() &&
 		m.MinimockSelectDone() &&
-		m.MinimockUpdateDone()
+		m.MinimockSelectByGroupIDDone() &&
+		m.MinimockUpdateDone() &&
+		m.MinimockUpdateNameDone()
 }

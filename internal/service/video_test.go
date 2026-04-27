@@ -54,7 +54,7 @@ func TestService_Video_GetPreflightUploadURL(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "success",
+			name: "success - account permission",
 			setupMocks: func(t *testing.T,
 				acc *service_mocks.AccessMock,
 				gm *service_mocks.GroupMemberMock,
@@ -62,10 +62,8 @@ func TestService_Video_GetPreflightUploadURL(t *testing.T) {
 				s3 *service_mocks.S3Mock,
 				repo *repository_mocks.VideoMock,
 			) {
-				groupRoleID := uuid.New()
-				acc.IsCheckAccountActionMock.Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionVideoUpload).Return(nil)
-				gm.GetByUserIDAndGroupIDMock.Expect(minimock.AnyContext, testUserID, testGroupID).Return(domain.GroupMember{UserID: testUserID, RoleID: groupRoleID}, nil)
-				gr.GetByIDMock.Expect(minimock.AnyContext, groupRoleID).Return([]domain.GroupRole{{PermissionMask: domain.PermissionMask(domain.GroupPermissionCreateVideo)}}, nil)
+				// Аккаунтное право есть — групповое не проверяется
+				acc.IsCheckAccountActionMock.Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).Return(nil)
 				repo.InsertMock.Expect(minimock.AnyContext, domain.DefaultVideoName, testGroupID, testUserID, domain.VideoStatusUploading).Return(testVideo, nil)
 				s3.GetPreflightUploadURLMock.Expect(minimock.AnyContext, domain.VideoBucketOriginal, testVideo.ID, domain.VideoUploadURLTTL).Return(testPreflightURL, nil)
 			},
@@ -77,7 +75,7 @@ func TestService_Video_GetPreflightUploadURL(t *testing.T) {
 			want: testPreflightURL,
 		},
 		{
-			name: "access denied",
+			name: "success - group permission only",
 			setupMocks: func(t *testing.T,
 				acc *service_mocks.AccessMock,
 				gm *service_mocks.GroupMemberMock,
@@ -85,7 +83,32 @@ func TestService_Video_GetPreflightUploadURL(t *testing.T) {
 				s3 *service_mocks.S3Mock,
 				repo *repository_mocks.VideoMock,
 			) {
-				acc.IsCheckAccountActionMock.Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionVideoUpload).Return(errForbidden)
+				// Аккаунтного нет — проверяем групповое
+				groupRoleID := uuid.New()
+				acc.IsCheckAccountActionMock.Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).Return(errForbidden)
+				gm.GetByUserIDAndGroupIDMock.Expect(minimock.AnyContext, testUserID, testGroupID).Return(domain.GroupMember{UserID: testUserID, RoleID: groupRoleID}, nil)
+				gr.GetByIDMock.Expect(minimock.AnyContext, groupRoleID).Return([]domain.GroupRole{{PermissionMask: domain.PermissionMask(1 << domain.GroupPermissionManageVideo)}}, nil)
+				repo.InsertMock.Expect(minimock.AnyContext, domain.DefaultVideoName, testGroupID, testUserID, domain.VideoStatusUploading).Return(testVideo, nil)
+				s3.GetPreflightUploadURLMock.Expect(minimock.AnyContext, domain.VideoBucketOriginal, testVideo.ID, domain.VideoUploadURLTTL).Return(testPreflightURL, nil)
+			},
+			args: args{
+				accountID: testAccountID,
+				groupID:   testGroupID,
+				userID:    testUserID,
+			},
+			want: testPreflightURL,
+		},
+		{
+			name: "access denied - no account and no group permission",
+			setupMocks: func(t *testing.T,
+				acc *service_mocks.AccessMock,
+				gm *service_mocks.GroupMemberMock,
+				gr *service_mocks.GroupRoleMock,
+				s3 *service_mocks.S3Mock,
+				repo *repository_mocks.VideoMock,
+			) {
+				acc.IsCheckAccountActionMock.Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).Return(errForbidden)
+				gm.GetByUserIDAndGroupIDMock.Expect(minimock.AnyContext, testUserID, testGroupID).Return(domain.GroupMember{}, errForbidden)
 			},
 			args: args{
 				accountID: testAccountID,

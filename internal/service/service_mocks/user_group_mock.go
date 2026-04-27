@@ -33,6 +33,20 @@ type UserGroupMock struct {
 	afterCreateCounter  uint64
 	beforeCreateCounter uint64
 	CreateMock          mUserGroupMockCreate
+
+	funcDelete          func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID) (err error)
+	funcDeleteOrigin    string
+	inspectFuncDelete   func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID)
+	afterDeleteCounter  uint64
+	beforeDeleteCounter uint64
+	DeleteMock          mUserGroupMockDelete
+
+	funcGetAll          func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID) (ua1 []domain.UserGroup, err error)
+	funcGetAllOrigin    string
+	inspectFuncGetAll   func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID)
+	afterGetAllCounter  uint64
+	beforeGetAllCounter uint64
+	GetAllMock          mUserGroupMockGetAll
 }
 
 // NewUserGroupMock returns a mock for mm_service.UserGroup
@@ -48,6 +62,12 @@ func NewUserGroupMock(t minimock.Tester) *UserGroupMock {
 
 	m.CreateMock = mUserGroupMockCreate{mock: m}
 	m.CreateMock.callArgs = []*UserGroupMockCreateParams{}
+
+	m.DeleteMock = mUserGroupMockDelete{mock: m}
+	m.DeleteMock.callArgs = []*UserGroupMockDeleteParams{}
+
+	m.GetAllMock = mUserGroupMockGetAll{mock: m}
+	m.GetAllMock.callArgs = []*UserGroupMockGetAllParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -895,6 +915,784 @@ func (m *UserGroupMock) MinimockCreateInspect() {
 	}
 }
 
+type mUserGroupMockDelete struct {
+	optional           bool
+	mock               *UserGroupMock
+	defaultExpectation *UserGroupMockDeleteExpectation
+	expectations       []*UserGroupMockDeleteExpectation
+
+	callArgs []*UserGroupMockDeleteParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// UserGroupMockDeleteExpectation specifies expectation struct of the UserGroup.Delete
+type UserGroupMockDeleteExpectation struct {
+	mock               *UserGroupMock
+	params             *UserGroupMockDeleteParams
+	paramPtrs          *UserGroupMockDeleteParamPtrs
+	expectationOrigins UserGroupMockDeleteExpectationOrigins
+	results            *UserGroupMockDeleteResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// UserGroupMockDeleteParams contains parameters of the UserGroup.Delete
+type UserGroupMockDeleteParams struct {
+	ctx         context.Context
+	initiatorID uuid.UUID
+	accountID   uuid.UUID
+	groupID     uuid.UUID
+}
+
+// UserGroupMockDeleteParamPtrs contains pointers to parameters of the UserGroup.Delete
+type UserGroupMockDeleteParamPtrs struct {
+	ctx         *context.Context
+	initiatorID *uuid.UUID
+	accountID   *uuid.UUID
+	groupID     *uuid.UUID
+}
+
+// UserGroupMockDeleteResults contains results of the UserGroup.Delete
+type UserGroupMockDeleteResults struct {
+	err error
+}
+
+// UserGroupMockDeleteOrigins contains origins of expectations of the UserGroup.Delete
+type UserGroupMockDeleteExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originInitiatorID string
+	originAccountID   string
+	originGroupID     string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDelete *mUserGroupMockDelete) Optional() *mUserGroupMockDelete {
+	mmDelete.optional = true
+	return mmDelete
+}
+
+// Expect sets up expected params for UserGroup.Delete
+func (mmDelete *mUserGroupMockDelete) Expect(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID) *mUserGroupMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &UserGroupMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by ExpectParams functions")
+	}
+
+	mmDelete.defaultExpectation.params = &UserGroupMockDeleteParams{ctx, initiatorID, accountID, groupID}
+	mmDelete.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDelete.expectations {
+		if minimock.Equal(e.params, mmDelete.defaultExpectation.params) {
+			mmDelete.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDelete.defaultExpectation.params)
+		}
+	}
+
+	return mmDelete
+}
+
+// ExpectCtxParam1 sets up expected param ctx for UserGroup.Delete
+func (mmDelete *mUserGroupMockDelete) ExpectCtxParam1(ctx context.Context) *mUserGroupMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &UserGroupMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &UserGroupMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDelete.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectInitiatorIDParam2 sets up expected param initiatorID for UserGroup.Delete
+func (mmDelete *mUserGroupMockDelete) ExpectInitiatorIDParam2(initiatorID uuid.UUID) *mUserGroupMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &UserGroupMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &UserGroupMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmDelete.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectAccountIDParam3 sets up expected param accountID for UserGroup.Delete
+func (mmDelete *mUserGroupMockDelete) ExpectAccountIDParam3(accountID uuid.UUID) *mUserGroupMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &UserGroupMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &UserGroupMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.accountID = &accountID
+	mmDelete.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectGroupIDParam4 sets up expected param groupID for UserGroup.Delete
+func (mmDelete *mUserGroupMockDelete) ExpectGroupIDParam4(groupID uuid.UUID) *mUserGroupMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &UserGroupMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &UserGroupMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.groupID = &groupID
+	mmDelete.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// Inspect accepts an inspector function that has same arguments as the UserGroup.Delete
+func (mmDelete *mUserGroupMockDelete) Inspect(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID)) *mUserGroupMockDelete {
+	if mmDelete.mock.inspectFuncDelete != nil {
+		mmDelete.mock.t.Fatalf("Inspect function is already set for UserGroupMock.Delete")
+	}
+
+	mmDelete.mock.inspectFuncDelete = f
+
+	return mmDelete
+}
+
+// Return sets up results that will be returned by UserGroup.Delete
+func (mmDelete *mUserGroupMockDelete) Return(err error) *UserGroupMock {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &UserGroupMockDeleteExpectation{mock: mmDelete.mock}
+	}
+	mmDelete.defaultExpectation.results = &UserGroupMockDeleteResults{err}
+	mmDelete.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDelete.mock
+}
+
+// Set uses given function f to mock the UserGroup.Delete method
+func (mmDelete *mUserGroupMockDelete) Set(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID) (err error)) *UserGroupMock {
+	if mmDelete.defaultExpectation != nil {
+		mmDelete.mock.t.Fatalf("Default expectation is already set for the UserGroup.Delete method")
+	}
+
+	if len(mmDelete.expectations) > 0 {
+		mmDelete.mock.t.Fatalf("Some expectations are already set for the UserGroup.Delete method")
+	}
+
+	mmDelete.mock.funcDelete = f
+	mmDelete.mock.funcDeleteOrigin = minimock.CallerInfo(1)
+	return mmDelete.mock
+}
+
+// When sets expectation for the UserGroup.Delete which will trigger the result defined by the following
+// Then helper
+func (mmDelete *mUserGroupMockDelete) When(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID) *UserGroupMockDeleteExpectation {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("UserGroupMock.Delete mock is already set by Set")
+	}
+
+	expectation := &UserGroupMockDeleteExpectation{
+		mock:               mmDelete.mock,
+		params:             &UserGroupMockDeleteParams{ctx, initiatorID, accountID, groupID},
+		expectationOrigins: UserGroupMockDeleteExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDelete.expectations = append(mmDelete.expectations, expectation)
+	return expectation
+}
+
+// Then sets up UserGroup.Delete return parameters for the expectation previously defined by the When method
+func (e *UserGroupMockDeleteExpectation) Then(err error) *UserGroupMock {
+	e.results = &UserGroupMockDeleteResults{err}
+	return e.mock
+}
+
+// Times sets number of times UserGroup.Delete should be invoked
+func (mmDelete *mUserGroupMockDelete) Times(n uint64) *mUserGroupMockDelete {
+	if n == 0 {
+		mmDelete.mock.t.Fatalf("Times of UserGroupMock.Delete mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDelete.expectedInvocations, n)
+	mmDelete.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDelete
+}
+
+func (mmDelete *mUserGroupMockDelete) invocationsDone() bool {
+	if len(mmDelete.expectations) == 0 && mmDelete.defaultExpectation == nil && mmDelete.mock.funcDelete == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDelete.mock.afterDeleteCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDelete.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// Delete implements mm_service.UserGroup
+func (mmDelete *UserGroupMock) Delete(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDelete.beforeDeleteCounter, 1)
+	defer mm_atomic.AddUint64(&mmDelete.afterDeleteCounter, 1)
+
+	mmDelete.t.Helper()
+
+	if mmDelete.inspectFuncDelete != nil {
+		mmDelete.inspectFuncDelete(ctx, initiatorID, accountID, groupID)
+	}
+
+	mm_params := UserGroupMockDeleteParams{ctx, initiatorID, accountID, groupID}
+
+	// Record call args
+	mmDelete.DeleteMock.mutex.Lock()
+	mmDelete.DeleteMock.callArgs = append(mmDelete.DeleteMock.callArgs, &mm_params)
+	mmDelete.DeleteMock.mutex.Unlock()
+
+	for _, e := range mmDelete.DeleteMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDelete.DeleteMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDelete.DeleteMock.defaultExpectation.Counter, 1)
+		mm_want := mmDelete.DeleteMock.defaultExpectation.params
+		mm_want_ptrs := mmDelete.DeleteMock.defaultExpectation.paramPtrs
+
+		mm_got := UserGroupMockDeleteParams{ctx, initiatorID, accountID, groupID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDelete.t.Errorf("UserGroupMock.Delete got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmDelete.t.Errorf("UserGroupMock.Delete got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmDelete.t.Errorf("UserGroupMock.Delete got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmDelete.t.Errorf("UserGroupMock.Delete got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDelete.t.Errorf("UserGroupMock.Delete got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDelete.DeleteMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDelete.DeleteMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDelete.t.Fatal("No results are set for the UserGroupMock.Delete")
+		}
+		return (*mm_results).err
+	}
+	if mmDelete.funcDelete != nil {
+		return mmDelete.funcDelete(ctx, initiatorID, accountID, groupID)
+	}
+	mmDelete.t.Fatalf("Unexpected call to UserGroupMock.Delete. %v %v %v %v", ctx, initiatorID, accountID, groupID)
+	return
+}
+
+// DeleteAfterCounter returns a count of finished UserGroupMock.Delete invocations
+func (mmDelete *UserGroupMock) DeleteAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDelete.afterDeleteCounter)
+}
+
+// DeleteBeforeCounter returns a count of UserGroupMock.Delete invocations
+func (mmDelete *UserGroupMock) DeleteBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDelete.beforeDeleteCounter)
+}
+
+// Calls returns a list of arguments used in each call to UserGroupMock.Delete.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDelete *mUserGroupMockDelete) Calls() []*UserGroupMockDeleteParams {
+	mmDelete.mutex.RLock()
+
+	argCopy := make([]*UserGroupMockDeleteParams, len(mmDelete.callArgs))
+	copy(argCopy, mmDelete.callArgs)
+
+	mmDelete.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteDone returns true if the count of the Delete invocations corresponds
+// the number of defined expectations
+func (m *UserGroupMock) MinimockDeleteDone() bool {
+	if m.DeleteMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteMock.invocationsDone()
+}
+
+// MinimockDeleteInspect logs each unmet expectation
+func (m *UserGroupMock) MinimockDeleteInspect() {
+	for _, e := range m.DeleteMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to UserGroupMock.Delete at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteCounter := mm_atomic.LoadUint64(&m.afterDeleteCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteMock.defaultExpectation != nil && afterDeleteCounter < 1 {
+		if m.DeleteMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to UserGroupMock.Delete at\n%s", m.DeleteMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to UserGroupMock.Delete at\n%s with params: %#v", m.DeleteMock.defaultExpectation.expectationOrigins.origin, *m.DeleteMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDelete != nil && afterDeleteCounter < 1 {
+		m.t.Errorf("Expected call to UserGroupMock.Delete at\n%s", m.funcDeleteOrigin)
+	}
+
+	if !m.DeleteMock.invocationsDone() && afterDeleteCounter > 0 {
+		m.t.Errorf("Expected %d calls to UserGroupMock.Delete at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteMock.expectedInvocations), m.DeleteMock.expectedInvocationsOrigin, afterDeleteCounter)
+	}
+}
+
+type mUserGroupMockGetAll struct {
+	optional           bool
+	mock               *UserGroupMock
+	defaultExpectation *UserGroupMockGetAllExpectation
+	expectations       []*UserGroupMockGetAllExpectation
+
+	callArgs []*UserGroupMockGetAllParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// UserGroupMockGetAllExpectation specifies expectation struct of the UserGroup.GetAll
+type UserGroupMockGetAllExpectation struct {
+	mock               *UserGroupMock
+	params             *UserGroupMockGetAllParams
+	paramPtrs          *UserGroupMockGetAllParamPtrs
+	expectationOrigins UserGroupMockGetAllExpectationOrigins
+	results            *UserGroupMockGetAllResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// UserGroupMockGetAllParams contains parameters of the UserGroup.GetAll
+type UserGroupMockGetAllParams struct {
+	ctx         context.Context
+	initiatorID uuid.UUID
+	accountID   uuid.UUID
+}
+
+// UserGroupMockGetAllParamPtrs contains pointers to parameters of the UserGroup.GetAll
+type UserGroupMockGetAllParamPtrs struct {
+	ctx         *context.Context
+	initiatorID *uuid.UUID
+	accountID   *uuid.UUID
+}
+
+// UserGroupMockGetAllResults contains results of the UserGroup.GetAll
+type UserGroupMockGetAllResults struct {
+	ua1 []domain.UserGroup
+	err error
+}
+
+// UserGroupMockGetAllOrigins contains origins of expectations of the UserGroup.GetAll
+type UserGroupMockGetAllExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originInitiatorID string
+	originAccountID   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetAll *mUserGroupMockGetAll) Optional() *mUserGroupMockGetAll {
+	mmGetAll.optional = true
+	return mmGetAll
+}
+
+// Expect sets up expected params for UserGroup.GetAll
+func (mmGetAll *mUserGroupMockGetAll) Expect(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID) *mUserGroupMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("UserGroupMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &UserGroupMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs != nil {
+		mmGetAll.mock.t.Fatalf("UserGroupMock.GetAll mock is already set by ExpectParams functions")
+	}
+
+	mmGetAll.defaultExpectation.params = &UserGroupMockGetAllParams{ctx, initiatorID, accountID}
+	mmGetAll.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetAll.expectations {
+		if minimock.Equal(e.params, mmGetAll.defaultExpectation.params) {
+			mmGetAll.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetAll.defaultExpectation.params)
+		}
+	}
+
+	return mmGetAll
+}
+
+// ExpectCtxParam1 sets up expected param ctx for UserGroup.GetAll
+func (mmGetAll *mUserGroupMockGetAll) ExpectCtxParam1(ctx context.Context) *mUserGroupMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("UserGroupMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &UserGroupMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.params != nil {
+		mmGetAll.mock.t.Fatalf("UserGroupMock.GetAll mock is already set by Expect")
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs == nil {
+		mmGetAll.defaultExpectation.paramPtrs = &UserGroupMockGetAllParamPtrs{}
+	}
+	mmGetAll.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetAll.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetAll
+}
+
+// ExpectInitiatorIDParam2 sets up expected param initiatorID for UserGroup.GetAll
+func (mmGetAll *mUserGroupMockGetAll) ExpectInitiatorIDParam2(initiatorID uuid.UUID) *mUserGroupMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("UserGroupMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &UserGroupMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.params != nil {
+		mmGetAll.mock.t.Fatalf("UserGroupMock.GetAll mock is already set by Expect")
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs == nil {
+		mmGetAll.defaultExpectation.paramPtrs = &UserGroupMockGetAllParamPtrs{}
+	}
+	mmGetAll.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmGetAll.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmGetAll
+}
+
+// ExpectAccountIDParam3 sets up expected param accountID for UserGroup.GetAll
+func (mmGetAll *mUserGroupMockGetAll) ExpectAccountIDParam3(accountID uuid.UUID) *mUserGroupMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("UserGroupMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &UserGroupMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.params != nil {
+		mmGetAll.mock.t.Fatalf("UserGroupMock.GetAll mock is already set by Expect")
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs == nil {
+		mmGetAll.defaultExpectation.paramPtrs = &UserGroupMockGetAllParamPtrs{}
+	}
+	mmGetAll.defaultExpectation.paramPtrs.accountID = &accountID
+	mmGetAll.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmGetAll
+}
+
+// Inspect accepts an inspector function that has same arguments as the UserGroup.GetAll
+func (mmGetAll *mUserGroupMockGetAll) Inspect(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID)) *mUserGroupMockGetAll {
+	if mmGetAll.mock.inspectFuncGetAll != nil {
+		mmGetAll.mock.t.Fatalf("Inspect function is already set for UserGroupMock.GetAll")
+	}
+
+	mmGetAll.mock.inspectFuncGetAll = f
+
+	return mmGetAll
+}
+
+// Return sets up results that will be returned by UserGroup.GetAll
+func (mmGetAll *mUserGroupMockGetAll) Return(ua1 []domain.UserGroup, err error) *UserGroupMock {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("UserGroupMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &UserGroupMockGetAllExpectation{mock: mmGetAll.mock}
+	}
+	mmGetAll.defaultExpectation.results = &UserGroupMockGetAllResults{ua1, err}
+	mmGetAll.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetAll.mock
+}
+
+// Set uses given function f to mock the UserGroup.GetAll method
+func (mmGetAll *mUserGroupMockGetAll) Set(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID) (ua1 []domain.UserGroup, err error)) *UserGroupMock {
+	if mmGetAll.defaultExpectation != nil {
+		mmGetAll.mock.t.Fatalf("Default expectation is already set for the UserGroup.GetAll method")
+	}
+
+	if len(mmGetAll.expectations) > 0 {
+		mmGetAll.mock.t.Fatalf("Some expectations are already set for the UserGroup.GetAll method")
+	}
+
+	mmGetAll.mock.funcGetAll = f
+	mmGetAll.mock.funcGetAllOrigin = minimock.CallerInfo(1)
+	return mmGetAll.mock
+}
+
+// When sets expectation for the UserGroup.GetAll which will trigger the result defined by the following
+// Then helper
+func (mmGetAll *mUserGroupMockGetAll) When(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID) *UserGroupMockGetAllExpectation {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("UserGroupMock.GetAll mock is already set by Set")
+	}
+
+	expectation := &UserGroupMockGetAllExpectation{
+		mock:               mmGetAll.mock,
+		params:             &UserGroupMockGetAllParams{ctx, initiatorID, accountID},
+		expectationOrigins: UserGroupMockGetAllExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetAll.expectations = append(mmGetAll.expectations, expectation)
+	return expectation
+}
+
+// Then sets up UserGroup.GetAll return parameters for the expectation previously defined by the When method
+func (e *UserGroupMockGetAllExpectation) Then(ua1 []domain.UserGroup, err error) *UserGroupMock {
+	e.results = &UserGroupMockGetAllResults{ua1, err}
+	return e.mock
+}
+
+// Times sets number of times UserGroup.GetAll should be invoked
+func (mmGetAll *mUserGroupMockGetAll) Times(n uint64) *mUserGroupMockGetAll {
+	if n == 0 {
+		mmGetAll.mock.t.Fatalf("Times of UserGroupMock.GetAll mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetAll.expectedInvocations, n)
+	mmGetAll.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetAll
+}
+
+func (mmGetAll *mUserGroupMockGetAll) invocationsDone() bool {
+	if len(mmGetAll.expectations) == 0 && mmGetAll.defaultExpectation == nil && mmGetAll.mock.funcGetAll == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetAll.mock.afterGetAllCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetAll.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetAll implements mm_service.UserGroup
+func (mmGetAll *UserGroupMock) GetAll(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID) (ua1 []domain.UserGroup, err error) {
+	mm_atomic.AddUint64(&mmGetAll.beforeGetAllCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetAll.afterGetAllCounter, 1)
+
+	mmGetAll.t.Helper()
+
+	if mmGetAll.inspectFuncGetAll != nil {
+		mmGetAll.inspectFuncGetAll(ctx, initiatorID, accountID)
+	}
+
+	mm_params := UserGroupMockGetAllParams{ctx, initiatorID, accountID}
+
+	// Record call args
+	mmGetAll.GetAllMock.mutex.Lock()
+	mmGetAll.GetAllMock.callArgs = append(mmGetAll.GetAllMock.callArgs, &mm_params)
+	mmGetAll.GetAllMock.mutex.Unlock()
+
+	for _, e := range mmGetAll.GetAllMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ua1, e.results.err
+		}
+	}
+
+	if mmGetAll.GetAllMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetAll.GetAllMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetAll.GetAllMock.defaultExpectation.params
+		mm_want_ptrs := mmGetAll.GetAllMock.defaultExpectation.paramPtrs
+
+		mm_got := UserGroupMockGetAllParams{ctx, initiatorID, accountID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetAll.t.Errorf("UserGroupMock.GetAll got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmGetAll.t.Errorf("UserGroupMock.GetAll got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmGetAll.t.Errorf("UserGroupMock.GetAll got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetAll.t.Errorf("UserGroupMock.GetAll got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetAll.GetAllMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetAll.t.Fatal("No results are set for the UserGroupMock.GetAll")
+		}
+		return (*mm_results).ua1, (*mm_results).err
+	}
+	if mmGetAll.funcGetAll != nil {
+		return mmGetAll.funcGetAll(ctx, initiatorID, accountID)
+	}
+	mmGetAll.t.Fatalf("Unexpected call to UserGroupMock.GetAll. %v %v %v", ctx, initiatorID, accountID)
+	return
+}
+
+// GetAllAfterCounter returns a count of finished UserGroupMock.GetAll invocations
+func (mmGetAll *UserGroupMock) GetAllAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetAll.afterGetAllCounter)
+}
+
+// GetAllBeforeCounter returns a count of UserGroupMock.GetAll invocations
+func (mmGetAll *UserGroupMock) GetAllBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetAll.beforeGetAllCounter)
+}
+
+// Calls returns a list of arguments used in each call to UserGroupMock.GetAll.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetAll *mUserGroupMockGetAll) Calls() []*UserGroupMockGetAllParams {
+	mmGetAll.mutex.RLock()
+
+	argCopy := make([]*UserGroupMockGetAllParams, len(mmGetAll.callArgs))
+	copy(argCopy, mmGetAll.callArgs)
+
+	mmGetAll.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetAllDone returns true if the count of the GetAll invocations corresponds
+// the number of defined expectations
+func (m *UserGroupMock) MinimockGetAllDone() bool {
+	if m.GetAllMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetAllMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetAllMock.invocationsDone()
+}
+
+// MinimockGetAllInspect logs each unmet expectation
+func (m *UserGroupMock) MinimockGetAllInspect() {
+	for _, e := range m.GetAllMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to UserGroupMock.GetAll at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetAllCounter := mm_atomic.LoadUint64(&m.afterGetAllCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetAllMock.defaultExpectation != nil && afterGetAllCounter < 1 {
+		if m.GetAllMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to UserGroupMock.GetAll at\n%s", m.GetAllMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to UserGroupMock.GetAll at\n%s with params: %#v", m.GetAllMock.defaultExpectation.expectationOrigins.origin, *m.GetAllMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetAll != nil && afterGetAllCounter < 1 {
+		m.t.Errorf("Expected call to UserGroupMock.GetAll at\n%s", m.funcGetAllOrigin)
+	}
+
+	if !m.GetAllMock.invocationsDone() && afterGetAllCounter > 0 {
+		m.t.Errorf("Expected %d calls to UserGroupMock.GetAll at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetAllMock.expectedInvocations), m.GetAllMock.expectedInvocationsOrigin, afterGetAllCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *UserGroupMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
@@ -902,6 +1700,10 @@ func (m *UserGroupMock) MinimockFinish() {
 			m.MinimockAddMembersInspect()
 
 			m.MinimockCreateInspect()
+
+			m.MinimockDeleteInspect()
+
+			m.MinimockGetAllInspect()
 		}
 	})
 }
@@ -926,5 +1728,7 @@ func (m *UserGroupMock) minimockDone() bool {
 	done := true
 	return done &&
 		m.MinimockAddMembersDone() &&
-		m.MinimockCreateDone()
+		m.MinimockCreateDone() &&
+		m.MinimockDeleteDone() &&
+		m.MinimockGetAllDone()
 }

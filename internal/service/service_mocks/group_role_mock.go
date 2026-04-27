@@ -27,6 +27,20 @@ type GroupRoleMock struct {
 	beforeCreateCounter uint64
 	CreateMock          mGroupRoleMockCreate
 
+	funcDelete          func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, roleID uuid.UUID) (err error)
+	funcDeleteOrigin    string
+	inspectFuncDelete   func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, roleID uuid.UUID)
+	afterDeleteCounter  uint64
+	beforeDeleteCounter uint64
+	DeleteMock          mGroupRoleMockDelete
+
+	funcGetAll          func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID) (ga1 []domain.GroupRole, err error)
+	funcGetAllOrigin    string
+	inspectFuncGetAll   func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID)
+	afterGetAllCounter  uint64
+	beforeGetAllCounter uint64
+	GetAllMock          mGroupRoleMockGetAll
+
 	funcGetByID          func(ctx context.Context, roleID uuid.UUID) (ga1 []domain.GroupRole, err error)
 	funcGetByIDOrigin    string
 	inspectFuncGetByID   func(ctx context.Context, roleID uuid.UUID)
@@ -52,6 +66,12 @@ func NewGroupRoleMock(t minimock.Tester) *GroupRoleMock {
 
 	m.CreateMock = mGroupRoleMockCreate{mock: m}
 	m.CreateMock.callArgs = []*GroupRoleMockCreateParams{}
+
+	m.DeleteMock = mGroupRoleMockDelete{mock: m}
+	m.DeleteMock.callArgs = []*GroupRoleMockDeleteParams{}
+
+	m.GetAllMock = mGroupRoleMockGetAll{mock: m}
+	m.GetAllMock.callArgs = []*GroupRoleMockGetAllParams{}
 
 	m.GetByIDMock = mGroupRoleMockGetByID{mock: m}
 	m.GetByIDMock.callArgs = []*GroupRoleMockGetByIDParams{}
@@ -528,6 +548,784 @@ func (m *GroupRoleMock) MinimockCreateInspect() {
 	if !m.CreateMock.invocationsDone() && afterCreateCounter > 0 {
 		m.t.Errorf("Expected %d calls to GroupRoleMock.Create at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.CreateMock.expectedInvocations), m.CreateMock.expectedInvocationsOrigin, afterCreateCounter)
+	}
+}
+
+type mGroupRoleMockDelete struct {
+	optional           bool
+	mock               *GroupRoleMock
+	defaultExpectation *GroupRoleMockDeleteExpectation
+	expectations       []*GroupRoleMockDeleteExpectation
+
+	callArgs []*GroupRoleMockDeleteParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// GroupRoleMockDeleteExpectation specifies expectation struct of the GroupRole.Delete
+type GroupRoleMockDeleteExpectation struct {
+	mock               *GroupRoleMock
+	params             *GroupRoleMockDeleteParams
+	paramPtrs          *GroupRoleMockDeleteParamPtrs
+	expectationOrigins GroupRoleMockDeleteExpectationOrigins
+	results            *GroupRoleMockDeleteResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// GroupRoleMockDeleteParams contains parameters of the GroupRole.Delete
+type GroupRoleMockDeleteParams struct {
+	ctx         context.Context
+	initiatorID uuid.UUID
+	accountID   uuid.UUID
+	roleID      uuid.UUID
+}
+
+// GroupRoleMockDeleteParamPtrs contains pointers to parameters of the GroupRole.Delete
+type GroupRoleMockDeleteParamPtrs struct {
+	ctx         *context.Context
+	initiatorID *uuid.UUID
+	accountID   *uuid.UUID
+	roleID      *uuid.UUID
+}
+
+// GroupRoleMockDeleteResults contains results of the GroupRole.Delete
+type GroupRoleMockDeleteResults struct {
+	err error
+}
+
+// GroupRoleMockDeleteOrigins contains origins of expectations of the GroupRole.Delete
+type GroupRoleMockDeleteExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originInitiatorID string
+	originAccountID   string
+	originRoleID      string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDelete *mGroupRoleMockDelete) Optional() *mGroupRoleMockDelete {
+	mmDelete.optional = true
+	return mmDelete
+}
+
+// Expect sets up expected params for GroupRole.Delete
+func (mmDelete *mGroupRoleMockDelete) Expect(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, roleID uuid.UUID) *mGroupRoleMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupRoleMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by ExpectParams functions")
+	}
+
+	mmDelete.defaultExpectation.params = &GroupRoleMockDeleteParams{ctx, initiatorID, accountID, roleID}
+	mmDelete.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDelete.expectations {
+		if minimock.Equal(e.params, mmDelete.defaultExpectation.params) {
+			mmDelete.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDelete.defaultExpectation.params)
+		}
+	}
+
+	return mmDelete
+}
+
+// ExpectCtxParam1 sets up expected param ctx for GroupRole.Delete
+func (mmDelete *mGroupRoleMockDelete) ExpectCtxParam1(ctx context.Context) *mGroupRoleMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupRoleMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &GroupRoleMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDelete.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectInitiatorIDParam2 sets up expected param initiatorID for GroupRole.Delete
+func (mmDelete *mGroupRoleMockDelete) ExpectInitiatorIDParam2(initiatorID uuid.UUID) *mGroupRoleMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupRoleMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &GroupRoleMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmDelete.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectAccountIDParam3 sets up expected param accountID for GroupRole.Delete
+func (mmDelete *mGroupRoleMockDelete) ExpectAccountIDParam3(accountID uuid.UUID) *mGroupRoleMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupRoleMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &GroupRoleMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.accountID = &accountID
+	mmDelete.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// ExpectRoleIDParam4 sets up expected param roleID for GroupRole.Delete
+func (mmDelete *mGroupRoleMockDelete) ExpectRoleIDParam4(roleID uuid.UUID) *mGroupRoleMockDelete {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupRoleMockDeleteExpectation{}
+	}
+
+	if mmDelete.defaultExpectation.params != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Expect")
+	}
+
+	if mmDelete.defaultExpectation.paramPtrs == nil {
+		mmDelete.defaultExpectation.paramPtrs = &GroupRoleMockDeleteParamPtrs{}
+	}
+	mmDelete.defaultExpectation.paramPtrs.roleID = &roleID
+	mmDelete.defaultExpectation.expectationOrigins.originRoleID = minimock.CallerInfo(1)
+
+	return mmDelete
+}
+
+// Inspect accepts an inspector function that has same arguments as the GroupRole.Delete
+func (mmDelete *mGroupRoleMockDelete) Inspect(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, roleID uuid.UUID)) *mGroupRoleMockDelete {
+	if mmDelete.mock.inspectFuncDelete != nil {
+		mmDelete.mock.t.Fatalf("Inspect function is already set for GroupRoleMock.Delete")
+	}
+
+	mmDelete.mock.inspectFuncDelete = f
+
+	return mmDelete
+}
+
+// Return sets up results that will be returned by GroupRole.Delete
+func (mmDelete *mGroupRoleMockDelete) Return(err error) *GroupRoleMock {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Set")
+	}
+
+	if mmDelete.defaultExpectation == nil {
+		mmDelete.defaultExpectation = &GroupRoleMockDeleteExpectation{mock: mmDelete.mock}
+	}
+	mmDelete.defaultExpectation.results = &GroupRoleMockDeleteResults{err}
+	mmDelete.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDelete.mock
+}
+
+// Set uses given function f to mock the GroupRole.Delete method
+func (mmDelete *mGroupRoleMockDelete) Set(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, roleID uuid.UUID) (err error)) *GroupRoleMock {
+	if mmDelete.defaultExpectation != nil {
+		mmDelete.mock.t.Fatalf("Default expectation is already set for the GroupRole.Delete method")
+	}
+
+	if len(mmDelete.expectations) > 0 {
+		mmDelete.mock.t.Fatalf("Some expectations are already set for the GroupRole.Delete method")
+	}
+
+	mmDelete.mock.funcDelete = f
+	mmDelete.mock.funcDeleteOrigin = minimock.CallerInfo(1)
+	return mmDelete.mock
+}
+
+// When sets expectation for the GroupRole.Delete which will trigger the result defined by the following
+// Then helper
+func (mmDelete *mGroupRoleMockDelete) When(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, roleID uuid.UUID) *GroupRoleMockDeleteExpectation {
+	if mmDelete.mock.funcDelete != nil {
+		mmDelete.mock.t.Fatalf("GroupRoleMock.Delete mock is already set by Set")
+	}
+
+	expectation := &GroupRoleMockDeleteExpectation{
+		mock:               mmDelete.mock,
+		params:             &GroupRoleMockDeleteParams{ctx, initiatorID, accountID, roleID},
+		expectationOrigins: GroupRoleMockDeleteExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDelete.expectations = append(mmDelete.expectations, expectation)
+	return expectation
+}
+
+// Then sets up GroupRole.Delete return parameters for the expectation previously defined by the When method
+func (e *GroupRoleMockDeleteExpectation) Then(err error) *GroupRoleMock {
+	e.results = &GroupRoleMockDeleteResults{err}
+	return e.mock
+}
+
+// Times sets number of times GroupRole.Delete should be invoked
+func (mmDelete *mGroupRoleMockDelete) Times(n uint64) *mGroupRoleMockDelete {
+	if n == 0 {
+		mmDelete.mock.t.Fatalf("Times of GroupRoleMock.Delete mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDelete.expectedInvocations, n)
+	mmDelete.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDelete
+}
+
+func (mmDelete *mGroupRoleMockDelete) invocationsDone() bool {
+	if len(mmDelete.expectations) == 0 && mmDelete.defaultExpectation == nil && mmDelete.mock.funcDelete == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDelete.mock.afterDeleteCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDelete.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// Delete implements mm_service.GroupRole
+func (mmDelete *GroupRoleMock) Delete(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, roleID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmDelete.beforeDeleteCounter, 1)
+	defer mm_atomic.AddUint64(&mmDelete.afterDeleteCounter, 1)
+
+	mmDelete.t.Helper()
+
+	if mmDelete.inspectFuncDelete != nil {
+		mmDelete.inspectFuncDelete(ctx, initiatorID, accountID, roleID)
+	}
+
+	mm_params := GroupRoleMockDeleteParams{ctx, initiatorID, accountID, roleID}
+
+	// Record call args
+	mmDelete.DeleteMock.mutex.Lock()
+	mmDelete.DeleteMock.callArgs = append(mmDelete.DeleteMock.callArgs, &mm_params)
+	mmDelete.DeleteMock.mutex.Unlock()
+
+	for _, e := range mmDelete.DeleteMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDelete.DeleteMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDelete.DeleteMock.defaultExpectation.Counter, 1)
+		mm_want := mmDelete.DeleteMock.defaultExpectation.params
+		mm_want_ptrs := mmDelete.DeleteMock.defaultExpectation.paramPtrs
+
+		mm_got := GroupRoleMockDeleteParams{ctx, initiatorID, accountID, roleID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDelete.t.Errorf("GroupRoleMock.Delete got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmDelete.t.Errorf("GroupRoleMock.Delete got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmDelete.t.Errorf("GroupRoleMock.Delete got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.roleID != nil && !minimock.Equal(*mm_want_ptrs.roleID, mm_got.roleID) {
+				mmDelete.t.Errorf("GroupRoleMock.Delete got unexpected parameter roleID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDelete.DeleteMock.defaultExpectation.expectationOrigins.originRoleID, *mm_want_ptrs.roleID, mm_got.roleID, minimock.Diff(*mm_want_ptrs.roleID, mm_got.roleID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDelete.t.Errorf("GroupRoleMock.Delete got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDelete.DeleteMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDelete.DeleteMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDelete.t.Fatal("No results are set for the GroupRoleMock.Delete")
+		}
+		return (*mm_results).err
+	}
+	if mmDelete.funcDelete != nil {
+		return mmDelete.funcDelete(ctx, initiatorID, accountID, roleID)
+	}
+	mmDelete.t.Fatalf("Unexpected call to GroupRoleMock.Delete. %v %v %v %v", ctx, initiatorID, accountID, roleID)
+	return
+}
+
+// DeleteAfterCounter returns a count of finished GroupRoleMock.Delete invocations
+func (mmDelete *GroupRoleMock) DeleteAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDelete.afterDeleteCounter)
+}
+
+// DeleteBeforeCounter returns a count of GroupRoleMock.Delete invocations
+func (mmDelete *GroupRoleMock) DeleteBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDelete.beforeDeleteCounter)
+}
+
+// Calls returns a list of arguments used in each call to GroupRoleMock.Delete.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDelete *mGroupRoleMockDelete) Calls() []*GroupRoleMockDeleteParams {
+	mmDelete.mutex.RLock()
+
+	argCopy := make([]*GroupRoleMockDeleteParams, len(mmDelete.callArgs))
+	copy(argCopy, mmDelete.callArgs)
+
+	mmDelete.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteDone returns true if the count of the Delete invocations corresponds
+// the number of defined expectations
+func (m *GroupRoleMock) MinimockDeleteDone() bool {
+	if m.DeleteMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteMock.invocationsDone()
+}
+
+// MinimockDeleteInspect logs each unmet expectation
+func (m *GroupRoleMock) MinimockDeleteInspect() {
+	for _, e := range m.DeleteMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to GroupRoleMock.Delete at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteCounter := mm_atomic.LoadUint64(&m.afterDeleteCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteMock.defaultExpectation != nil && afterDeleteCounter < 1 {
+		if m.DeleteMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to GroupRoleMock.Delete at\n%s", m.DeleteMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to GroupRoleMock.Delete at\n%s with params: %#v", m.DeleteMock.defaultExpectation.expectationOrigins.origin, *m.DeleteMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDelete != nil && afterDeleteCounter < 1 {
+		m.t.Errorf("Expected call to GroupRoleMock.Delete at\n%s", m.funcDeleteOrigin)
+	}
+
+	if !m.DeleteMock.invocationsDone() && afterDeleteCounter > 0 {
+		m.t.Errorf("Expected %d calls to GroupRoleMock.Delete at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteMock.expectedInvocations), m.DeleteMock.expectedInvocationsOrigin, afterDeleteCounter)
+	}
+}
+
+type mGroupRoleMockGetAll struct {
+	optional           bool
+	mock               *GroupRoleMock
+	defaultExpectation *GroupRoleMockGetAllExpectation
+	expectations       []*GroupRoleMockGetAllExpectation
+
+	callArgs []*GroupRoleMockGetAllParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// GroupRoleMockGetAllExpectation specifies expectation struct of the GroupRole.GetAll
+type GroupRoleMockGetAllExpectation struct {
+	mock               *GroupRoleMock
+	params             *GroupRoleMockGetAllParams
+	paramPtrs          *GroupRoleMockGetAllParamPtrs
+	expectationOrigins GroupRoleMockGetAllExpectationOrigins
+	results            *GroupRoleMockGetAllResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// GroupRoleMockGetAllParams contains parameters of the GroupRole.GetAll
+type GroupRoleMockGetAllParams struct {
+	ctx         context.Context
+	initiatorID uuid.UUID
+	accountID   uuid.UUID
+}
+
+// GroupRoleMockGetAllParamPtrs contains pointers to parameters of the GroupRole.GetAll
+type GroupRoleMockGetAllParamPtrs struct {
+	ctx         *context.Context
+	initiatorID *uuid.UUID
+	accountID   *uuid.UUID
+}
+
+// GroupRoleMockGetAllResults contains results of the GroupRole.GetAll
+type GroupRoleMockGetAllResults struct {
+	ga1 []domain.GroupRole
+	err error
+}
+
+// GroupRoleMockGetAllOrigins contains origins of expectations of the GroupRole.GetAll
+type GroupRoleMockGetAllExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originInitiatorID string
+	originAccountID   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetAll *mGroupRoleMockGetAll) Optional() *mGroupRoleMockGetAll {
+	mmGetAll.optional = true
+	return mmGetAll
+}
+
+// Expect sets up expected params for GroupRole.GetAll
+func (mmGetAll *mGroupRoleMockGetAll) Expect(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID) *mGroupRoleMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("GroupRoleMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &GroupRoleMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs != nil {
+		mmGetAll.mock.t.Fatalf("GroupRoleMock.GetAll mock is already set by ExpectParams functions")
+	}
+
+	mmGetAll.defaultExpectation.params = &GroupRoleMockGetAllParams{ctx, initiatorID, accountID}
+	mmGetAll.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetAll.expectations {
+		if minimock.Equal(e.params, mmGetAll.defaultExpectation.params) {
+			mmGetAll.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetAll.defaultExpectation.params)
+		}
+	}
+
+	return mmGetAll
+}
+
+// ExpectCtxParam1 sets up expected param ctx for GroupRole.GetAll
+func (mmGetAll *mGroupRoleMockGetAll) ExpectCtxParam1(ctx context.Context) *mGroupRoleMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("GroupRoleMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &GroupRoleMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.params != nil {
+		mmGetAll.mock.t.Fatalf("GroupRoleMock.GetAll mock is already set by Expect")
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs == nil {
+		mmGetAll.defaultExpectation.paramPtrs = &GroupRoleMockGetAllParamPtrs{}
+	}
+	mmGetAll.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetAll.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetAll
+}
+
+// ExpectInitiatorIDParam2 sets up expected param initiatorID for GroupRole.GetAll
+func (mmGetAll *mGroupRoleMockGetAll) ExpectInitiatorIDParam2(initiatorID uuid.UUID) *mGroupRoleMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("GroupRoleMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &GroupRoleMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.params != nil {
+		mmGetAll.mock.t.Fatalf("GroupRoleMock.GetAll mock is already set by Expect")
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs == nil {
+		mmGetAll.defaultExpectation.paramPtrs = &GroupRoleMockGetAllParamPtrs{}
+	}
+	mmGetAll.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmGetAll.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmGetAll
+}
+
+// ExpectAccountIDParam3 sets up expected param accountID for GroupRole.GetAll
+func (mmGetAll *mGroupRoleMockGetAll) ExpectAccountIDParam3(accountID uuid.UUID) *mGroupRoleMockGetAll {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("GroupRoleMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &GroupRoleMockGetAllExpectation{}
+	}
+
+	if mmGetAll.defaultExpectation.params != nil {
+		mmGetAll.mock.t.Fatalf("GroupRoleMock.GetAll mock is already set by Expect")
+	}
+
+	if mmGetAll.defaultExpectation.paramPtrs == nil {
+		mmGetAll.defaultExpectation.paramPtrs = &GroupRoleMockGetAllParamPtrs{}
+	}
+	mmGetAll.defaultExpectation.paramPtrs.accountID = &accountID
+	mmGetAll.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmGetAll
+}
+
+// Inspect accepts an inspector function that has same arguments as the GroupRole.GetAll
+func (mmGetAll *mGroupRoleMockGetAll) Inspect(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID)) *mGroupRoleMockGetAll {
+	if mmGetAll.mock.inspectFuncGetAll != nil {
+		mmGetAll.mock.t.Fatalf("Inspect function is already set for GroupRoleMock.GetAll")
+	}
+
+	mmGetAll.mock.inspectFuncGetAll = f
+
+	return mmGetAll
+}
+
+// Return sets up results that will be returned by GroupRole.GetAll
+func (mmGetAll *mGroupRoleMockGetAll) Return(ga1 []domain.GroupRole, err error) *GroupRoleMock {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("GroupRoleMock.GetAll mock is already set by Set")
+	}
+
+	if mmGetAll.defaultExpectation == nil {
+		mmGetAll.defaultExpectation = &GroupRoleMockGetAllExpectation{mock: mmGetAll.mock}
+	}
+	mmGetAll.defaultExpectation.results = &GroupRoleMockGetAllResults{ga1, err}
+	mmGetAll.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetAll.mock
+}
+
+// Set uses given function f to mock the GroupRole.GetAll method
+func (mmGetAll *mGroupRoleMockGetAll) Set(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID) (ga1 []domain.GroupRole, err error)) *GroupRoleMock {
+	if mmGetAll.defaultExpectation != nil {
+		mmGetAll.mock.t.Fatalf("Default expectation is already set for the GroupRole.GetAll method")
+	}
+
+	if len(mmGetAll.expectations) > 0 {
+		mmGetAll.mock.t.Fatalf("Some expectations are already set for the GroupRole.GetAll method")
+	}
+
+	mmGetAll.mock.funcGetAll = f
+	mmGetAll.mock.funcGetAllOrigin = minimock.CallerInfo(1)
+	return mmGetAll.mock
+}
+
+// When sets expectation for the GroupRole.GetAll which will trigger the result defined by the following
+// Then helper
+func (mmGetAll *mGroupRoleMockGetAll) When(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID) *GroupRoleMockGetAllExpectation {
+	if mmGetAll.mock.funcGetAll != nil {
+		mmGetAll.mock.t.Fatalf("GroupRoleMock.GetAll mock is already set by Set")
+	}
+
+	expectation := &GroupRoleMockGetAllExpectation{
+		mock:               mmGetAll.mock,
+		params:             &GroupRoleMockGetAllParams{ctx, initiatorID, accountID},
+		expectationOrigins: GroupRoleMockGetAllExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetAll.expectations = append(mmGetAll.expectations, expectation)
+	return expectation
+}
+
+// Then sets up GroupRole.GetAll return parameters for the expectation previously defined by the When method
+func (e *GroupRoleMockGetAllExpectation) Then(ga1 []domain.GroupRole, err error) *GroupRoleMock {
+	e.results = &GroupRoleMockGetAllResults{ga1, err}
+	return e.mock
+}
+
+// Times sets number of times GroupRole.GetAll should be invoked
+func (mmGetAll *mGroupRoleMockGetAll) Times(n uint64) *mGroupRoleMockGetAll {
+	if n == 0 {
+		mmGetAll.mock.t.Fatalf("Times of GroupRoleMock.GetAll mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetAll.expectedInvocations, n)
+	mmGetAll.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetAll
+}
+
+func (mmGetAll *mGroupRoleMockGetAll) invocationsDone() bool {
+	if len(mmGetAll.expectations) == 0 && mmGetAll.defaultExpectation == nil && mmGetAll.mock.funcGetAll == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetAll.mock.afterGetAllCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetAll.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetAll implements mm_service.GroupRole
+func (mmGetAll *GroupRoleMock) GetAll(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID) (ga1 []domain.GroupRole, err error) {
+	mm_atomic.AddUint64(&mmGetAll.beforeGetAllCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetAll.afterGetAllCounter, 1)
+
+	mmGetAll.t.Helper()
+
+	if mmGetAll.inspectFuncGetAll != nil {
+		mmGetAll.inspectFuncGetAll(ctx, initiatorID, accountID)
+	}
+
+	mm_params := GroupRoleMockGetAllParams{ctx, initiatorID, accountID}
+
+	// Record call args
+	mmGetAll.GetAllMock.mutex.Lock()
+	mmGetAll.GetAllMock.callArgs = append(mmGetAll.GetAllMock.callArgs, &mm_params)
+	mmGetAll.GetAllMock.mutex.Unlock()
+
+	for _, e := range mmGetAll.GetAllMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ga1, e.results.err
+		}
+	}
+
+	if mmGetAll.GetAllMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetAll.GetAllMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetAll.GetAllMock.defaultExpectation.params
+		mm_want_ptrs := mmGetAll.GetAllMock.defaultExpectation.paramPtrs
+
+		mm_got := GroupRoleMockGetAllParams{ctx, initiatorID, accountID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetAll.t.Errorf("GroupRoleMock.GetAll got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmGetAll.t.Errorf("GroupRoleMock.GetAll got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmGetAll.t.Errorf("GroupRoleMock.GetAll got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetAll.t.Errorf("GroupRoleMock.GetAll got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetAll.GetAllMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetAll.GetAllMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetAll.t.Fatal("No results are set for the GroupRoleMock.GetAll")
+		}
+		return (*mm_results).ga1, (*mm_results).err
+	}
+	if mmGetAll.funcGetAll != nil {
+		return mmGetAll.funcGetAll(ctx, initiatorID, accountID)
+	}
+	mmGetAll.t.Fatalf("Unexpected call to GroupRoleMock.GetAll. %v %v %v", ctx, initiatorID, accountID)
+	return
+}
+
+// GetAllAfterCounter returns a count of finished GroupRoleMock.GetAll invocations
+func (mmGetAll *GroupRoleMock) GetAllAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetAll.afterGetAllCounter)
+}
+
+// GetAllBeforeCounter returns a count of GroupRoleMock.GetAll invocations
+func (mmGetAll *GroupRoleMock) GetAllBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetAll.beforeGetAllCounter)
+}
+
+// Calls returns a list of arguments used in each call to GroupRoleMock.GetAll.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetAll *mGroupRoleMockGetAll) Calls() []*GroupRoleMockGetAllParams {
+	mmGetAll.mutex.RLock()
+
+	argCopy := make([]*GroupRoleMockGetAllParams, len(mmGetAll.callArgs))
+	copy(argCopy, mmGetAll.callArgs)
+
+	mmGetAll.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetAllDone returns true if the count of the GetAll invocations corresponds
+// the number of defined expectations
+func (m *GroupRoleMock) MinimockGetAllDone() bool {
+	if m.GetAllMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetAllMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetAllMock.invocationsDone()
+}
+
+// MinimockGetAllInspect logs each unmet expectation
+func (m *GroupRoleMock) MinimockGetAllInspect() {
+	for _, e := range m.GetAllMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to GroupRoleMock.GetAll at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetAllCounter := mm_atomic.LoadUint64(&m.afterGetAllCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetAllMock.defaultExpectation != nil && afterGetAllCounter < 1 {
+		if m.GetAllMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to GroupRoleMock.GetAll at\n%s", m.GetAllMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to GroupRoleMock.GetAll at\n%s with params: %#v", m.GetAllMock.defaultExpectation.expectationOrigins.origin, *m.GetAllMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetAll != nil && afterGetAllCounter < 1 {
+		m.t.Errorf("Expected call to GroupRoleMock.GetAll at\n%s", m.funcGetAllOrigin)
+	}
+
+	if !m.GetAllMock.invocationsDone() && afterGetAllCounter > 0 {
+		m.t.Errorf("Expected %d calls to GroupRoleMock.GetAll at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetAllMock.expectedInvocations), m.GetAllMock.expectedInvocationsOrigin, afterGetAllCounter)
 	}
 }
 
@@ -1223,6 +2021,10 @@ func (m *GroupRoleMock) MinimockFinish() {
 		if !m.minimockDone() {
 			m.MinimockCreateInspect()
 
+			m.MinimockDeleteInspect()
+
+			m.MinimockGetAllInspect()
+
 			m.MinimockGetByIDInspect()
 
 			m.MinimockGetDefaultInspect()
@@ -1250,6 +2052,8 @@ func (m *GroupRoleMock) minimockDone() bool {
 	done := true
 	return done &&
 		m.MinimockCreateDone() &&
+		m.MinimockDeleteDone() &&
+		m.MinimockGetAllDone() &&
 		m.MinimockGetByIDDone() &&
 		m.MinimockGetDefaultDone()
 }

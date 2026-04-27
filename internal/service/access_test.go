@@ -45,7 +45,7 @@ func TestService_Access_IsCheckAccountAction(t *testing.T) {
 				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
 					Return(service.ErrForbidden)
 			},
-			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionCreateUser},
+			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionManageUsers},
 			wantErr: service.ErrForbidden,
 		},
 		{
@@ -56,7 +56,7 @@ func TestService_Access_IsCheckAccountAction(t *testing.T) {
 				user.GetByIDMock.Expect(minimock.AnyContext, testInitiatorID).
 					Return(nil, errSomeError)
 			},
-			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionCreateUser},
+			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionManageUsers},
 			wantErr: errSomeError,
 		},
 		{
@@ -69,7 +69,7 @@ func TestService_Access_IsCheckAccountAction(t *testing.T) {
 				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
 					Return(nil, errSomeError)
 			},
-			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionCreateUser},
+			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionManageUsers},
 			wantErr: errSomeError,
 		},
 		{
@@ -82,7 +82,7 @@ func TestService_Access_IsCheckAccountAction(t *testing.T) {
 				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
 					Return([]domain.AccountRole{{PermissionMask: domain.SetBits(0, domain.AccountPermissionOwner)}}, nil)
 			},
-			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionCreateUser},
+			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionManageUsers},
 			wantErr: nil,
 		},
 		{
@@ -93,9 +93,9 @@ func TestService_Access_IsCheckAccountAction(t *testing.T) {
 				user.GetByIDMock.Expect(minimock.AnyContext, testInitiatorID).
 					Return([]domain.User{{ID: testInitiatorID, RoleID: testRoleID}}, nil)
 				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
-					Return([]domain.AccountRole{{PermissionMask: domain.SetBits(0, domain.AccountPermissionCreateUser)}}, nil)
+					Return([]domain.AccountRole{{PermissionMask: domain.SetBits(0, domain.AccountPermissionManageUsers)}}, nil)
 			},
-			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionCreateUser},
+			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionManageUsers},
 			wantErr: nil,
 		},
 		{
@@ -108,7 +108,7 @@ func TestService_Access_IsCheckAccountAction(t *testing.T) {
 				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
 					Return([]domain.AccountRole{{PermissionMask: domain.PermissionMask(0)}}, nil)
 			},
-			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionCreateUser},
+			args:    args{testAccountID, testInitiatorID, domain.AccountPermissionManageUsers},
 			wantErr: service.ErrForbidden,
 		},
 	}

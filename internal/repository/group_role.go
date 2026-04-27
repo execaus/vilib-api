@@ -9,6 +9,7 @@ import (
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
 	"github.com/stephenafamo/bob/dialect/psql"
+	"github.com/stephenafamo/bob/dialect/psql/dm"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"go.uber.org/zap"
 )
@@ -120,4 +121,41 @@ func (r *GroupRoleRepository) GetDefault(ctx context.Context, accountID uuid.UUI
 	role.FromDB(rolesDB[0])
 
 	return role, nil
+}
+
+func (r *GroupRoleRepository) SelectMembersByRole(
+	ctx context.Context,
+	roleID uuid.UUID,
+) ([]domain.GroupMember, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	membersDB, err := schema.GroupMembers.Query(
+		sm.Where(schema.GroupMembers.Columns.RoleID.EQ(psql.Arg(roleID))),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	members := make([]domain.GroupMember, len(membersDB))
+	for i, m := range membersDB {
+		members[i] = domain.GroupMember{}
+		members[i].FromDB(m)
+	}
+
+	return members, nil
+}
+
+func (r *GroupRoleRepository) Delete(ctx context.Context, roleID uuid.UUID) error {
+	exec := r.provider.GetExecutor(ctx)
+
+	_, err := schema.GroupRoles.Delete(
+		dm.Where(schema.GroupRoles.Columns.GroupRoleID.EQ(psql.Arg(roleID))),
+	).Exec(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
 }

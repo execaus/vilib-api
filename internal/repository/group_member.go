@@ -8,6 +8,7 @@ import (
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
 	"github.com/stephenafamo/bob/dialect/psql"
+	"github.com/stephenafamo/bob/dialect/psql/dm"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"go.uber.org/zap"
 )
@@ -64,4 +65,23 @@ func (r *GroupMemberRepository) SelectByUserIDAndGroupID(
 	var dm domain.GroupMember
 	dm.FromDB(member)
 	return dm, nil
+}
+
+func (r *GroupMemberRepository) Delete(ctx context.Context, groupID, userID uuid.UUID) error {
+	exec := r.provider.GetExecutor(ctx)
+
+	rowsAffected, err := schema.GroupMembers.Delete(
+		dm.Where(schema.GroupMembers.Columns.GroupID.EQ(psql.Arg(groupID))),
+		dm.Where(schema.GroupMembers.Columns.UserID.EQ(psql.Arg(userID))),
+	).Exec(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
 }

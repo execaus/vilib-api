@@ -26,16 +26,11 @@ func (s *VideoService) Get(
 	accountID, groupID, initiatorID, videoID uuid.UUID,
 	isPreferOriginal bool,
 ) (domain.PreflightURL, error) {
-	// Проверка прав доступа на уровне аккаунта
+	// OR-логика: аккаунтное право ИЛИ групповое право
 	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionVideoWatch); err != nil {
-		zap.L().Error(err.Error())
-		return "", err
-	}
-
-	// Проверка прав доступа на уровне группы (является ли участником группы)
-	if err := s.isCheckGroupMember(ctx, groupID, initiatorID); err != nil {
-		zap.L().Error(err.Error())
-		return "", err
+		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionVideoWatch); err != nil {
+			return "", ErrForbidden
+		}
 	}
 
 	// Получение видео по ID
@@ -109,16 +104,11 @@ func (s *VideoService) GetPreflightUploadURL(
 	ctx context.Context,
 	accountID, groupID, userID uuid.UUID,
 ) (domain.PreflightURL, error) {
-	// Проверка прав доступа на уровне аккаунта
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, userID, domain.AccountPermissionVideoUpload); err != nil {
-		zap.L().Error(err.Error())
-		return "", err
-	}
-
-	// Проверка прав доступа на уровне группы (может ли загружать видео)
-	if err := s.isCheckGroupAction(ctx, groupID, userID, domain.GroupPermissionCreateVideo); err != nil {
-		zap.L().Error(err.Error())
-		return "", err
+	// OR-логика: аккаунтное право ИЛИ групповое право
+	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, userID, domain.AccountPermissionManageVideo); err != nil {
+		if err := s.isCheckGroupAction(ctx, groupID, userID, domain.GroupPermissionManageVideo); err != nil {
+			return "", ErrForbidden
+		}
 	}
 
 	// Создание записи о видео в статусе загрузки
@@ -157,7 +147,7 @@ func (s *VideoService) Update(
 
 	// Проверка прав доступа (только если передан инициатор — не для Kafka)
 	if initiatorID != nil {
-		if err := s.isCheckGroupAction(ctx, video.GroupID, *initiatorID, domain.GroupPermissionEditVideo); err != nil {
+		if err := s.isCheckGroupAction(ctx, video.GroupID, *initiatorID, domain.GroupPermissionManageVideo); err != nil {
 			zap.L().Error(err.Error())
 			return domain.Video{}, err
 		}
@@ -171,6 +161,69 @@ func (s *VideoService) Update(
 	}
 
 	return updatedVideo, nil
+}
+
+func (s *VideoService) GetAll(
+	ctx context.Context,
+	accountID, groupID, initiatorID uuid.UUID,
+) ([]domain.Video, error) {
+	// OR-логика: аккаунтное право ИЛИ групповое право
+	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionVideoWatch); err != nil {
+		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionVideoWatch); err != nil {
+			return nil, ErrForbidden
+		}
+	}
+
+	// Получение списка видео группы
+	videos, err := s.repo.SelectByGroupID(ctx, groupID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return videos, nil
+}
+
+func (s *VideoService) Rename(
+	ctx context.Context,
+	accountID, groupID, initiatorID, videoID uuid.UUID,
+	name string,
+) (domain.Video, error) {
+	// OR-логика: аккаунтное право ИЛИ групповое право
+	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageVideo); err != nil {
+		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo); err != nil {
+			return domain.Video{}, ErrForbidden
+		}
+	}
+
+	// Переименование видео
+	video, err := s.repo.UpdateName(ctx, videoID, name)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.Video{}, err
+	}
+
+	return video, nil
+}
+
+func (s *VideoService) Delete(
+	ctx context.Context,
+	accountID, groupID, initiatorID, videoID uuid.UUID,
+) error {
+	// OR-логика: аккаунтное право ИЛИ групповое право
+	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageVideo); err != nil {
+		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo); err != nil {
+			return ErrForbidden
+		}
+	}
+
+	// Удаление видео
+	if err := s.repo.Delete(ctx, videoID); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
 }
 
 func (s *VideoService) isCheckGroupMember(

@@ -16,6 +16,15 @@ import (
 //go:generate minimock -i Video -o ./repository_mocks/video_mock.go
 //go:generate minimock -i VideoAsset -o ./repository_mocks/video_asset_mock.go
 
+// UserStatus определяет фильтр по активности пользователей при выборке.
+type UserStatus string
+
+const (
+	UserStatusActive      UserStatus = "active"
+	UserStatusDeactivated UserStatus = "deactivated"
+	UserStatusAll         UserStatus = "all"
+)
+
 type Account interface {
 	Insert(ctx context.Context, name, email string) (domain.Account, error)
 	SelectByUsersID(ctx context.Context, usersID ...uuid.UUID) ([]domain.Account, error)
@@ -26,6 +35,10 @@ type User interface {
 	SelectByEmail(ctx context.Context, email string) ([]domain.User, error)
 	Insert(ctx context.Context, name, surname, hash, email string, roleID uuid.UUID) (domain.User, error)
 	SelectByID(ctx context.Context, usersID ...uuid.UUID) ([]domain.User, error)
+	UpdateRole(ctx context.Context, userID, roleID uuid.UUID) (domain.User, error)
+	Deactivate(ctx context.Context, userID uuid.UUID) error
+	Reactivate(ctx context.Context, userID uuid.UUID) error
+	SelectByAccountID(ctx context.Context, accountID uuid.UUID, status UserStatus) ([]domain.User, error)
 }
 
 type AccountRole interface {
@@ -35,16 +48,22 @@ type AccountRole interface {
 	) (domain.AccountRole, error)
 	SelectByAccountID(ctx context.Context, accountID uuid.UUID) ([]domain.AccountRole, error)
 	SelectByID(ctx context.Context, rolesID ...uuid.UUID) ([]domain.AccountRole, error)
+	Delete(ctx context.Context, roleID uuid.UUID) error
+	SelectActiveUsersByRole(ctx context.Context, roleID uuid.UUID) ([]domain.User, error)
+	ResetRoleToDefault(ctx context.Context, oldRoleID, defaultRoleID uuid.UUID) error
 }
 
 type UserGroup interface {
 	Insert(ctx context.Context, accountID uuid.UUID, name string) (domain.UserGroup, error)
 	GetByID(ctx context.Context, groupsID ...uuid.UUID) ([]domain.UserGroup, error)
+	SelectByAccountID(ctx context.Context, accountID uuid.UUID) ([]domain.UserGroup, error)
+	DeleteCascade(ctx context.Context, groupID uuid.UUID) error
 }
 
 type GroupMember interface {
 	Insert(ctx context.Context, groupID, roleID uuid.UUID, usersID ...uuid.UUID) ([]domain.GroupMember, error)
 	SelectByUserIDAndGroupID(ctx context.Context, userID, groupID uuid.UUID) (domain.GroupMember, error)
+	Delete(ctx context.Context, groupID, userID uuid.UUID) error
 }
 
 type GroupRole interface {
@@ -58,12 +77,17 @@ type GroupRole interface {
 	SelectByAccount(ctx context.Context, accountID uuid.UUID) ([]domain.GroupRole, error)
 	SelectByID(ctx context.Context, roleID uuid.UUID) ([]domain.GroupRole, error)
 	GetDefault(ctx context.Context, groupID uuid.UUID) (domain.GroupRole, error)
+	SelectMembersByRole(ctx context.Context, roleID uuid.UUID) ([]domain.GroupMember, error)
+	Delete(ctx context.Context, roleID uuid.UUID) error
 }
 
 type Video interface {
 	Select(ctx context.Context, id uuid.UUID) (*domain.Video, error)
 	Insert(ctx context.Context, name string, groupID, userID uuid.UUID, status domain.VideoStatus) (domain.Video, error)
 	Update(ctx context.Context, id uuid.UUID, status *domain.VideoStatus) (domain.Video, error)
+	SelectByGroupID(ctx context.Context, groupID uuid.UUID) ([]domain.Video, error)
+	UpdateName(ctx context.Context, videoID uuid.UUID, name string) (domain.Video, error)
+	Delete(ctx context.Context, videoID uuid.UUID) error
 }
 
 type VideoAsset interface {

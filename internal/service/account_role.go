@@ -19,14 +19,12 @@ func NewAccountRoleService(repo repository.AccountRole, srv *Service) *AccountRo
 }
 
 func (s *AccountRoleService) GetDefault(ctx context.Context, accountID uuid.UUID) (domain.AccountRole, error) {
-	// Получение всех ролей аккаунта
 	roles, err := s.repo.SelectByAccountID(ctx, accountID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.AccountRole{}, err
 	}
 
-	// Поиск роли по умолчанию
 	defaultRole, err := s.findDefaultRole(roles)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -40,10 +38,8 @@ func (s *AccountRoleService) CreateSystemAccountOwner(
 	ctx context.Context,
 	accountID uuid.UUID,
 ) (domain.AccountRole, error) {
-	// Создание битовой маски с правами владельца
 	permission := domain.SetBits(domain.DefaultPermissionMask, domain.AccountPermissionOwner)
 
-	// Создание системной роли владельца аккаунта
 	if _, err := s.repo.Insert(
 		ctx,
 		accountID,
@@ -57,7 +53,6 @@ func (s *AccountRoleService) CreateSystemAccountOwner(
 		return domain.AccountRole{}, err
 	}
 
-	// Получение созданной роли
 	roles, err := s.repo.SelectByAccountID(ctx, accountID)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -75,24 +70,21 @@ func (s *AccountRoleService) Create(
 	permission domain.PermissionMask,
 	isDefault bool,
 ) (domain.AccountRole, error) {
-	// Разрешено ли пользователю создавать роли аккаунта
 	if err := s.srv.Access.IsCheckAccountAction(
 		ctx,
 		accountID,
 		initiatorID,
-		domain.AccountPermissionCreateAccountRole,
+		domain.AccountPermissionManageRoles,
 	); err != nil {
 		zap.L().Error(err.Error())
 		return domain.AccountRole{}, nil
 	}
 
-	// Создание роли в базе данных
 	if _, err := s.repo.Insert(ctx, accountID, name, parentID, permission, isDefault, false); err != nil {
 		zap.L().Error(err.Error())
 		return domain.AccountRole{}, err
 	}
 
-	// Получение созданной роли
 	roles, err := s.repo.SelectByAccountID(ctx, accountID)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -100,6 +92,58 @@ func (s *AccountRoleService) Create(
 	}
 
 	return roles[0], nil
+}
+
+func (s *AccountRoleService) GetAll(
+	ctx context.Context,
+	initiatorID, accountID uuid.UUID,
+) ([]domain.AccountRole, error) {
+	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageRoles); err != nil {
+		return nil, err
+	}
+
+	roles, err := s.repo.SelectByAccountID(ctx, accountID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return roles, nil
+}
+
+func (s *AccountRoleService) Delete(
+	ctx context.Context,
+	initiatorID, accountID, roleID uuid.UUID,
+) error {
+	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageRoles); err != nil {
+		return err
+	}
+
+	roles, err := s.repo.SelectByID(ctx, roleID)
+	if err != nil || len(roles) == 0 {
+		return ErrNotFound
+	}
+
+	if roles[0].IsSystem {
+		return ErrIsSystemRole
+	}
+
+	activeUsers, err := s.repo.SelectActiveUsersByRole(ctx, roleID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if len(activeUsers) > 0 {
+		return ErrRoleInUse
+	}
+
+	if err := s.repo.Delete(ctx, roleID); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
 }
 
 func (s *AccountRoleService) findDefaultRole(roles []domain.AccountRole) (domain.AccountRole, error) {
@@ -122,7 +166,6 @@ func (s *AccountRoleService) findDefaultRole(roles []domain.AccountRole) (domain
 }
 
 func (s *AccountRoleService) GetByID(ctx context.Context, rolesID ...uuid.UUID) ([]domain.AccountRole, error) {
-	// Получение ролей по ID
 	roles, err := s.repo.SelectByID(ctx, rolesID...)
 	if err != nil {
 		zap.L().Error(err.Error())

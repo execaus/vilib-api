@@ -46,3 +46,33 @@ func (s *GroupMemberService) GetByUserIDAndGroupID(
 
 	return member, nil
 }
+
+func (s *GroupMemberService) RemoveMember(
+	ctx context.Context,
+	initiatorID, groupID, targetID uuid.UUID,
+) error {
+	// Проверка прав на управление участниками группы
+	member, err := s.repo.SelectByUserIDAndGroupID(ctx, initiatorID, groupID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return ErrForbidden
+	}
+
+	roles, err := s.srv.GroupRole.GetByID(ctx, member.RoleID)
+	if err != nil || len(roles) == 0 {
+		return ErrForbidden
+	}
+
+	if !domain.HasBit(roles[0].PermissionMask, domain.GroupPermissionOwner) &&
+		!domain.HasBit(roles[0].PermissionMask, domain.GroupPermissionManageMembers) {
+		return ErrForbidden
+	}
+
+	// Удаление участника из группы
+	if err := s.repo.Delete(ctx, groupID, targetID); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
+}
