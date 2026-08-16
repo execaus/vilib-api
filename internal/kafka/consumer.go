@@ -106,6 +106,11 @@ func (c *ReaderConsumer) fetchError(ctx context.Context, fetchErr error) error {
 }
 
 // handleWithRetry вызывает handle для одного и того же сообщения raw до успеха или отмены ctx.
+//
+// Обработка текущего сообщения и коммит выполняются с контекстом без отмены (сохраняет
+// значения ctx, но игнорирует его Done/Err): при остановке консьюмера (Э1-Т26) уже начатая
+// обработка не прерывается на середине и, если завершилась успехом, offset коммитится —
+// отменяемый ctx влияет только на решение прекратить повтор после ошибки handle.
 func (c *ReaderConsumer) handleWithRetry(
 	ctx context.Context,
 	raw segmentio.Message,
@@ -113,9 +118,10 @@ func (c *ReaderConsumer) handleWithRetry(
 ) {
 	backoff := c.backoffInitial
 	msg := toMessage(raw)
+	handleCtx := context.WithoutCancel(ctx)
 
 	for {
-		if err := handle(ctx, msg); err != nil {
+		if err := handle(handleCtx, msg); err != nil {
 			zap.L().Error("failed to handle kafka message, will retry",
 				zap.String("topic", raw.Topic),
 				zap.Int64("offset", raw.Offset),
@@ -129,7 +135,7 @@ func (c *ReaderConsumer) handleWithRetry(
 			continue
 		}
 
-		if commitErr := c.reader.CommitMessages(ctx, raw); commitErr != nil {
+		if commitErr := c.reader.CommitMessages(handleCtx, raw); commitErr != nil {
 			zap.L().Error("failed to commit kafka message",
 				zap.String("topic", raw.Topic),
 				zap.Int64("offset", raw.Offset),

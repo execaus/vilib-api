@@ -201,6 +201,59 @@ func TestReaderConsumer_Run_StopsWithoutCommitOnShutdownDuringRetry(t *testing.T
 	require.Empty(t, fetcher.committedOffsets())
 }
 
+// TestReaderConsumer_Run_CompletesInFlightHandleAndCommitsAfterCtxCancelledDuringHandle
+// проверяет семантику graceful shutdown (Э1-Т26): если ctx консьюмера отменяется, пока
+// текущее сообщение уже обрабатывается, handle не прерывается — получает контекст без
+// отмены — и, завершившись успехом, сообщение коммитится.
+func TestReaderConsumer_Run_CompletesInFlightHandleAndCommitsAfterCtxCancelledDuringHandle(t *testing.T) {
+	t.Parallel()
+
+	fetcher := &fakeFetcher{
+		messages: []segmentio.Message{
+			{Topic: "video.processing-events", Offset: 1, Value: []byte("payload")},
+		},
+	}
+	consumer := kafka.NewConsumerWithFetcher(fetcher, kafka.WithBackoff(time.Millisecond, 5*time.Millisecond))
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	handleStarted := make(chan struct{})
+	proceed := make(chan struct{})
+
+	var handleSawCancel atomic.Bool
+
+	done := make(chan error, 1)
+	go func() {
+		done <- consumer.Run(ctx, func(handleCtx context.Context, _ kafka.Message) error {
+			close(handleStarted)
+			<-proceed
+
+			if handleCtx.Err() != nil {
+				handleSawCancel.Store(true)
+			}
+
+			return nil
+		})
+	}()
+
+	<-handleStarted
+	cancel()
+	// Даём отменённому ctx время дойти до горутины до того, как handle продолжит работу и
+	// проверит handleCtx.Err().
+	time.Sleep(20 * time.Millisecond)
+	close(proceed)
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("consumer.Run did not stop after context cancellation")
+	}
+
+	require.False(t, handleSawCancel.Load(), "handle must not observe cancellation of the outer ctx")
+	require.Equal(t, []int64{1}, fetcher.committedOffsets())
+}
+
 // TestReaderConsumer_Run_ReturnsErrorOnFetchFailure проверяет, что ошибка FetchMessage,
 // не связанная с отменой ctx, возвращается из Run.
 func TestReaderConsumer_Run_ReturnsErrorOnFetchFailure(t *testing.T) {
