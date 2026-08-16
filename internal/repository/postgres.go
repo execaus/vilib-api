@@ -15,12 +15,13 @@ func NewPostgresDB(ctx context.Context, cfg config.DatabaseConfig) (*bob.DB, *pg
 	hostPort := net.JoinHostPort(cfg.Host, cfg.Port)
 
 	connStr := fmt.Sprintf(
-		"postgres://%s:%s@%s/%s?search_path=%s",
+		"postgres://%s:%s@%s/%s?search_path=%s&sslmode=%s",
 		cfg.User,
 		cfg.Password,
 		hostPort,
 		cfg.Name,
-		cfg.Path,
+		cfg.Schema,
+		cfg.SSLMode,
 	)
 
 	pool, err := pgxpool.New(ctx, connStr)

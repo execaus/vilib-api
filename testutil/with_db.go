@@ -50,11 +50,12 @@ func WithDB(t *testing.T, migrationsPath []string, fn func(bobDB *bob.DB)) {
 		User:     dbUser,
 		Password: dbPassword,
 		Name:     dbName,
-		Path:     schemaName,
+		Schema:   schemaName,
+		SSLMode:  "disable",
 	}
 
 	dbConfigMigrations := dbConfig
-	dbConfigMigrations.Path = schemaMigrationsName
+	dbConfigMigrations.Schema = schemaMigrationsName
 
 	ctx := t.Context()
 	_, stdlibDBConn, err := repository.NewPostgresDB(ctx, dbConfigMigrations)
