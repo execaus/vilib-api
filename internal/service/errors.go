@@ -27,3 +27,19 @@ func NewForbiddenError(message string) *ForbiddenError {
 func (e ForbiddenError) Error() string {
 	return e.message
 }
+
+// ErrValidation — sentinel-ошибка валидации входных данных на уровне сервиса (HTTP 400).
+var ErrValidation = NewValidationError("validation error")
+
+// ValidationError — ошибка валидации входных данных, которую handler превращает в HTTP 400.
+type ValidationError struct {
+	message string
+}
+
+func NewValidationError(message string) *ValidationError {
+	return &ValidationError{message: message}
+}
+
+func (e ValidationError) Error() string {
+	return e.message
+}

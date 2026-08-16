@@ -11,6 +11,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// newTestVideo создаёт аккаунт, группу, роль, пользователя и видео для теста репозитория видео.
+func newTestVideo(
+	t *testing.T,
+	r *repository.Repository,
+	f faker.Faker,
+	status domain.VideoStatus,
+) domain.Video {
+	t.Helper()
+
+	account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+	group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+	accountRole, _ := r.AccountRole.Insert(
+		t.Context(),
+		account.ID,
+		f.Beer().Name(),
+		nil,
+		4,
+		true,
+		false,
+	)
+	user, _ := r.User.Insert(
+		t.Context(),
+		f.Person().FirstName(),
+		f.Person().LastName(),
+		f.Hash().MD5(),
+		f.Person().Contact().Email,
+		accountRole.ID,
+	)
+
+	video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, status)
+	require.NoError(t, err)
+
+	return video
+}
+
 func TestRepository_VideoInsert_Success(t *testing.T) {
 	t.Parallel()
 
@@ -37,7 +72,7 @@ func TestRepository_VideoInsert_Success(t *testing.T) {
 
 		video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusUploading)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.NotEmpty(t, video.ID)
 		require.Equal(t, domain.VideoStatusUploading, video.Status)
 		require.Equal(t, group.ID, video.GroupID)
@@ -72,7 +107,7 @@ func TestRepository_VideoSelect_Success(t *testing.T) {
 
 		video, err := r.Video.Select(t.Context(), createdVideo.ID)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, createdVideo.ID, video.ID)
 		require.Equal(t, domain.VideoStatusReady, video.Status)
 	})
@@ -89,70 +124,101 @@ func TestRepository_VideoSelect_NilNotFound(t *testing.T) {
 	})
 }
 
-func TestRepository_VideoUpdate_Success(t *testing.T) {
+func TestRepository_VideoUpdateStatusIf_MatchingFrom_UpdatesRowAndReturnsTrue(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
-		accountRole, _ := r.AccountRole.Insert(
-			t.Context(),
-			account.ID,
-			f.Beer().Name(),
-			nil,
-			4,
-			true,
-			false,
-		)
-		user, _ := r.User.Insert(
-			t.Context(),
-			f.Person().FirstName(),
-			f.Person().LastName(),
-			f.Hash().MD5(),
-			f.Person().Contact().Email,
-			accountRole.ID,
-		)
-		video, _ := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusUploading)
+		video := newTestVideo(t, r, f, domain.VideoStatusUploading)
 
-		newStatus := domain.VideoStatusReady
-		updatedVideo, err := r.Video.Update(t.Context(), video.ID, &newStatus)
+		attempt := 1
+		updated, err := r.Video.UpdateStatusIf(
+			t.Context(),
+			video.ID,
+			[]domain.VideoStatus{domain.VideoStatusUploading},
+			domain.VideoStatusQueued,
+			domain.VideoPatch{ProcessingAttempt: &attempt},
+		)
 
-		require.Nil(t, err)
-		require.Equal(t, domain.VideoStatusReady, updatedVideo.Status)
+		require.NoError(t, err)
+		require.True(t, updated)
+
+		got, err := r.Video.Select(t.Context(), video.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.VideoStatusQueued, got.Status)
+		require.Equal(t, 1, got.ProcessingAttempt)
+		require.True(
+			t,
+			got.StatusChangedAt.After(video.StatusChangedAt) || got.StatusChangedAt.Equal(video.StatusChangedAt),
+		)
 	})
 }
 
-func TestRepository_VideoAssetCreate_Success(t *testing.T) {
+func TestRepository_VideoUpdateStatusIf_MismatchedFrom_ReturnsFalseAndKeepsRow(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
-		accountRole, _ := r.AccountRole.Insert(
+		video := newTestVideo(t, r, f, domain.VideoStatusReady)
+
+		updated, err := r.Video.UpdateStatusIf(
 			t.Context(),
-			account.ID,
-			f.Beer().Name(),
-			nil,
-			4,
-			true,
-			false,
+			video.ID,
+			[]domain.VideoStatus{domain.VideoStatusUploading},
+			domain.VideoStatusQueued,
+			domain.VideoPatch{},
 		)
-		user, _ := r.User.Insert(
+
+		require.NoError(t, err)
+		require.False(t, updated)
+
+		got, err := r.Video.Select(t.Context(), video.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.VideoStatusReady, got.Status)
+	})
+}
+
+func TestRepository_VideoUpdateStatusIf_MismatchedExpectedAttempt_ReturnsFalse(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		video := newTestVideo(t, r, f, domain.VideoStatusQueued)
+
+		wrongAttempt := 42
+		updated, err := r.Video.UpdateStatusIf(
 			t.Context(),
-			f.Person().FirstName(),
-			f.Person().LastName(),
-			f.Hash().MD5(),
-			f.Person().Contact().Email,
-			accountRole.ID,
+			video.ID,
+			[]domain.VideoStatus{domain.VideoStatusQueued},
+			domain.VideoStatusCompressing,
+			domain.VideoPatch{ExpectedAttempt: &wrongAttempt},
 		)
-		video, _ := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady)
+
+		require.NoError(t, err)
+		require.False(t, updated)
+
+		got, err := r.Video.Select(t.Context(), video.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.VideoStatusQueued, got.Status)
+	})
+}
+
+func TestRepository_VideoAssetInsert_Success(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		video := newTestVideo(t, r, f, domain.VideoStatusReady)
 
 		objectKey := "videos/" + video.ID.String() + "/original"
-		asset, err := r.VideoAsset.Create(
-			t.Context(), video.ID, domain.VideoAssetKindOriginal, domain.VideoProfile(""), "bucket", objectKey, "video/mp4", 1024,
+		asset, err := r.VideoAsset.Insert(
+			t.Context(),
+			video.ID,
+			domain.VideoAssetKindOriginal,
+			domain.VideoProfile(""),
+			"bucket",
+			objectKey,
+			"video/mp4",
+			1024,
 		)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.NotEmpty(t, asset.FileID)
 		require.Equal(t, video.ID, asset.VideoID)
 		require.Equal(t, domain.VideoAssetKindOriginal, asset.Kind)
@@ -164,38 +230,60 @@ func TestRepository_VideoAssetCreate_Success(t *testing.T) {
 	})
 }
 
+func TestRepository_VideoAssetInsert_DuplicateKindAndProfile_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		video := newTestVideo(t, r, f, domain.VideoStatusReady)
+		objectKey := "videos/" + video.ID.String() + "/original"
+
+		_, err := r.VideoAsset.Insert(
+			t.Context(),
+			video.ID,
+			domain.VideoAssetKindOriginal,
+			domain.VideoProfile(""),
+			"bucket",
+			objectKey,
+			"video/mp4",
+			1024,
+		)
+		require.NoError(t, err)
+
+		_, err = r.VideoAsset.Insert(
+			t.Context(),
+			video.ID,
+			domain.VideoAssetKindOriginal,
+			domain.VideoProfile(""),
+			"bucket",
+			"videos/"+video.ID.String()+"/other",
+			"video/mp4",
+			2048,
+		)
+
+		require.Error(t, err)
+	})
+}
+
 func TestRepository_VideoAssetSelect_Success(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
-		accountRole, _ := r.AccountRole.Insert(
-			t.Context(),
-			account.ID,
-			f.Beer().Name(),
-			nil,
-			4,
-			true,
-			false,
-		)
-		user, _ := r.User.Insert(
-			t.Context(),
-			f.Person().FirstName(),
-			f.Person().LastName(),
-			f.Hash().MD5(),
-			f.Person().Contact().Email,
-			accountRole.ID,
-		)
-		video, _ := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady)
+		video := newTestVideo(t, r, f, domain.VideoStatusReady)
 		objectKey := "videos/" + video.ID.String() + "/original"
-		createdAsset, _ := r.VideoAsset.Create(
-			t.Context(), video.ID, domain.VideoAssetKindOriginal, domain.VideoProfile(""), "bucket", objectKey, "video/mp4", 1024,
+		createdAsset, _ := r.VideoAsset.Insert(
+			t.Context(),
+			video.ID,
+			domain.VideoAssetKindOriginal,
+			domain.VideoProfile(""),
+			"bucket",
+			objectKey,
+			"video/mp4",
+			1024,
 		)
 
 		assets, err := r.VideoAsset.Select(t.Context(), video.ID)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Len(t, assets, 1)
 		require.Equal(t, createdAsset.FileID, assets[0].FileID)
 		require.Equal(t, createdAsset.ObjectKey, assets[0].ObjectKey)
@@ -208,7 +296,7 @@ func TestRepository_VideoAssetSelect_Empty(t *testing.T) {
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		assets, err := r.VideoAsset.Select(t.Context(), uuid.New())
 
-		require.Nil(t, err)
-		require.Len(t, assets, 0)
+		require.NoError(t, err)
+		require.Empty(t, assets)
 	})
 }

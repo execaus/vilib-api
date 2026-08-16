@@ -82,10 +82,10 @@ func TestService_VideoAsset_Create(t *testing.T) {
 	testVideoID := uuid.New()
 	testKind := domain.VideoAssetKindOriginal
 	testProfile := domain.VideoProfile("")
-	testBucketName := "test-bucket"
+	testBucket := "test-bucket"
 	testObjectKey := "videos/" + testVideoID.String() + "/original"
 	testContentType := "video/mp4"
-	testBytes := 1024
+	testSizeBytes := int64(1024)
 
 	var errSomeError = errors.New("some error")
 
@@ -93,10 +93,10 @@ func TestService_VideoAsset_Create(t *testing.T) {
 		videoID     uuid.UUID
 		kind        domain.VideoAssetKind
 		profile     domain.VideoProfile
-		bucketName  string
+		bucket      string
 		objectKey   string
 		contentType string
-		bytes       int
+		sizeBytes   int64
 	}
 
 	tests := []struct {
@@ -109,11 +109,28 @@ func TestService_VideoAsset_Create(t *testing.T) {
 		{
 			name: "create error",
 			setupMocks: func(repo *repository_mocks.VideoAssetMock) {
-				repo.CreateMock.
-					Expect(minimock.AnyContext, testVideoID, testKind, testProfile, testBucketName, testObjectKey, testContentType, testBytes).
+				repo.InsertMock.
+					Expect(
+						minimock.AnyContext,
+						testVideoID,
+						testKind,
+						testProfile,
+						testBucket,
+						testObjectKey,
+						testContentType,
+						testSizeBytes,
+					).
 					Return(domain.VideoAsset{}, errSomeError)
 			},
-			args:    args{testVideoID, testKind, testProfile, testBucketName, testObjectKey, testContentType, testBytes},
+			args: args{
+				testVideoID,
+				testKind,
+				testProfile,
+				testBucket,
+				testObjectKey,
+				testContentType,
+				testSizeBytes,
+			},
 			want:    domain.VideoAsset{},
 			wantErr: errSomeError,
 		},
@@ -136,10 +153,10 @@ func TestService_VideoAsset_Create(t *testing.T) {
 						tt.args.videoID,
 						tt.args.kind,
 						tt.args.profile,
-						tt.args.bucketName,
+						tt.args.bucket,
 						tt.args.objectKey,
 						tt.args.contentType,
-						tt.args.bytes,
+						tt.args.sizeBytes,
 					)
 
 					require.Equal(t, tt.want, got)

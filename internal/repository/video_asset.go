@@ -47,21 +47,24 @@ func (r *VideoAssetRepository) Select(ctx context.Context, videoID uuid.UUID) ([
 	return assets, nil
 }
 
-func (r *VideoAssetRepository) Create(
+// Insert регистрирует ассет видео: создаёт запись файла и связывает её с видео одной
+// операцией. Уникальность (video_id, kind, profile) обеспечивается ограничением БД —
+// повторная регистрация того же ассета возвращает ошибку нарушения уникальности.
+func (r *VideoAssetRepository) Insert(
 	ctx context.Context,
 	videoID uuid.UUID,
 	kind domain.VideoAssetKind,
 	profile domain.VideoProfile,
-	bucketName, objectKey, contentType string,
-	bytes int,
+	bucket, key, contentType string,
+	sizeBytes int64,
 ) (domain.VideoAsset, error) {
 	exec := r.provider.GetExecutor(ctx)
 
 	fileDB, err := schema.Files.Insert(&schema.FileSetter{
-		Bucket:      omit.From(bucketName),
-		ObjectKey:   omit.From(objectKey),
+		Bucket:      omit.From(bucket),
+		ObjectKey:   omit.From(key),
 		ContentType: omit.From(contentType),
-		SizeBytes:   omit.From(int64(bytes)),
+		SizeBytes:   omit.From(sizeBytes),
 	}).One(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())

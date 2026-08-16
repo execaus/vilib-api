@@ -34,6 +34,11 @@ definitions:
           $ref: '#/definitions/dto.GroupMember'
         type: array
     type: object
+  dto.CompleteVideoUploadResponse:
+    properties:
+      video:
+        $ref: '#/definitions/dto.Video'
+    type: object
   dto.CreateAccountRoleRequest:
     properties:
       is_default:
@@ -116,6 +121,27 @@ definitions:
       message:
         type: string
     type: object
+  dto.GetAllUserGroupsResponse:
+    properties:
+      groups:
+        items:
+          $ref: '#/definitions/dto.UserGroup'
+        type: array
+    type: object
+  dto.GetAllUsersResponse:
+    properties:
+      users:
+        items:
+          $ref: '#/definitions/dto.User'
+        type: array
+    type: object
+  dto.GetAllVideosResponse:
+    properties:
+      videos:
+        items:
+          $ref: '#/definitions/dto.Video'
+        type: array
+    type: object
   dto.GetVideoResponse:
     properties:
       presigned_url:
@@ -142,20 +168,6 @@ definitions:
         type: string
       permission_mask:
         $ref: '#/definitions/domain.PermissionMask'
-    type: object
-  dto.GetAllUsersResponse:
-    properties:
-      users:
-        items:
-          $ref: '#/definitions/dto.User'
-        type: array
-    type: object
-  dto.GetAllVideosResponse:
-    properties:
-      videos:
-        items:
-          $ref: '#/definitions/dto.Video'
-        type: array
     type: object
   dto.LoginRequest:
     properties:
@@ -217,9 +229,28 @@ definitions:
       user:
         $ref: '#/definitions/dto.User'
     type: object
+  dto.UploadVideoRequest:
+    properties:
+      content_type:
+        type: string
+      name:
+        maxLength: 255
+        minLength: 1
+        type: string
+      size_bytes:
+        type: integer
+    required:
+    - content_type
+    - name
+    - size_bytes
+    type: object
   dto.UploadVideoResponse:
     properties:
-      presigned_url:
+      expires_at:
+        type: string
+      upload_url:
+        type: string
+      video_id:
         type: string
     type: object
   dto.User:
@@ -239,6 +270,15 @@ definitions:
       surname:
         type: string
     type: object
+  dto.UserGroup:
+    properties:
+      account_id:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+    type: object
   dto.Video:
     properties:
       author:
@@ -253,21 +293,7 @@ definitions:
         type: string
       status:
         type: integer
-    type: object
-  dto.GetAllUserGroupsResponse:
-    properties:
-      groups:
-        items:
-          $ref: '#/definitions/dto.UserGroup'
-        type: array
-    type: object
-  dto.UserGroup:
-    properties:
-      account_id:
-        type: string
-      id:
-        type: string
-      name:
+      status_name:
         type: string
     type: object
 host: localhost:8080
@@ -493,7 +519,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Возвращает преподписанный URL для загрузки видео в S3
+      description: Создаёт запись видео в статусе загрузки и возвращает преподписанный
+        URL для загрузки оригинала в S3
       parameters:
       - description: ID аккаунта
         in: path
@@ -505,22 +532,40 @@ paths:
         name: groupId
         required: true
         type: string
+      - description: Тело запроса
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UploadVideoRequest'
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/dto.UploadVideoResponse'
         "400":
           description: Bad Request
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
-      summary: Загрузка видео
+      summary: Создание загрузки видео
       tags:
       - videos
   /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}:
@@ -564,6 +609,62 @@ paths:
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
       summary: Получение видео
+      tags:
+      - videos
+  /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}/complete:
+    post:
+      description: |-
+        Подтверждает, что оригинал видео загружен в хранилище: проверяет объект,
+        регистрирует ассет-оригинал и переводит видео в очередь на обработку.
+        Повторный вызов для видео, уже поставленного в очередь, обрабатываемого или готового, идемпотентен.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы пользователей
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: ID видео
+        in: path
+        name: videoId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.CompleteVideoUploadResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      summary: Подтверждение загрузки видео
       tags:
       - videos
   /api/v1/accounts/{accountId}/user-groups/{userGroupId}:

@@ -26,17 +26,18 @@ const (
 )
 
 var (
-	APIVersion1          = "v1"
-	RegisterURL          = "auth/register"
-	LoginURL             = "auth/login"
-	CreateUserURL        = NewURLSupplier("accounts/%s/users")
-	CreateAccountRoleURL = NewURLSupplier("accounts/%s/roles")
-	UpdateUserURL        = NewURLSupplier("accounts/%s/users/%s")
-	CreateUserGroupURL   = NewURLSupplier("accounts/%s/user-groups")
-	AddGroupMemberURL    = NewURLSupplier("accounts/%s/user-groups/%s/members")
-	CreateGroupRoleURL   = NewURLSupplier("accounts/%s/user-groups/roles")
-	UploadVideoUrl       = NewURLSupplier("accounts/%s/user-groups/%s/video")
-	GetVideoUrl          = NewURLSupplier("accounts/%s/user-groups/%s/video/%s")
+	APIVersion1            = "v1"
+	RegisterURL            = "auth/register"
+	LoginURL               = "auth/login"
+	CreateUserURL          = NewURLSupplier("accounts/%s/users")
+	CreateAccountRoleURL   = NewURLSupplier("accounts/%s/roles")
+	UpdateUserURL          = NewURLSupplier("accounts/%s/users/%s")
+	CreateUserGroupURL     = NewURLSupplier("accounts/%s/user-groups")
+	AddGroupMemberURL      = NewURLSupplier("accounts/%s/user-groups/%s/members")
+	CreateGroupRoleURL     = NewURLSupplier("accounts/%s/user-groups/roles")
+	UploadVideoUrl         = NewURLSupplier("accounts/%s/user-groups/%s/video")
+	GetVideoUrl            = NewURLSupplier("accounts/%s/user-groups/%s/video/%s")
+	CompleteVideoUploadURL = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/complete")
 
 	ListUsersURL         = NewURLSupplier("accounts/%s/users")
 	ReactivateUserURL    = NewURLSupplier("accounts/%s/users/%s/reactivate")
@@ -138,6 +139,11 @@ func (h *Handler) GetRouter() *gin.Engine {
 		GetVideoUrl.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
 		h.RequireAuthMiddleware,
 		h.DeleteVideo,
+	)
+	v1.POST(
+		CompleteVideoUploadURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		h.RequireAuthMiddleware,
+		h.CompleteVideoUpload,
 	)
 
 	return engine

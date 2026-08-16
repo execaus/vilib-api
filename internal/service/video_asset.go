@@ -34,11 +34,11 @@ func (s *VideoAssetService) Create(
 	videoID uuid.UUID,
 	kind domain.VideoAssetKind,
 	profile domain.VideoProfile,
-	bucketName, objectKey, contentType string,
-	bytes int,
+	bucket, key, contentType string,
+	sizeBytes int64,
 ) (domain.VideoAsset, error) {
 	// Создание ассета видео
-	asset, err := s.repo.Create(ctx, videoID, kind, profile, bucketName, objectKey, contentType, bytes)
+	asset, err := s.repo.Insert(ctx, videoID, kind, profile, bucket, key, contentType, sizeBytes)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.VideoAsset{}, err

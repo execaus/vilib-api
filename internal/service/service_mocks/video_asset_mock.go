@@ -20,9 +20,9 @@ type VideoAssetMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
-	funcCreate          func(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucketName string, objectKey string, contentType string, bytes int) (v1 domain.VideoAsset, err error)
+	funcCreate          func(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucket string, key string, contentType string, sizeBytes int64) (v1 domain.VideoAsset, err error)
 	funcCreateOrigin    string
-	inspectFuncCreate   func(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucketName string, objectKey string, contentType string, bytes int)
+	inspectFuncCreate   func(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucket string, key string, contentType string, sizeBytes int64)
 	afterCreateCounter  uint64
 	beforeCreateCounter uint64
 	CreateMock          mVideoAssetMockCreate
@@ -84,10 +84,10 @@ type VideoAssetMockCreateParams struct {
 	videoID     uuid.UUID
 	kind        domain.VideoAssetKind
 	profile     domain.VideoProfile
-	bucketName  string
-	objectKey   string
+	bucket      string
+	key         string
 	contentType string
-	bytes       int
+	sizeBytes   int64
 }
 
 // VideoAssetMockCreateParamPtrs contains pointers to parameters of the VideoAsset.Create
@@ -96,10 +96,10 @@ type VideoAssetMockCreateParamPtrs struct {
 	videoID     *uuid.UUID
 	kind        *domain.VideoAssetKind
 	profile     *domain.VideoProfile
-	bucketName  *string
-	objectKey   *string
+	bucket      *string
+	key         *string
 	contentType *string
-	bytes       *int
+	sizeBytes   *int64
 }
 
 // VideoAssetMockCreateResults contains results of the VideoAsset.Create
@@ -115,10 +115,10 @@ type VideoAssetMockCreateExpectationOrigins struct {
 	originVideoID     string
 	originKind        string
 	originProfile     string
-	originBucketName  string
-	originObjectKey   string
+	originBucket      string
+	originKey         string
 	originContentType string
-	originBytes       string
+	originSizeBytes   string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -132,7 +132,7 @@ func (mmCreate *mVideoAssetMockCreate) Optional() *mVideoAssetMockCreate {
 }
 
 // Expect sets up expected params for VideoAsset.Create
-func (mmCreate *mVideoAssetMockCreate) Expect(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucketName string, objectKey string, contentType string, bytes int) *mVideoAssetMockCreate {
+func (mmCreate *mVideoAssetMockCreate) Expect(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucket string, key string, contentType string, sizeBytes int64) *mVideoAssetMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("VideoAssetMock.Create mock is already set by Set")
 	}
@@ -145,7 +145,7 @@ func (mmCreate *mVideoAssetMockCreate) Expect(ctx context.Context, videoID uuid.
 		mmCreate.mock.t.Fatalf("VideoAssetMock.Create mock is already set by ExpectParams functions")
 	}
 
-	mmCreate.defaultExpectation.params = &VideoAssetMockCreateParams{ctx, videoID, kind, profile, bucketName, objectKey, contentType, bytes}
+	mmCreate.defaultExpectation.params = &VideoAssetMockCreateParams{ctx, videoID, kind, profile, bucket, key, contentType, sizeBytes}
 	mmCreate.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmCreate.expectations {
 		if minimock.Equal(e.params, mmCreate.defaultExpectation.params) {
@@ -248,8 +248,8 @@ func (mmCreate *mVideoAssetMockCreate) ExpectProfileParam4(profile domain.VideoP
 	return mmCreate
 }
 
-// ExpectBucketNameParam5 sets up expected param bucketName for VideoAsset.Create
-func (mmCreate *mVideoAssetMockCreate) ExpectBucketNameParam5(bucketName string) *mVideoAssetMockCreate {
+// ExpectBucketParam5 sets up expected param bucket for VideoAsset.Create
+func (mmCreate *mVideoAssetMockCreate) ExpectBucketParam5(bucket string) *mVideoAssetMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("VideoAssetMock.Create mock is already set by Set")
 	}
@@ -265,14 +265,14 @@ func (mmCreate *mVideoAssetMockCreate) ExpectBucketNameParam5(bucketName string)
 	if mmCreate.defaultExpectation.paramPtrs == nil {
 		mmCreate.defaultExpectation.paramPtrs = &VideoAssetMockCreateParamPtrs{}
 	}
-	mmCreate.defaultExpectation.paramPtrs.bucketName = &bucketName
-	mmCreate.defaultExpectation.expectationOrigins.originBucketName = minimock.CallerInfo(1)
+	mmCreate.defaultExpectation.paramPtrs.bucket = &bucket
+	mmCreate.defaultExpectation.expectationOrigins.originBucket = minimock.CallerInfo(1)
 
 	return mmCreate
 }
 
-// ExpectObjectKeyParam6 sets up expected param objectKey for VideoAsset.Create
-func (mmCreate *mVideoAssetMockCreate) ExpectObjectKeyParam6(objectKey string) *mVideoAssetMockCreate {
+// ExpectKeyParam6 sets up expected param key for VideoAsset.Create
+func (mmCreate *mVideoAssetMockCreate) ExpectKeyParam6(key string) *mVideoAssetMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("VideoAssetMock.Create mock is already set by Set")
 	}
@@ -288,8 +288,8 @@ func (mmCreate *mVideoAssetMockCreate) ExpectObjectKeyParam6(objectKey string) *
 	if mmCreate.defaultExpectation.paramPtrs == nil {
 		mmCreate.defaultExpectation.paramPtrs = &VideoAssetMockCreateParamPtrs{}
 	}
-	mmCreate.defaultExpectation.paramPtrs.objectKey = &objectKey
-	mmCreate.defaultExpectation.expectationOrigins.originObjectKey = minimock.CallerInfo(1)
+	mmCreate.defaultExpectation.paramPtrs.key = &key
+	mmCreate.defaultExpectation.expectationOrigins.originKey = minimock.CallerInfo(1)
 
 	return mmCreate
 }
@@ -317,8 +317,8 @@ func (mmCreate *mVideoAssetMockCreate) ExpectContentTypeParam7(contentType strin
 	return mmCreate
 }
 
-// ExpectBytesParam8 sets up expected param bytes for VideoAsset.Create
-func (mmCreate *mVideoAssetMockCreate) ExpectBytesParam8(bytes int) *mVideoAssetMockCreate {
+// ExpectSizeBytesParam8 sets up expected param sizeBytes for VideoAsset.Create
+func (mmCreate *mVideoAssetMockCreate) ExpectSizeBytesParam8(sizeBytes int64) *mVideoAssetMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("VideoAssetMock.Create mock is already set by Set")
 	}
@@ -334,14 +334,14 @@ func (mmCreate *mVideoAssetMockCreate) ExpectBytesParam8(bytes int) *mVideoAsset
 	if mmCreate.defaultExpectation.paramPtrs == nil {
 		mmCreate.defaultExpectation.paramPtrs = &VideoAssetMockCreateParamPtrs{}
 	}
-	mmCreate.defaultExpectation.paramPtrs.bytes = &bytes
-	mmCreate.defaultExpectation.expectationOrigins.originBytes = minimock.CallerInfo(1)
+	mmCreate.defaultExpectation.paramPtrs.sizeBytes = &sizeBytes
+	mmCreate.defaultExpectation.expectationOrigins.originSizeBytes = minimock.CallerInfo(1)
 
 	return mmCreate
 }
 
 // Inspect accepts an inspector function that has same arguments as the VideoAsset.Create
-func (mmCreate *mVideoAssetMockCreate) Inspect(f func(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucketName string, objectKey string, contentType string, bytes int)) *mVideoAssetMockCreate {
+func (mmCreate *mVideoAssetMockCreate) Inspect(f func(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucket string, key string, contentType string, sizeBytes int64)) *mVideoAssetMockCreate {
 	if mmCreate.mock.inspectFuncCreate != nil {
 		mmCreate.mock.t.Fatalf("Inspect function is already set for VideoAssetMock.Create")
 	}
@@ -366,7 +366,7 @@ func (mmCreate *mVideoAssetMockCreate) Return(v1 domain.VideoAsset, err error) *
 }
 
 // Set uses given function f to mock the VideoAsset.Create method
-func (mmCreate *mVideoAssetMockCreate) Set(f func(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucketName string, objectKey string, contentType string, bytes int) (v1 domain.VideoAsset, err error)) *VideoAssetMock {
+func (mmCreate *mVideoAssetMockCreate) Set(f func(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucket string, key string, contentType string, sizeBytes int64) (v1 domain.VideoAsset, err error)) *VideoAssetMock {
 	if mmCreate.defaultExpectation != nil {
 		mmCreate.mock.t.Fatalf("Default expectation is already set for the VideoAsset.Create method")
 	}
@@ -382,14 +382,14 @@ func (mmCreate *mVideoAssetMockCreate) Set(f func(ctx context.Context, videoID u
 
 // When sets expectation for the VideoAsset.Create which will trigger the result defined by the following
 // Then helper
-func (mmCreate *mVideoAssetMockCreate) When(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucketName string, objectKey string, contentType string, bytes int) *VideoAssetMockCreateExpectation {
+func (mmCreate *mVideoAssetMockCreate) When(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucket string, key string, contentType string, sizeBytes int64) *VideoAssetMockCreateExpectation {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("VideoAssetMock.Create mock is already set by Set")
 	}
 
 	expectation := &VideoAssetMockCreateExpectation{
 		mock:               mmCreate.mock,
-		params:             &VideoAssetMockCreateParams{ctx, videoID, kind, profile, bucketName, objectKey, contentType, bytes},
+		params:             &VideoAssetMockCreateParams{ctx, videoID, kind, profile, bucket, key, contentType, sizeBytes},
 		expectationOrigins: VideoAssetMockCreateExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmCreate.expectations = append(mmCreate.expectations, expectation)
@@ -424,17 +424,17 @@ func (mmCreate *mVideoAssetMockCreate) invocationsDone() bool {
 }
 
 // Create implements mm_service.VideoAsset
-func (mmCreate *VideoAssetMock) Create(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucketName string, objectKey string, contentType string, bytes int) (v1 domain.VideoAsset, err error) {
+func (mmCreate *VideoAssetMock) Create(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucket string, key string, contentType string, sizeBytes int64) (v1 domain.VideoAsset, err error) {
 	mm_atomic.AddUint64(&mmCreate.beforeCreateCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreate.afterCreateCounter, 1)
 
 	mmCreate.t.Helper()
 
 	if mmCreate.inspectFuncCreate != nil {
-		mmCreate.inspectFuncCreate(ctx, videoID, kind, profile, bucketName, objectKey, contentType, bytes)
+		mmCreate.inspectFuncCreate(ctx, videoID, kind, profile, bucket, key, contentType, sizeBytes)
 	}
 
-	mm_params := VideoAssetMockCreateParams{ctx, videoID, kind, profile, bucketName, objectKey, contentType, bytes}
+	mm_params := VideoAssetMockCreateParams{ctx, videoID, kind, profile, bucket, key, contentType, sizeBytes}
 
 	// Record call args
 	mmCreate.CreateMock.mutex.Lock()
@@ -453,7 +453,7 @@ func (mmCreate *VideoAssetMock) Create(ctx context.Context, videoID uuid.UUID, k
 		mm_want := mmCreate.CreateMock.defaultExpectation.params
 		mm_want_ptrs := mmCreate.CreateMock.defaultExpectation.paramPtrs
 
-		mm_got := VideoAssetMockCreateParams{ctx, videoID, kind, profile, bucketName, objectKey, contentType, bytes}
+		mm_got := VideoAssetMockCreateParams{ctx, videoID, kind, profile, bucket, key, contentType, sizeBytes}
 
 		if mm_want_ptrs != nil {
 
@@ -477,14 +477,14 @@ func (mmCreate *VideoAssetMock) Create(ctx context.Context, videoID uuid.UUID, k
 					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originProfile, *mm_want_ptrs.profile, mm_got.profile, minimock.Diff(*mm_want_ptrs.profile, mm_got.profile))
 			}
 
-			if mm_want_ptrs.bucketName != nil && !minimock.Equal(*mm_want_ptrs.bucketName, mm_got.bucketName) {
-				mmCreate.t.Errorf("VideoAssetMock.Create got unexpected parameter bucketName, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originBucketName, *mm_want_ptrs.bucketName, mm_got.bucketName, minimock.Diff(*mm_want_ptrs.bucketName, mm_got.bucketName))
+			if mm_want_ptrs.bucket != nil && !minimock.Equal(*mm_want_ptrs.bucket, mm_got.bucket) {
+				mmCreate.t.Errorf("VideoAssetMock.Create got unexpected parameter bucket, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originBucket, *mm_want_ptrs.bucket, mm_got.bucket, minimock.Diff(*mm_want_ptrs.bucket, mm_got.bucket))
 			}
 
-			if mm_want_ptrs.objectKey != nil && !minimock.Equal(*mm_want_ptrs.objectKey, mm_got.objectKey) {
-				mmCreate.t.Errorf("VideoAssetMock.Create got unexpected parameter objectKey, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originObjectKey, *mm_want_ptrs.objectKey, mm_got.objectKey, minimock.Diff(*mm_want_ptrs.objectKey, mm_got.objectKey))
+			if mm_want_ptrs.key != nil && !minimock.Equal(*mm_want_ptrs.key, mm_got.key) {
+				mmCreate.t.Errorf("VideoAssetMock.Create got unexpected parameter key, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originKey, *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
 			}
 
 			if mm_want_ptrs.contentType != nil && !minimock.Equal(*mm_want_ptrs.contentType, mm_got.contentType) {
@@ -492,9 +492,9 @@ func (mmCreate *VideoAssetMock) Create(ctx context.Context, videoID uuid.UUID, k
 					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originContentType, *mm_want_ptrs.contentType, mm_got.contentType, minimock.Diff(*mm_want_ptrs.contentType, mm_got.contentType))
 			}
 
-			if mm_want_ptrs.bytes != nil && !minimock.Equal(*mm_want_ptrs.bytes, mm_got.bytes) {
-				mmCreate.t.Errorf("VideoAssetMock.Create got unexpected parameter bytes, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originBytes, *mm_want_ptrs.bytes, mm_got.bytes, minimock.Diff(*mm_want_ptrs.bytes, mm_got.bytes))
+			if mm_want_ptrs.sizeBytes != nil && !minimock.Equal(*mm_want_ptrs.sizeBytes, mm_got.sizeBytes) {
+				mmCreate.t.Errorf("VideoAssetMock.Create got unexpected parameter sizeBytes, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originSizeBytes, *mm_want_ptrs.sizeBytes, mm_got.sizeBytes, minimock.Diff(*mm_want_ptrs.sizeBytes, mm_got.sizeBytes))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -509,9 +509,9 @@ func (mmCreate *VideoAssetMock) Create(ctx context.Context, videoID uuid.UUID, k
 		return (*mm_results).v1, (*mm_results).err
 	}
 	if mmCreate.funcCreate != nil {
-		return mmCreate.funcCreate(ctx, videoID, kind, profile, bucketName, objectKey, contentType, bytes)
+		return mmCreate.funcCreate(ctx, videoID, kind, profile, bucket, key, contentType, sizeBytes)
 	}
-	mmCreate.t.Fatalf("Unexpected call to VideoAssetMock.Create. %v %v %v %v %v %v %v %v", ctx, videoID, kind, profile, bucketName, objectKey, contentType, bytes)
+	mmCreate.t.Fatalf("Unexpected call to VideoAssetMock.Create. %v %v %v %v %v %v %v %v", ctx, videoID, kind, profile, bucket, key, contentType, sizeBytes)
 	return
 }
 

@@ -491,7 +491,7 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/{groupId}/video": {
             "post": {
-                "description": "Возвращает преподписанный URL для загрузки видео в S3",
+                "description": "Создаёт запись видео в статусе загрузки и возвращает преподписанный URL для загрузки оригинала в S3",
                 "consumes": [
                     "application/json"
                 ],
@@ -501,7 +501,7 @@ const docTemplate = `{
                 "tags": [
                     "videos"
                 ],
-                "summary": "Загрузка видео",
+                "summary": "Создание загрузки видео",
                 "parameters": [
                     {
                         "type": "string",
@@ -516,17 +516,44 @@ const docTemplate = `{
                         "name": "groupId",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Тело запроса",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UploadVideoRequest"
+                        }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/dto.UploadVideoResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorMessage"
                         }
@@ -591,6 +618,85 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}/complete": {
+            "post": {
+                "description": "Подтверждает, что оригинал видео загружен в хранилище: проверяет объект,\nрегистрирует ассет-оригинал и переводит видео в очередь на обработку.\nПовторный вызов для видео, уже поставленного в очередь, обрабатываемого или готового, идемпотентен.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "Подтверждение загрузки видео",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы пользователей",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.CompleteVideoUploadResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorMessage"
                         }
@@ -1363,6 +1469,14 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.CompleteVideoUploadResponse": {
+            "type": "object",
+            "properties": {
+                "video": {
+                    "$ref": "#/definitions/dto.Video"
+                }
+            }
+        },
         "dto.CreateAccountRoleRequest": {
             "type": "object",
             "properties": {
@@ -1486,6 +1600,39 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.GetAllUserGroupsResponse": {
+            "type": "object",
+            "properties": {
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.UserGroup"
+                    }
+                }
+            }
+        },
+        "dto.GetAllUsersResponse": {
+            "type": "object",
+            "properties": {
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.User"
+                    }
+                }
+            }
+        },
+        "dto.GetAllVideosResponse": {
+            "type": "object",
+            "properties": {
+                "videos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.Video"
+                    }
+                }
+            }
+        },
         "dto.GetVideoResponse": {
             "type": "object",
             "properties": {
@@ -1525,28 +1672,6 @@ const docTemplate = `{
                 },
                 "permission_mask": {
                     "$ref": "#/definitions/domain.PermissionMask"
-                }
-            }
-        },
-        "dto.GetAllUsersResponse": {
-            "type": "object",
-            "properties": {
-                "users": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/dto.User"
-                    }
-                }
-            }
-        },
-        "dto.GetAllVideosResponse": {
-            "type": "object",
-            "properties": {
-                "videos": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/dto.Video"
-                    }
                 }
             }
         },
@@ -1638,10 +1763,37 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.UploadVideoRequest": {
+            "type": "object",
+            "required": [
+                "content_type",
+                "name",
+                "size_bytes"
+            ],
+            "properties": {
+                "content_type": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "size_bytes": {
+                    "type": "integer"
+                }
+            }
+        },
         "dto.UploadVideoResponse": {
             "type": "object",
             "properties": {
-                "presigned_url": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "upload_url": {
+                    "type": "string"
+                },
+                "video_id": {
                     "type": "string"
                 }
             }
@@ -1672,6 +1824,20 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.UserGroup": {
+            "type": "object",
+            "properties": {
+                "account_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.Video": {
             "type": "object",
             "properties": {
@@ -1692,30 +1858,8 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "integer"
-                }
-            }
-        },
-        "dto.GetAllUserGroupsResponse": {
-            "type": "object",
-            "properties": {
-                "groups": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/dto.UserGroup"
-                    }
-                }
-            }
-        },
-        "dto.UserGroup": {
-            "type": "object",
-            "properties": {
-                "account_id": {
-                    "type": "string"
                 },
-                "id": {
-                    "type": "string"
-                },
-                "name": {
+                "status_name": {
                     "type": "string"
                 }
             }

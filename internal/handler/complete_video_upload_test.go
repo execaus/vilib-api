@@ -1,12 +1,10 @@
 package handler_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"vilib-api/internal/domain"
 	"vilib-api/internal/dto"
@@ -21,16 +19,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestHandler_UploadVideo(t *testing.T) {
+func TestHandler_CompleteVideoUpload(t *testing.T) {
 	var (
 		testAccountID   = uuid.New()
 		testGroupID     = uuid.New()
 		testVideoID     = uuid.New()
 		testInitiatorID = uuid.New()
 		testToken       = "valid-token"
-		testUploadURL   = domain.PreflightURL("https://example.com/upload")
-		testExpiresAt   = time.Now().Add(time.Hour)
-		testRequest     = dto.UploadVideoRequest{Name: "test video", ContentType: "video/mp4", SizeBytes: 1024}
+		testVideo       = domain.Video{ID: testVideoID, GroupID: testGroupID, Status: domain.VideoStatusQueued}
 	)
 
 	setupCommitTx := func(mc *minimock.Controller) *saga_mocks.TransactableMock {
@@ -49,7 +45,8 @@ func TestHandler_UploadVideo(t *testing.T) {
 		return repo
 	}
 
-	url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() + "/video"
+	url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() +
+		"/video/" + testVideoID.String() + "/complete"
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
@@ -62,35 +59,79 @@ func TestHandler_UploadVideo(t *testing.T) {
 			UserID:           testInitiatorID,
 			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.Video.CreateUploadMock.
-			When(
-				minimock.AnyContext,
-				testAccountID,
-				testGroupID,
-				testInitiatorID,
-				testRequest.Name,
-				testRequest.ContentType,
-				testRequest.SizeBytes,
-			).
-			Then(domain.VideoUpload{VideoID: testVideoID, UploadURL: testUploadURL, ExpiresAt: testExpiresAt}, nil)
+		svcMock.Video.CompleteUploadMock.
+			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
+			Then(testVideo, nil)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
 		router := h.GetRouter()
 
-		body, _ := json.Marshal(testRequest)
-		req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+		req := httptest.NewRequest(http.MethodPost, url, nil)
 		req.Header.Set("Authorization", "Bearer "+testToken)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		require.Equal(t, http.StatusCreated, w.Code)
+		require.Equal(t, http.StatusOK, w.Code)
 
-		var response dto.UploadVideoResponse
+		var response dto.CompleteVideoUploadResponse
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-		require.Equal(t, testVideoID, response.VideoID)
-		require.Equal(t, testUploadURL, response.UploadURL)
+		require.Equal(t, testVideoID, response.Video.ID)
+		require.Equal(t, "queued", response.Video.StatusName)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		mc := minimock.NewController(t)
+		defer mc.Finish()
+
+		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		repo := setupRollbackTx(mc)
+
+		svcMock.Auth.GetClaimsFromTokenMock.When("Bearer "+testToken).Then(&domain.AuthClaims{
+			UserID:           testInitiatorID,
+			CurrentAccountID: testAccountID,
+		}, nil)
+		svcMock.Video.CompleteUploadMock.
+			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
+			Then(domain.Video{}, service.ErrNotFound)
+
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		router := h.GetRouter()
+
+		req := httptest.NewRequest(http.MethodPost, url, nil)
+		req.Header.Set("Authorization", "Bearer "+testToken)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("conflict when object not found in storage", func(t *testing.T) {
+		mc := minimock.NewController(t)
+		defer mc.Finish()
+
+		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		repo := setupRollbackTx(mc)
+
+		svcMock.Auth.GetClaimsFromTokenMock.When("Bearer "+testToken).Then(&domain.AuthClaims{
+			UserID:           testInitiatorID,
+			CurrentAccountID: testAccountID,
+		}, nil)
+		svcMock.Video.CompleteUploadMock.
+			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
+			Then(domain.Video{}, service.NewConflictError("object not found in storage"))
+
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		router := h.GetRouter()
+
+		req := httptest.NewRequest(http.MethodPost, url, nil)
+		req.Header.Set("Authorization", "Bearer "+testToken)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusConflict, w.Code)
 	})
 
 	t.Run("forbidden", func(t *testing.T) {
@@ -104,85 +145,20 @@ func TestHandler_UploadVideo(t *testing.T) {
 			UserID:           testInitiatorID,
 			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.Video.CreateUploadMock.
-			When(
-				minimock.AnyContext,
-				testAccountID,
-				testGroupID,
-				testInitiatorID,
-				testRequest.Name,
-				testRequest.ContentType,
-				testRequest.SizeBytes,
-			).
-			Then(domain.VideoUpload{}, service.ErrForbidden)
+		svcMock.Video.CompleteUploadMock.
+			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
+			Then(domain.Video{}, service.ErrForbidden)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
 		router := h.GetRouter()
 
-		body, _ := json.Marshal(testRequest)
-		req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+		req := httptest.NewRequest(http.MethodPost, url, nil)
 		req.Header.Set("Authorization", "Bearer "+testToken)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusForbidden, w.Code)
-	})
-
-	t.Run("conflict on duplicate name", func(t *testing.T) {
-		mc := minimock.NewController(t)
-		defer mc.Finish()
-
-		svcMock := testutil.NewHandlerTestServiceMock(mc)
-		repo := setupRollbackTx(mc)
-
-		svcMock.Auth.GetClaimsFromTokenMock.When("Bearer "+testToken).Then(&domain.AuthClaims{
-			UserID:           testInitiatorID,
-			CurrentAccountID: testAccountID,
-		}, nil)
-		svcMock.Video.CreateUploadMock.
-			When(
-				minimock.AnyContext,
-				testAccountID,
-				testGroupID,
-				testInitiatorID,
-				testRequest.Name,
-				testRequest.ContentType,
-				testRequest.SizeBytes,
-			).
-			Then(domain.VideoUpload{}, service.NewConflictError("video name already exists"))
-
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
-		router := h.GetRouter()
-
-		body, _ := json.Marshal(testRequest)
-		req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+testToken)
-
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		require.Equal(t, http.StatusConflict, w.Code)
-	})
-
-	t.Run("invalid body", func(t *testing.T) {
-		mc := minimock.NewController(t)
-		defer mc.Finish()
-
-		svcMock := testutil.NewHandlerTestServiceMock(mc)
-		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
-
-		body, _ := json.Marshal(dto.UploadVideoRequest{Name: "", ContentType: "video/mp4", SizeBytes: 1024})
-		req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+testToken)
-
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	t.Run("unauthorized without token", func(t *testing.T) {
@@ -192,13 +168,29 @@ func TestHandler_UploadVideo(t *testing.T) {
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
-		body, _ := json.Marshal(testRequest)
-		req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
+		req := httptest.NewRequest(http.MethodPost, url, nil)
 
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("invalid video id", func(t *testing.T) {
+		mc := minimock.NewController(t)
+		defer mc.Finish()
+
+		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
+
+		invalidURL := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() +
+			"/video/invalid-uuid/complete"
+		req := httptest.NewRequest(http.MethodPost, invalidURL, nil)
+		req.Header.Set("Authorization", "Bearer "+testToken)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }

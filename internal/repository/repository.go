@@ -85,7 +85,17 @@ type GroupRole interface {
 type Video interface {
 	Select(ctx context.Context, id uuid.UUID) (*domain.Video, error)
 	Insert(ctx context.Context, name string, groupID, userID uuid.UUID, status domain.VideoStatus) (domain.Video, error)
-	Update(ctx context.Context, id uuid.UUID, status *domain.VideoStatus) (domain.Video, error)
+	// UpdateStatusIf выполняет условный переход статуса видео: строка обновляется, только
+	// если её текущий статус входит в from (и, если задан patch.ExpectedAttempt, совпадает
+	// текущий processing_attempt). Возвращает true, если строка была обновлена — гонки
+	// между watchdog'ом и обработчиком событий безопасны (§1.3 эпика).
+	UpdateStatusIf(
+		ctx context.Context,
+		id uuid.UUID,
+		from []domain.VideoStatus,
+		to domain.VideoStatus,
+		patch domain.VideoPatch,
+	) (bool, error)
 	SelectByGroupID(ctx context.Context, groupID uuid.UUID) ([]domain.Video, error)
 	UpdateName(ctx context.Context, videoID uuid.UUID, name string) (domain.Video, error)
 	Delete(ctx context.Context, videoID uuid.UUID) error
@@ -93,13 +103,13 @@ type Video interface {
 
 type VideoAsset interface {
 	Select(ctx context.Context, videoID uuid.UUID) ([]domain.VideoAsset, error)
-	Create(
+	Insert(
 		ctx context.Context,
 		videoID uuid.UUID,
 		kind domain.VideoAssetKind,
 		profile domain.VideoProfile,
-		bucketName, objectKey, contentType string,
-		bytes int,
+		bucket, key, contentType string,
+		sizeBytes int64,
 	) (domain.VideoAsset, error)
 }
 

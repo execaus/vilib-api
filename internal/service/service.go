@@ -102,8 +102,19 @@ type GroupRole interface {
 }
 
 type Video interface {
-	GetPreflightUploadURL(ctx context.Context, accountID, groupID, userID uuid.UUID) (domain.PreflightURL, error)
-	Update(ctx context.Context, videoID uuid.UUID, initiatorID *uuid.UUID, status *domain.VideoStatus) (domain.Video, error)
+	// CreateUpload проверяет права ManageVideo, валидирует content-type/размер, создаёт
+	// запись видео в статусе uploading и выдаёт преподписанный URL на PUT-загрузку оригинала.
+	CreateUpload(
+		ctx context.Context,
+		accountID, groupID, userID uuid.UUID,
+		name, contentType string,
+		size int64,
+	) (domain.VideoUpload, error)
+	// CompleteUpload подтверждает загрузку оригинала: проверяет объект в хранилище,
+	// регистрирует ассет-оригинал, переводит видео в очередь на обработку и публикует
+	// событие OriginalUploaded через outbox. Идемпотентна для видео, уже поставленных
+	// в очередь/обрабатываемых/готовых.
+	CompleteUpload(ctx context.Context, accountID, groupID, userID, videoID uuid.UUID) (domain.Video, error)
 	Get(
 		ctx context.Context,
 		accountID, groupID, initiatorID, videoID uuid.UUID,
@@ -120,8 +131,8 @@ type VideoAsset interface {
 		videoID uuid.UUID,
 		kind domain.VideoAssetKind,
 		profile domain.VideoProfile,
-		bucketName, objectKey, contentType string,
-		bytes int,
+		bucket, key, contentType string,
+		sizeBytes int64,
 	) (domain.VideoAsset, error)
 	Get(ctx context.Context, videoID uuid.UUID) ([]domain.VideoAsset, error)
 }
@@ -165,7 +176,11 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 	s.UserGroup = NewUserGroupService(r.UserGroup, s)
 	s.GroupMember = NewGroupMemberService(r.GroupMember, s)
 	s.GroupRole = NewGroupRoleService(r.GroupRole, s)
-	s.Video = NewVideoService(s3, r.Video, s, VideoServiceConfig{Bucket: cfg.S3.Bucket, Video: cfg.Video})
+	s.Video = NewVideoService(s3, r.Video, s, VideoServiceConfig{
+		Bucket:                cfg.S3.Bucket,
+		Video:                 cfg.Video,
+		TopicOriginalUploaded: cfg.Kafka.TopicOriginalUploaded,
+	})
 	s.VideoAsset = NewVideoAssetService(r.VideoAsset, s)
 	s.Access = NewAccessService(s)
 	s.Outbox = NewOutboxService(r.Outbox, s)

@@ -15,7 +15,6 @@ type (
 const (
 	VideoUploadURLTTL = time.Hour
 	VideoStreamURLTTL = time.Hour
-	DefaultVideoName  = "untitled"
 )
 
 const (
@@ -65,6 +64,38 @@ const (
 	VideoFailureClassTemporary VideoFailureClass = "temporary"
 	VideoFailureClassTimeout   VideoFailureClass = "timeout"
 )
+
+// VideoOriginalObjectKey вычисляет ключ объекта оригинала видео в хранилище (§3.3 эпика).
+// Ключ выводится из одного video_id в любой точке (complete-ручка, watchdog, удаление) без
+// хранения промежуточного состояния между созданием загрузки и её подтверждением.
+func VideoOriginalObjectKey(videoID uuid.UUID) string {
+	return "videos/" + videoID.String() + "/original"
+}
+
+// VideoUpload — результат создания загрузки видео: идентификатор видео и преподписанный
+// URL на PUT-загрузку оригинала.
+type VideoUpload struct {
+	VideoID   uuid.UUID
+	UploadURL PreflightURL
+	ExpiresAt time.Time
+}
+
+// VideoPatch описывает опциональные поля частичного обновления видео при условном переходе
+// статуса (см. Video.UpdateStatusIf репозитория). Незаполненные поля не изменяются.
+type VideoPatch struct {
+	// ProcessingAttempt — новое значение номера текущей попытки обработки.
+	ProcessingAttempt *int
+	// ExpectedAttempt — ожидаемое текущее значение processing_attempt в условии WHERE;
+	// защищает от гонки между watchdog'ом и обработчиком событий.
+	ExpectedAttempt *int
+	FailureClass    *VideoFailureClass
+	FailureReason   *string
+	DurationMs      *int64
+	Width           *int
+	Height          *int
+	// ClearFailure сбрасывает FailureClass и FailureReason в NULL.
+	ClearFailure bool
+}
 
 type Video struct {
 	ID                uuid.UUID
