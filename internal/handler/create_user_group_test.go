@@ -74,6 +74,39 @@ func TestHandler_CreateUserGroup(t *testing.T) {
 		require.Equal(t, http.StatusCreated, w.Code)
 	})
 
+	t.Run("success without users", func(t *testing.T) {
+		mc := minimock.NewController(t)
+		defer mc.Finish()
+
+		svcMock := testutil.NewHandlerTestServiceMock(mc)
+
+		tx := saga_mocks.NewBobTransactionMock(mc)
+		tx.CommitMock.Expect(minimock.AnyContext).Return(nil)
+
+		repo := saga_mocks.NewTransactableMock(mc)
+		repo.WithTxMock.Expect(minimock.AnyContext).Return(tx, nil)
+
+		svcMock.Auth.GetClaimsFromTokenMock.Expect("Bearer "+testToken).Return(&domain.AuthClaims{
+			UserID:           testInitiatorID,
+			CurrentAccountID: testAccountID,
+		}, nil)
+		svcMock.UserGroup.CreateMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID, testGroupName).Return(testGroup, nil)
+
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		router := h.GetRouter()
+
+		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups"
+		body, _ := json.Marshal(dto.CreateUserGroupRequest{Name: testGroupName})
+		req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+testToken)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusCreated, w.Code)
+	})
+
 	t.Run("invalid account id", func(t *testing.T) {
 		mc := minimock.NewController(t)
 		defer mc.Finish()

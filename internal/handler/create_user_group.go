@@ -55,6 +55,12 @@ func (h *Handler) CreateUserGroup(c *gin.Context) {
 			return err
 		}
 
+		// Участники добавляются только если они переданы: в новом аккаунте роли группы
+		// по умолчанию может ещё не быть, и группа без участников должна создаваться.
+		if len(req.Users) == 0 {
+			return nil
+		}
+
 		members, err = services.UserGroup.AddMembers(ctx, accountID, claims.UserID, group.ID, req.Users...)
 		if err != nil {
 			zap.L().Error(err.Error())

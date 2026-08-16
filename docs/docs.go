@@ -1738,8 +1738,7 @@ const docTemplate = `{
         "dto.CreateUserGroupRequest": {
             "type": "object",
             "required": [
-                "name",
-                "users"
+                "name"
             ],
             "properties": {
                 "name": {

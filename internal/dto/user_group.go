@@ -8,7 +8,7 @@ import (
 
 type CreateUserGroupRequest struct {
 	Name  string      `json:"name"  binding:"required,max=64"`
-	Users []uuid.UUID `json:"users" binding:"required"`
+	Users []uuid.UUID `json:"users"`
 }
 
 type CreateUserGroupResponse struct {

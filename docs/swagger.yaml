@@ -80,7 +80,6 @@ definitions:
         type: array
     required:
     - name
-    - users
     type: object
   dto.CreateUserGroupResponse:
     properties:
