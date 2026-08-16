@@ -43,6 +43,15 @@ type CompleteVideoUploadResponse struct {
 	Video Video `json:"video"`
 }
 
+// VideoFailure — причина сбоя обработки видео (Э1-Т17): класс ошибки и человекочитаемый текст.
+// Присутствует в ответе только у инициатора с правом ManageVideo, иначе поле — null.
+type VideoFailure struct {
+	// Class — класс ошибки: permanent, temporary, timeout.
+	Class string `json:"class"`
+	// Reason — человекочитаемая причина сбоя.
+	Reason string `json:"reason"`
+}
+
 type Video struct {
 	ID         uuid.UUID `json:"id"`
 	GroupID    uuid.UUID `json:"group_id"`
@@ -51,8 +60,26 @@ type Video struct {
 	Status     uint      `json:"status"`
 	StatusName string    `json:"status_name"`
 	CreatedAt  time.Time `json:"created_at"`
+	// Profiles — имена HLS-профилей видео по возрастанию качества (пустой список, пока
+	// профилей нет).
+	Profiles []string `json:"profiles"`
+	// HasProcessed — признак наличия обработанной версии (готового мастер-плейлиста HLS).
+	HasProcessed bool `json:"has_processed"`
+	// DurationMs — длительность видео в миллисекундах, известна после успешной обработки.
+	DurationMs *int64 `json:"duration_ms,omitempty"`
+	// Width — ширина кадра оригинала в пикселях, известна после успешной обработки.
+	Width *int `json:"width,omitempty"`
+	// Height — высота кадра оригинала в пикселях, известна после успешной обработки.
+	Height *int `json:"height,omitempty"`
+	// Failure — причина сбоя обработки видео, заполняется только для инициатора с правом
+	// ManageVideo (Э1-Т17); для остальных — всегда null, даже если видео в статусе failed.
+	Failure *VideoFailure `json:"failure,omitempty"`
 }
 
+// FromDomain заполняет DTO базовыми полями видео без сведений об ассетах (Profiles — пустой
+// список, HasProcessed — false, Failure — nil). Используется там, где ассеты видео не
+// загружались (например, CompleteVideoUpload, RenameVideo) — для полного представления с
+// профилями и причиной сбоя используй FromDomainListItem.
 func (v *Video) FromDomain(video domain.Video) {
 	v.ID = video.ID
 	v.GroupID = video.GroupID
@@ -61,6 +88,27 @@ func (v *Video) FromDomain(video domain.Video) {
 	v.Status = uint(video.Status)
 	v.StatusName = video.Status.String()
 	v.CreatedAt = video.CreatedAt
+	v.Profiles = []string{}
+}
+
+// FromDomainListItem заполняет DTO элементом списка видео (Э1-Т20): профили, признак обработки
+// и причина сбоя (если она была вычислена сервисом для инициатора с правом ManageVideo, §5
+// дизайна эпика, Э1-Т17).
+func (v *Video) FromDomainListItem(item domain.VideoListItem) {
+	v.FromDomain(item.Video)
+
+	v.Profiles = item.Profiles
+	if v.Profiles == nil {
+		v.Profiles = []string{}
+	}
+	v.HasProcessed = item.HasProcessed
+	v.DurationMs = item.DurationMs
+	v.Width = item.Width
+	v.Height = item.Height
+
+	if item.Failure != nil {
+		v.Failure = &VideoFailure{Class: string(item.Failure.Class), Reason: item.Failure.Reason}
+	}
 }
 
 type GetAllVideosResponse struct {

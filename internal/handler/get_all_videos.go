@@ -11,15 +11,18 @@ import (
 
 // GetAllVideos godoc
 // @Summary Список видео группы
-// @Description Возвращает список видео в группе пользователей
+// @Description Возвращает список видео в группе пользователей: статус, профили HLS и признак
+// @Description наличия обработанной версии — из ассетов видео. Причина сбоя (failure) видна
+// @Description только инициатору с правом ManageVideo, иначе поле — null (Э1-Т17).
 // @Tags videos
 // @Produce json
 // @Param accountId path string true "ID аккаунта"
 // @Param userGroupId path string true "ID группы"
 // @Success 200 {object} dto.GetAllVideosResponse
 // @Failure 400 {object} dto.ErrorMessage
+// @Failure 401
 // @Failure 403 {object} dto.ErrorMessage
-// @Failure 500 {object} dto.ErrorMessage
+// @Failure 500
 // @Router /api/v1/accounts/{accountId}/user-groups/{userGroupId}/videos [get]
 func (h *Handler) GetAllVideos(c *gin.Context) {
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
@@ -42,16 +45,16 @@ func (h *Handler) GetAllVideos(c *gin.Context) {
 			return err
 		}
 
-		domainVideos, err := services.Video.GetAll(ctx, accountID, groupID, claims.UserID)
+		items, err := services.Video.GetAll(ctx, accountID, groupID, claims.UserID)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err
 		}
 
-		videos = make([]dto.Video, len(domainVideos))
-		for i, v := range domainVideos {
+		videos = make([]dto.Video, len(items))
+		for i, item := range items {
 			videos[i] = dto.Video{}
-			videos[i].FromDomain(v)
+			videos[i].FromDomainListItem(item)
 		}
 
 		return nil
