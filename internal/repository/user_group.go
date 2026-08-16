@@ -9,6 +9,7 @@ import (
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/stephenafamo/bob"
 	"github.com/stephenafamo/bob/dialect/psql"
 	"github.com/stephenafamo/bob/dialect/psql/dm"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
@@ -92,73 +93,84 @@ func (r *UserGroupRepository) SelectByAccountID(
 	return groups, nil
 }
 
-func (r *UserGroupRepository) DeleteCascade(ctx context.Context, groupID uuid.UUID) error {
+// DeleteCascade удаляет группу вместе со всеми её видео, ассетами, файлами и участниками
+// (Э1-Т21). Порядок: сначала files, на которые ссылаются video_assets видео группы (каскадно
+// убирает и сами video_assets — FK video_assets.file_id → files.file_id объявлен ON DELETE
+// CASCADE), затем видео (FK video_assets.video_id → user_group_videos.id тоже ON DELETE
+// CASCADE, но явное удаление files обязательно — иначе они остались бы сиротами в БД), затем
+// участники и сама группа. Возвращает id удалённых видео — вызывающая сторона использует их
+// для best-effort зачистки объектов в хранилище после коммита (§7.3 эпика).
+func (r *UserGroupRepository) DeleteCascade(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error) {
 	exec := r.provider.GetExecutor(ctx)
 
-	// 1. Получить список видео группы
+	// 1. Получить список видео группы — id нужны вызывающей стороне для очистки S3.
 	videosDB, err := schema.UserGroupVideos.Query(
 		sm.Where(schema.UserGroupVideos.Columns.UserGroupID.EQ(psql.Arg(groupID))),
 	).All(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return err
+		return nil, err
 	}
 
-	// 2. Удалить video_assets и files для каждого видео
-	for _, video := range videosDB {
-		assetsDB, err := schema.VideoAssets.Query(
-			sm.Where(schema.VideoAssets.Columns.VideoID.EQ(psql.Arg(video.ID))),
+	videoIDs := make([]uuid.UUID, len(videosDB))
+	for i, video := range videosDB {
+		videoIDs[i] = video.ID
+	}
+
+	// 2. Удалить files, на которые ссылаются video_assets видео группы (одним запросом через
+	// подзапрос по video_id) — каскадно убирает и сами строки video_assets.
+	if len(videoIDs) > 0 {
+		videoIDArgs := make([]bob.Expression, len(videoIDs))
+		for i, id := range videoIDs {
+			videoIDArgs[i] = psql.Arg(id)
+		}
+
+		assetsDB, assetsErr := schema.VideoAssets.Query(
+			sm.Where(schema.VideoAssets.Columns.VideoID.In(videoIDArgs...)),
 		).All(ctx, exec)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		if assetsErr != nil {
+			zap.L().Error(assetsErr.Error())
+			return nil, assetsErr
 		}
 
-		for _, asset := range assetsDB {
-			_, err = schema.Files.Delete(
-				dm.Where(schema.Files.Columns.FileID.EQ(psql.Arg(asset.FileID))),
-			).Exec(ctx, exec)
-			if err != nil {
-				zap.L().Error(err.Error())
-				return err
+		if len(assetsDB) > 0 {
+			fileIDArgs := make([]bob.Expression, len(assetsDB))
+			for i, asset := range assetsDB {
+				fileIDArgs[i] = psql.Arg(asset.FileID)
 			}
-		}
 
-		_, err = schema.VideoAssets.Delete(
-			dm.Where(schema.VideoAssets.Columns.VideoID.EQ(psql.Arg(video.ID))),
-		).Exec(ctx, exec)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+			if _, deleteErr := schema.Files.Delete(
+				dm.Where(schema.Files.Columns.FileID.In(fileIDArgs...)),
+			).Exec(ctx, exec); deleteErr != nil {
+				zap.L().Error(deleteErr.Error())
+				return nil, deleteErr
+			}
 		}
 	}
 
 	// 3. Удалить user_group_videos
-	_, err = schema.UserGroupVideos.Delete(
+	if _, err = schema.UserGroupVideos.Delete(
 		dm.Where(schema.UserGroupVideos.Columns.UserGroupID.EQ(psql.Arg(groupID))),
-	).Exec(ctx, exec)
-	if err != nil {
+	).Exec(ctx, exec); err != nil {
 		zap.L().Error(err.Error())
-		return err
+		return nil, err
 	}
 
 	// 4. Удалить group_members
-	_, err = schema.GroupMembers.Delete(
+	if _, err = schema.GroupMembers.Delete(
 		dm.Where(schema.GroupMembers.Columns.GroupID.EQ(psql.Arg(groupID))),
-	).Exec(ctx, exec)
-	if err != nil {
+	).Exec(ctx, exec); err != nil {
 		zap.L().Error(err.Error())
-		return err
+		return nil, err
 	}
 
 	// 5. Удалить user_group
-	_, err = schema.UserGroups.Delete(
+	if _, err = schema.UserGroups.Delete(
 		dm.Where(schema.UserGroups.Columns.GroupID.EQ(psql.Arg(groupID))),
-	).Exec(ctx, exec)
-	if err != nil {
+	).Exec(ctx, exec); err != nil {
 		zap.L().Error(err.Error())
-		return err
+		return nil, err
 	}
 
-	return nil
+	return videoIDs, nil
 }

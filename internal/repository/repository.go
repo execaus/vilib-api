@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 	"vilib-api/internal/domain"
 
 	"github.com/google/uuid"
@@ -58,7 +59,10 @@ type UserGroup interface {
 	Insert(ctx context.Context, accountID uuid.UUID, name string) (domain.UserGroup, error)
 	GetByID(ctx context.Context, groupsID ...uuid.UUID) ([]domain.UserGroup, error)
 	SelectByAccountID(ctx context.Context, accountID uuid.UUID) ([]domain.UserGroup, error)
-	DeleteCascade(ctx context.Context, groupID uuid.UUID) error
+	// DeleteCascade удаляет группу вместе со всеми её видео, ассетами, файлами и участниками
+	// (Э1-Т21). Возвращает идентификаторы удалённых видео группы — нужны вызывающей стороне
+	// для best-effort зачистки их объектов в хранилище после коммита (§7.3 эпика).
+	DeleteCascade(ctx context.Context, groupID uuid.UUID) ([]uuid.UUID, error)
 }
 
 type GroupMember interface {
@@ -98,7 +102,18 @@ type Video interface {
 	) (bool, error)
 	SelectByGroupID(ctx context.Context, groupID uuid.UUID) ([]domain.Video, error)
 	UpdateName(ctx context.Context, videoID uuid.UUID, name string) (domain.Video, error)
+	// Delete удаляет видео вместе со всеми его ассетами и файлами (Э1-Т21) — без сирот в БД.
 	Delete(ctx context.Context, videoID uuid.UUID) error
+	// UpdateTimedOut переводит в failed(timeout) все видео заданного статуса, чья контрольная
+	// временная метка (created_at для uploading, status_changed_at для остальных) старше
+	// before — один атомарный условный UPDATE, возвращает id обновлённых строк (§8 дизайна
+	// эпика).
+	UpdateTimedOut(
+		ctx context.Context,
+		status domain.VideoStatus,
+		before time.Time,
+		failure domain.VideoFailure,
+	) ([]uuid.UUID, error)
 }
 
 type VideoAsset interface {

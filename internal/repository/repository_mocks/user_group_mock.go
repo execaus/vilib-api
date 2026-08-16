@@ -20,7 +20,7 @@ type UserGroupMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
-	funcDeleteCascade          func(ctx context.Context, groupID uuid.UUID) (err error)
+	funcDeleteCascade          func(ctx context.Context, groupID uuid.UUID) (ua1 []uuid.UUID, err error)
 	funcDeleteCascadeOrigin    string
 	inspectFuncDeleteCascade   func(ctx context.Context, groupID uuid.UUID)
 	afterDeleteCascadeCounter  uint64
@@ -112,6 +112,7 @@ type UserGroupMockDeleteCascadeParamPtrs struct {
 
 // UserGroupMockDeleteCascadeResults contains results of the UserGroup.DeleteCascade
 type UserGroupMockDeleteCascadeResults struct {
+	ua1 []uuid.UUID
 	err error
 }
 
@@ -215,7 +216,7 @@ func (mmDeleteCascade *mUserGroupMockDeleteCascade) Inspect(f func(ctx context.C
 }
 
 // Return sets up results that will be returned by UserGroup.DeleteCascade
-func (mmDeleteCascade *mUserGroupMockDeleteCascade) Return(err error) *UserGroupMock {
+func (mmDeleteCascade *mUserGroupMockDeleteCascade) Return(ua1 []uuid.UUID, err error) *UserGroupMock {
 	if mmDeleteCascade.mock.funcDeleteCascade != nil {
 		mmDeleteCascade.mock.t.Fatalf("UserGroupMock.DeleteCascade mock is already set by Set")
 	}
@@ -223,13 +224,13 @@ func (mmDeleteCascade *mUserGroupMockDeleteCascade) Return(err error) *UserGroup
 	if mmDeleteCascade.defaultExpectation == nil {
 		mmDeleteCascade.defaultExpectation = &UserGroupMockDeleteCascadeExpectation{mock: mmDeleteCascade.mock}
 	}
-	mmDeleteCascade.defaultExpectation.results = &UserGroupMockDeleteCascadeResults{err}
+	mmDeleteCascade.defaultExpectation.results = &UserGroupMockDeleteCascadeResults{ua1, err}
 	mmDeleteCascade.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
 	return mmDeleteCascade.mock
 }
 
 // Set uses given function f to mock the UserGroup.DeleteCascade method
-func (mmDeleteCascade *mUserGroupMockDeleteCascade) Set(f func(ctx context.Context, groupID uuid.UUID) (err error)) *UserGroupMock {
+func (mmDeleteCascade *mUserGroupMockDeleteCascade) Set(f func(ctx context.Context, groupID uuid.UUID) (ua1 []uuid.UUID, err error)) *UserGroupMock {
 	if mmDeleteCascade.defaultExpectation != nil {
 		mmDeleteCascade.mock.t.Fatalf("Default expectation is already set for the UserGroup.DeleteCascade method")
 	}
@@ -260,8 +261,8 @@ func (mmDeleteCascade *mUserGroupMockDeleteCascade) When(ctx context.Context, gr
 }
 
 // Then sets up UserGroup.DeleteCascade return parameters for the expectation previously defined by the When method
-func (e *UserGroupMockDeleteCascadeExpectation) Then(err error) *UserGroupMock {
-	e.results = &UserGroupMockDeleteCascadeResults{err}
+func (e *UserGroupMockDeleteCascadeExpectation) Then(ua1 []uuid.UUID, err error) *UserGroupMock {
+	e.results = &UserGroupMockDeleteCascadeResults{ua1, err}
 	return e.mock
 }
 
@@ -287,7 +288,7 @@ func (mmDeleteCascade *mUserGroupMockDeleteCascade) invocationsDone() bool {
 }
 
 // DeleteCascade implements mm_repository.UserGroup
-func (mmDeleteCascade *UserGroupMock) DeleteCascade(ctx context.Context, groupID uuid.UUID) (err error) {
+func (mmDeleteCascade *UserGroupMock) DeleteCascade(ctx context.Context, groupID uuid.UUID) (ua1 []uuid.UUID, err error) {
 	mm_atomic.AddUint64(&mmDeleteCascade.beforeDeleteCascadeCounter, 1)
 	defer mm_atomic.AddUint64(&mmDeleteCascade.afterDeleteCascadeCounter, 1)
 
@@ -307,7 +308,7 @@ func (mmDeleteCascade *UserGroupMock) DeleteCascade(ctx context.Context, groupID
 	for _, e := range mmDeleteCascade.DeleteCascadeMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.err
+			return e.results.ua1, e.results.err
 		}
 	}
 
@@ -339,7 +340,7 @@ func (mmDeleteCascade *UserGroupMock) DeleteCascade(ctx context.Context, groupID
 		if mm_results == nil {
 			mmDeleteCascade.t.Fatal("No results are set for the UserGroupMock.DeleteCascade")
 		}
-		return (*mm_results).err
+		return (*mm_results).ua1, (*mm_results).err
 	}
 	if mmDeleteCascade.funcDeleteCascade != nil {
 		return mmDeleteCascade.funcDeleteCascade(ctx, groupID)

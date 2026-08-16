@@ -8,6 +8,7 @@ import (
 	"context"
 	"sync"
 	mm_atomic "sync/atomic"
+	"time"
 	mm_time "time"
 	"vilib-api/internal/domain"
 
@@ -61,6 +62,13 @@ type VideoMock struct {
 	afterUpdateStatusIfCounter  uint64
 	beforeUpdateStatusIfCounter uint64
 	UpdateStatusIfMock          mVideoMockUpdateStatusIf
+
+	funcUpdateTimedOut          func(ctx context.Context, status domain.VideoStatus, before time.Time, failure domain.VideoFailure) (ua1 []uuid.UUID, err error)
+	funcUpdateTimedOutOrigin    string
+	inspectFuncUpdateTimedOut   func(ctx context.Context, status domain.VideoStatus, before time.Time, failure domain.VideoFailure)
+	afterUpdateTimedOutCounter  uint64
+	beforeUpdateTimedOutCounter uint64
+	UpdateTimedOutMock          mVideoMockUpdateTimedOut
 }
 
 // NewVideoMock returns a mock for mm_repository.Video
@@ -88,6 +96,9 @@ func NewVideoMock(t minimock.Tester) *VideoMock {
 
 	m.UpdateStatusIfMock = mVideoMockUpdateStatusIf{mock: m}
 	m.UpdateStatusIfMock.callArgs = []*VideoMockUpdateStatusIfParams{}
+
+	m.UpdateTimedOutMock = mVideoMockUpdateTimedOut{mock: m}
+	m.UpdateTimedOutMock.callArgs = []*VideoMockUpdateTimedOutParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -2368,6 +2379,411 @@ func (m *VideoMock) MinimockUpdateStatusIfInspect() {
 	}
 }
 
+type mVideoMockUpdateTimedOut struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockUpdateTimedOutExpectation
+	expectations       []*VideoMockUpdateTimedOutExpectation
+
+	callArgs []*VideoMockUpdateTimedOutParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockUpdateTimedOutExpectation specifies expectation struct of the Video.UpdateTimedOut
+type VideoMockUpdateTimedOutExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockUpdateTimedOutParams
+	paramPtrs          *VideoMockUpdateTimedOutParamPtrs
+	expectationOrigins VideoMockUpdateTimedOutExpectationOrigins
+	results            *VideoMockUpdateTimedOutResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockUpdateTimedOutParams contains parameters of the Video.UpdateTimedOut
+type VideoMockUpdateTimedOutParams struct {
+	ctx     context.Context
+	status  domain.VideoStatus
+	before  time.Time
+	failure domain.VideoFailure
+}
+
+// VideoMockUpdateTimedOutParamPtrs contains pointers to parameters of the Video.UpdateTimedOut
+type VideoMockUpdateTimedOutParamPtrs struct {
+	ctx     *context.Context
+	status  *domain.VideoStatus
+	before  *time.Time
+	failure *domain.VideoFailure
+}
+
+// VideoMockUpdateTimedOutResults contains results of the Video.UpdateTimedOut
+type VideoMockUpdateTimedOutResults struct {
+	ua1 []uuid.UUID
+	err error
+}
+
+// VideoMockUpdateTimedOutOrigins contains origins of expectations of the Video.UpdateTimedOut
+type VideoMockUpdateTimedOutExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originStatus  string
+	originBefore  string
+	originFailure string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) Optional() *mVideoMockUpdateTimedOut {
+	mmUpdateTimedOut.optional = true
+	return mmUpdateTimedOut
+}
+
+// Expect sets up expected params for Video.UpdateTimedOut
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) Expect(ctx context.Context, status domain.VideoStatus, before time.Time, failure domain.VideoFailure) *mVideoMockUpdateTimedOut {
+	if mmUpdateTimedOut.mock.funcUpdateTimedOut != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Set")
+	}
+
+	if mmUpdateTimedOut.defaultExpectation == nil {
+		mmUpdateTimedOut.defaultExpectation = &VideoMockUpdateTimedOutExpectation{}
+	}
+
+	if mmUpdateTimedOut.defaultExpectation.paramPtrs != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateTimedOut.defaultExpectation.params = &VideoMockUpdateTimedOutParams{ctx, status, before, failure}
+	mmUpdateTimedOut.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateTimedOut.expectations {
+		if minimock.Equal(e.params, mmUpdateTimedOut.defaultExpectation.params) {
+			mmUpdateTimedOut.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateTimedOut.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateTimedOut
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.UpdateTimedOut
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) ExpectCtxParam1(ctx context.Context) *mVideoMockUpdateTimedOut {
+	if mmUpdateTimedOut.mock.funcUpdateTimedOut != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Set")
+	}
+
+	if mmUpdateTimedOut.defaultExpectation == nil {
+		mmUpdateTimedOut.defaultExpectation = &VideoMockUpdateTimedOutExpectation{}
+	}
+
+	if mmUpdateTimedOut.defaultExpectation.params != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Expect")
+	}
+
+	if mmUpdateTimedOut.defaultExpectation.paramPtrs == nil {
+		mmUpdateTimedOut.defaultExpectation.paramPtrs = &VideoMockUpdateTimedOutParamPtrs{}
+	}
+	mmUpdateTimedOut.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateTimedOut.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateTimedOut
+}
+
+// ExpectStatusParam2 sets up expected param status for Video.UpdateTimedOut
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) ExpectStatusParam2(status domain.VideoStatus) *mVideoMockUpdateTimedOut {
+	if mmUpdateTimedOut.mock.funcUpdateTimedOut != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Set")
+	}
+
+	if mmUpdateTimedOut.defaultExpectation == nil {
+		mmUpdateTimedOut.defaultExpectation = &VideoMockUpdateTimedOutExpectation{}
+	}
+
+	if mmUpdateTimedOut.defaultExpectation.params != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Expect")
+	}
+
+	if mmUpdateTimedOut.defaultExpectation.paramPtrs == nil {
+		mmUpdateTimedOut.defaultExpectation.paramPtrs = &VideoMockUpdateTimedOutParamPtrs{}
+	}
+	mmUpdateTimedOut.defaultExpectation.paramPtrs.status = &status
+	mmUpdateTimedOut.defaultExpectation.expectationOrigins.originStatus = minimock.CallerInfo(1)
+
+	return mmUpdateTimedOut
+}
+
+// ExpectBeforeParam3 sets up expected param before for Video.UpdateTimedOut
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) ExpectBeforeParam3(before time.Time) *mVideoMockUpdateTimedOut {
+	if mmUpdateTimedOut.mock.funcUpdateTimedOut != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Set")
+	}
+
+	if mmUpdateTimedOut.defaultExpectation == nil {
+		mmUpdateTimedOut.defaultExpectation = &VideoMockUpdateTimedOutExpectation{}
+	}
+
+	if mmUpdateTimedOut.defaultExpectation.params != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Expect")
+	}
+
+	if mmUpdateTimedOut.defaultExpectation.paramPtrs == nil {
+		mmUpdateTimedOut.defaultExpectation.paramPtrs = &VideoMockUpdateTimedOutParamPtrs{}
+	}
+	mmUpdateTimedOut.defaultExpectation.paramPtrs.before = &before
+	mmUpdateTimedOut.defaultExpectation.expectationOrigins.originBefore = minimock.CallerInfo(1)
+
+	return mmUpdateTimedOut
+}
+
+// ExpectFailureParam4 sets up expected param failure for Video.UpdateTimedOut
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) ExpectFailureParam4(failure domain.VideoFailure) *mVideoMockUpdateTimedOut {
+	if mmUpdateTimedOut.mock.funcUpdateTimedOut != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Set")
+	}
+
+	if mmUpdateTimedOut.defaultExpectation == nil {
+		mmUpdateTimedOut.defaultExpectation = &VideoMockUpdateTimedOutExpectation{}
+	}
+
+	if mmUpdateTimedOut.defaultExpectation.params != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Expect")
+	}
+
+	if mmUpdateTimedOut.defaultExpectation.paramPtrs == nil {
+		mmUpdateTimedOut.defaultExpectation.paramPtrs = &VideoMockUpdateTimedOutParamPtrs{}
+	}
+	mmUpdateTimedOut.defaultExpectation.paramPtrs.failure = &failure
+	mmUpdateTimedOut.defaultExpectation.expectationOrigins.originFailure = minimock.CallerInfo(1)
+
+	return mmUpdateTimedOut
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.UpdateTimedOut
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) Inspect(f func(ctx context.Context, status domain.VideoStatus, before time.Time, failure domain.VideoFailure)) *mVideoMockUpdateTimedOut {
+	if mmUpdateTimedOut.mock.inspectFuncUpdateTimedOut != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("Inspect function is already set for VideoMock.UpdateTimedOut")
+	}
+
+	mmUpdateTimedOut.mock.inspectFuncUpdateTimedOut = f
+
+	return mmUpdateTimedOut
+}
+
+// Return sets up results that will be returned by Video.UpdateTimedOut
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) Return(ua1 []uuid.UUID, err error) *VideoMock {
+	if mmUpdateTimedOut.mock.funcUpdateTimedOut != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Set")
+	}
+
+	if mmUpdateTimedOut.defaultExpectation == nil {
+		mmUpdateTimedOut.defaultExpectation = &VideoMockUpdateTimedOutExpectation{mock: mmUpdateTimedOut.mock}
+	}
+	mmUpdateTimedOut.defaultExpectation.results = &VideoMockUpdateTimedOutResults{ua1, err}
+	mmUpdateTimedOut.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateTimedOut.mock
+}
+
+// Set uses given function f to mock the Video.UpdateTimedOut method
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) Set(f func(ctx context.Context, status domain.VideoStatus, before time.Time, failure domain.VideoFailure) (ua1 []uuid.UUID, err error)) *VideoMock {
+	if mmUpdateTimedOut.defaultExpectation != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("Default expectation is already set for the Video.UpdateTimedOut method")
+	}
+
+	if len(mmUpdateTimedOut.expectations) > 0 {
+		mmUpdateTimedOut.mock.t.Fatalf("Some expectations are already set for the Video.UpdateTimedOut method")
+	}
+
+	mmUpdateTimedOut.mock.funcUpdateTimedOut = f
+	mmUpdateTimedOut.mock.funcUpdateTimedOutOrigin = minimock.CallerInfo(1)
+	return mmUpdateTimedOut.mock
+}
+
+// When sets expectation for the Video.UpdateTimedOut which will trigger the result defined by the following
+// Then helper
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) When(ctx context.Context, status domain.VideoStatus, before time.Time, failure domain.VideoFailure) *VideoMockUpdateTimedOutExpectation {
+	if mmUpdateTimedOut.mock.funcUpdateTimedOut != nil {
+		mmUpdateTimedOut.mock.t.Fatalf("VideoMock.UpdateTimedOut mock is already set by Set")
+	}
+
+	expectation := &VideoMockUpdateTimedOutExpectation{
+		mock:               mmUpdateTimedOut.mock,
+		params:             &VideoMockUpdateTimedOutParams{ctx, status, before, failure},
+		expectationOrigins: VideoMockUpdateTimedOutExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateTimedOut.expectations = append(mmUpdateTimedOut.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.UpdateTimedOut return parameters for the expectation previously defined by the When method
+func (e *VideoMockUpdateTimedOutExpectation) Then(ua1 []uuid.UUID, err error) *VideoMock {
+	e.results = &VideoMockUpdateTimedOutResults{ua1, err}
+	return e.mock
+}
+
+// Times sets number of times Video.UpdateTimedOut should be invoked
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) Times(n uint64) *mVideoMockUpdateTimedOut {
+	if n == 0 {
+		mmUpdateTimedOut.mock.t.Fatalf("Times of VideoMock.UpdateTimedOut mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateTimedOut.expectedInvocations, n)
+	mmUpdateTimedOut.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateTimedOut
+}
+
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) invocationsDone() bool {
+	if len(mmUpdateTimedOut.expectations) == 0 && mmUpdateTimedOut.defaultExpectation == nil && mmUpdateTimedOut.mock.funcUpdateTimedOut == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateTimedOut.mock.afterUpdateTimedOutCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateTimedOut.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateTimedOut implements mm_repository.Video
+func (mmUpdateTimedOut *VideoMock) UpdateTimedOut(ctx context.Context, status domain.VideoStatus, before time.Time, failure domain.VideoFailure) (ua1 []uuid.UUID, err error) {
+	mm_atomic.AddUint64(&mmUpdateTimedOut.beforeUpdateTimedOutCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateTimedOut.afterUpdateTimedOutCounter, 1)
+
+	mmUpdateTimedOut.t.Helper()
+
+	if mmUpdateTimedOut.inspectFuncUpdateTimedOut != nil {
+		mmUpdateTimedOut.inspectFuncUpdateTimedOut(ctx, status, before, failure)
+	}
+
+	mm_params := VideoMockUpdateTimedOutParams{ctx, status, before, failure}
+
+	// Record call args
+	mmUpdateTimedOut.UpdateTimedOutMock.mutex.Lock()
+	mmUpdateTimedOut.UpdateTimedOutMock.callArgs = append(mmUpdateTimedOut.UpdateTimedOutMock.callArgs, &mm_params)
+	mmUpdateTimedOut.UpdateTimedOutMock.mutex.Unlock()
+
+	for _, e := range mmUpdateTimedOut.UpdateTimedOutMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ua1, e.results.err
+		}
+	}
+
+	if mmUpdateTimedOut.UpdateTimedOutMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateTimedOut.UpdateTimedOutMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateTimedOut.UpdateTimedOutMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateTimedOut.UpdateTimedOutMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockUpdateTimedOutParams{ctx, status, before, failure}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateTimedOut.t.Errorf("VideoMock.UpdateTimedOut got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateTimedOut.UpdateTimedOutMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.status != nil && !minimock.Equal(*mm_want_ptrs.status, mm_got.status) {
+				mmUpdateTimedOut.t.Errorf("VideoMock.UpdateTimedOut got unexpected parameter status, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateTimedOut.UpdateTimedOutMock.defaultExpectation.expectationOrigins.originStatus, *mm_want_ptrs.status, mm_got.status, minimock.Diff(*mm_want_ptrs.status, mm_got.status))
+			}
+
+			if mm_want_ptrs.before != nil && !minimock.Equal(*mm_want_ptrs.before, mm_got.before) {
+				mmUpdateTimedOut.t.Errorf("VideoMock.UpdateTimedOut got unexpected parameter before, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateTimedOut.UpdateTimedOutMock.defaultExpectation.expectationOrigins.originBefore, *mm_want_ptrs.before, mm_got.before, minimock.Diff(*mm_want_ptrs.before, mm_got.before))
+			}
+
+			if mm_want_ptrs.failure != nil && !minimock.Equal(*mm_want_ptrs.failure, mm_got.failure) {
+				mmUpdateTimedOut.t.Errorf("VideoMock.UpdateTimedOut got unexpected parameter failure, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateTimedOut.UpdateTimedOutMock.defaultExpectation.expectationOrigins.originFailure, *mm_want_ptrs.failure, mm_got.failure, minimock.Diff(*mm_want_ptrs.failure, mm_got.failure))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateTimedOut.t.Errorf("VideoMock.UpdateTimedOut got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateTimedOut.UpdateTimedOutMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateTimedOut.UpdateTimedOutMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateTimedOut.t.Fatal("No results are set for the VideoMock.UpdateTimedOut")
+		}
+		return (*mm_results).ua1, (*mm_results).err
+	}
+	if mmUpdateTimedOut.funcUpdateTimedOut != nil {
+		return mmUpdateTimedOut.funcUpdateTimedOut(ctx, status, before, failure)
+	}
+	mmUpdateTimedOut.t.Fatalf("Unexpected call to VideoMock.UpdateTimedOut. %v %v %v %v", ctx, status, before, failure)
+	return
+}
+
+// UpdateTimedOutAfterCounter returns a count of finished VideoMock.UpdateTimedOut invocations
+func (mmUpdateTimedOut *VideoMock) UpdateTimedOutAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateTimedOut.afterUpdateTimedOutCounter)
+}
+
+// UpdateTimedOutBeforeCounter returns a count of VideoMock.UpdateTimedOut invocations
+func (mmUpdateTimedOut *VideoMock) UpdateTimedOutBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateTimedOut.beforeUpdateTimedOutCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.UpdateTimedOut.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateTimedOut *mVideoMockUpdateTimedOut) Calls() []*VideoMockUpdateTimedOutParams {
+	mmUpdateTimedOut.mutex.RLock()
+
+	argCopy := make([]*VideoMockUpdateTimedOutParams, len(mmUpdateTimedOut.callArgs))
+	copy(argCopy, mmUpdateTimedOut.callArgs)
+
+	mmUpdateTimedOut.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateTimedOutDone returns true if the count of the UpdateTimedOut invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockUpdateTimedOutDone() bool {
+	if m.UpdateTimedOutMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateTimedOutMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateTimedOutMock.invocationsDone()
+}
+
+// MinimockUpdateTimedOutInspect logs each unmet expectation
+func (m *VideoMock) MinimockUpdateTimedOutInspect() {
+	for _, e := range m.UpdateTimedOutMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.UpdateTimedOut at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateTimedOutCounter := mm_atomic.LoadUint64(&m.afterUpdateTimedOutCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateTimedOutMock.defaultExpectation != nil && afterUpdateTimedOutCounter < 1 {
+		if m.UpdateTimedOutMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.UpdateTimedOut at\n%s", m.UpdateTimedOutMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.UpdateTimedOut at\n%s with params: %#v", m.UpdateTimedOutMock.defaultExpectation.expectationOrigins.origin, *m.UpdateTimedOutMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateTimedOut != nil && afterUpdateTimedOutCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.UpdateTimedOut at\n%s", m.funcUpdateTimedOutOrigin)
+	}
+
+	if !m.UpdateTimedOutMock.invocationsDone() && afterUpdateTimedOutCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.UpdateTimedOut at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateTimedOutMock.expectedInvocations), m.UpdateTimedOutMock.expectedInvocationsOrigin, afterUpdateTimedOutCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *VideoMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
@@ -2383,6 +2799,8 @@ func (m *VideoMock) MinimockFinish() {
 			m.MinimockUpdateNameInspect()
 
 			m.MinimockUpdateStatusIfInspect()
+
+			m.MinimockUpdateTimedOutInspect()
 		}
 	})
 }
@@ -2411,5 +2829,6 @@ func (m *VideoMock) minimockDone() bool {
 		m.MinimockSelectDone() &&
 		m.MinimockSelectByGroupIDDone() &&
 		m.MinimockUpdateNameDone() &&
-		m.MinimockUpdateStatusIfDone()
+		m.MinimockUpdateStatusIfDone() &&
+		m.MinimockUpdateTimedOutDone()
 }

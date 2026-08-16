@@ -2,12 +2,14 @@ package repository_test
 
 import (
 	"testing"
+	"time"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
 	"vilib-api/testutil"
 
 	"github.com/google/uuid"
 	"github.com/jaswdr/faker/v2"
+	"github.com/stephenafamo/bob"
 	"github.com/stretchr/testify/require"
 )
 
@@ -380,5 +382,138 @@ func TestRepository_VideoAssetDeleteByVideoAndKinds_NoMatchingAssets_NoError(t *
 		)
 
 		require.NoError(t, err)
+	})
+}
+
+// backdateVideoTimestamp напрямую переписывает created_at/status_changed_at видео в обход
+// репозитория — нужно для тестов watchdog'а, где строка должна выглядеть "зависшей" дольше
+// таймаута. Прямой доступ к *bob.DB получают только тесты, использующие testutil.WithDB
+// (не TestRepositoryWithDB) — это осознанное исключение для симуляции течения времени.
+func backdateVideoTimestamp(t *testing.T, bobDB *bob.DB, videoID uuid.UUID, at time.Time) {
+	t.Helper()
+
+	_, err := bobDB.ExecContext(
+		t.Context(),
+		"UPDATE app.user_group_videos SET created_at = $1, status_changed_at = $1 WHERE id = $2",
+		at, videoID,
+	)
+	require.NoError(t, err)
+}
+
+// TestRepository_VideoUpdateTimedOut_TranslatesOnlyOverdueRowsOfRequestedStatus проверяет,
+// что UpdateTimedOut переводит в failed только строку заданного статуса, чья контрольная
+// метка старше before — непросроченная строка того же статуса и просроченная строка другого
+// статуса не затрагиваются (§8 дизайна эпика).
+func TestRepository_VideoUpdateTimedOut_TranslatesOnlyOverdueRowsOfRequestedStatus(t *testing.T) {
+	t.Parallel()
+
+	testutil.WithDB(t, []string{"../../migrations"}, func(bobDB *bob.DB) {
+		provider := repository.NewExecutorProvider(bobDB)
+		r := repository.NewRepository(provider)
+		f := testutil.Faker
+
+		overdueUploading := newTestVideo(t, r, f, domain.VideoStatusUploading)
+		freshUploading := newTestVideo(t, r, f, domain.VideoStatusUploading)
+		overdueQueued := newTestVideo(t, r, f, domain.VideoStatusQueued)
+
+		threshold := time.Now().Add(-2 * time.Hour)
+		backdateVideoTimestamp(t, bobDB, overdueUploading.ID, threshold.Add(-time.Minute))
+		backdateVideoTimestamp(t, bobDB, freshUploading.ID, threshold.Add(time.Minute))
+		backdateVideoTimestamp(t, bobDB, overdueQueued.ID, threshold.Add(-time.Minute))
+
+		failure := domain.VideoFailure{
+			Class:  domain.VideoFailureClassTimeout,
+			Reason: "загрузка не завершена за 2h0m0s",
+		}
+		ids, err := r.Video.UpdateTimedOut(t.Context(), domain.VideoStatusUploading, threshold, failure)
+
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{overdueUploading.ID}, ids)
+
+		got, err := r.Video.Select(t.Context(), overdueUploading.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.VideoStatusFailed, got.Status)
+		require.NotNil(t, got.FailureClass)
+		require.Equal(t, domain.VideoFailureClassTimeout, *got.FailureClass)
+		require.NotNil(t, got.FailureReason)
+		require.Equal(t, "загрузка не завершена за 2h0m0s", *got.FailureReason)
+		require.True(t, got.StatusChangedAt.After(threshold))
+
+		stillUploading, err := r.Video.Select(t.Context(), freshUploading.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.VideoStatusUploading, stillUploading.Status)
+
+		stillQueued, err := r.Video.Select(t.Context(), overdueQueued.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.VideoStatusQueued, stillQueued.Status)
+	})
+}
+
+// TestRepository_VideoUpdateTimedOut_RepeatedCall_Idempotent проверяет, что повторный вызов
+// после первого перевода строки в failed больше не находит просроченных строк — watchdog
+// безопасен при повторных тиках и при нескольких одновременно работающих инстансах API.
+func TestRepository_VideoUpdateTimedOut_RepeatedCall_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	testutil.WithDB(t, []string{"../../migrations"}, func(bobDB *bob.DB) {
+		provider := repository.NewExecutorProvider(bobDB)
+		r := repository.NewRepository(provider)
+		f := testutil.Faker
+
+		video := newTestVideo(t, r, f, domain.VideoStatusQueued)
+
+		threshold := time.Now().Add(-time.Hour)
+		backdateVideoTimestamp(t, bobDB, video.ID, threshold.Add(-time.Minute))
+
+		failure := domain.VideoFailure{Class: domain.VideoFailureClassTimeout, Reason: "не взято в обработку"}
+
+		first, err := r.Video.UpdateTimedOut(t.Context(), domain.VideoStatusQueued, threshold, failure)
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{video.ID}, first)
+
+		second, err := r.Video.UpdateTimedOut(t.Context(), domain.VideoStatusQueued, threshold, failure)
+		require.NoError(t, err)
+		require.Empty(t, second)
+	})
+}
+
+// TestRepository_VideoDelete_RemovesAssetsAndFiles проверяет, что удаление видео убирает и
+// связанные ассеты, и файлы — без сирот в БД (Э1-Т21).
+func TestRepository_VideoDelete_RemovesAssetsAndFiles(t *testing.T) {
+	t.Parallel()
+
+	testutil.WithDB(t, []string{"../../migrations"}, func(bobDB *bob.DB) {
+		provider := repository.NewExecutorProvider(bobDB)
+		r := repository.NewRepository(provider)
+		f := testutil.Faker
+
+		video := newTestVideo(t, r, f, domain.VideoStatusReady)
+
+		asset, err := r.VideoAsset.Insert(
+			t.Context(),
+			video.ID,
+			domain.VideoAssetKindOriginal,
+			domain.VideoProfile(""),
+			"bucket",
+			"videos/"+video.ID.String()+"/original",
+			"video/mp4",
+			1024,
+		)
+		require.NoError(t, err)
+
+		err = r.Video.Delete(t.Context(), video.ID)
+		require.NoError(t, err)
+
+		_, err = r.Video.Select(t.Context(), video.ID)
+		require.ErrorIs(t, err, repository.ErrNotFound)
+
+		remainingAssets, err := r.VideoAsset.Select(t.Context(), video.ID)
+		require.NoError(t, err)
+		require.Empty(t, remainingAssets)
+
+		var fileCount int
+		row := bobDB.QueryRowContext(t.Context(), "SELECT count(*) FROM app.files WHERE file_id = $1", asset.FileID)
+		require.NoError(t, row.Scan(&fileCount))
+		require.Zero(t, fileCount, "file must not remain as orphan after video deletion")
 	})
 }

@@ -139,7 +139,9 @@ func (r *VideoRepository) UpdateStatusIf(
 	if patch.ExpectedAttempt != nil {
 		mods = append(
 			mods,
-			um.Where(schema.UserGroupVideos.Columns.ProcessingAttempt.EQ(psql.Arg(int32FromInt(*patch.ExpectedAttempt)))),
+			um.Where(
+				schema.UserGroupVideos.Columns.ProcessingAttempt.EQ(psql.Arg(int32FromInt(*patch.ExpectedAttempt))),
+			),
 		)
 	}
 
@@ -150,6 +152,51 @@ func (r *VideoRepository) UpdateStatusIf(
 	}
 
 	return affected > 0, nil
+}
+
+// UpdateTimedOut переводит в failed(watchdog timeout) все видео заданного статуса, у которых
+// контрольная временная метка старше before — один атомарный условный UPDATE (§8 дизайна
+// эпика). Контрольная метка выбирается по статусу: created_at для uploading (время начала
+// загрузки), status_changed_at для остальных статусов (время входа в текущий статус). Один
+// SQL-запрос атомарен, поэтому несколько инстансов API безопасны без дополнительной
+// блокировки: строка обновляется ровно одним инстансом, остальные получат её уже в статусе
+// failed и не попадут под условие WHERE status = $1.
+func (r *VideoRepository) UpdateTimedOut(
+	ctx context.Context,
+	status domain.VideoStatus,
+	before time.Time,
+	failure domain.VideoFailure,
+) ([]uuid.UUID, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	timestampColumn := schema.UserGroupVideos.Columns.StatusChangedAt
+	if status == domain.VideoStatusUploading {
+		timestampColumn = schema.UserGroupVideos.Columns.CreatedAt
+	}
+
+	setter := &schema.UserGroupVideoSetter{
+		Status:          omit.From(int32FromVideoStatus(domain.VideoStatusFailed)),
+		StatusChangedAt: omit.From(time.Now()),
+		FailureClass:    omitnull.From(string(failure.Class)),
+		FailureReason:   omitnull.From(failure.Reason),
+	}
+
+	rows, err := schema.UserGroupVideos.Update(
+		setter.UpdateMod(),
+		um.Where(schema.UserGroupVideos.Columns.Status.EQ(psql.Arg(int32FromVideoStatus(status)))),
+		um.Where(timestampColumn.LT(psql.Arg(before))),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	ids := make([]uuid.UUID, len(rows))
+	for i, row := range rows {
+		ids[i] = row.ID
+	}
+
+	return ids, nil
 }
 
 func (r *VideoRepository) SelectByGroupID(ctx context.Context, groupID uuid.UUID) ([]domain.Video, error) {
@@ -200,13 +247,41 @@ func (r *VideoRepository) UpdateName(ctx context.Context, videoID uuid.UUID, nam
 	return video, nil
 }
 
+// Delete удаляет видео вместе со всеми его ассетами и файлами (Э1-Т21): сначала удаляются
+// строки files, на которые ссылаются video_assets видео (это каскадно убирает и сами строки
+// video_assets — video_assets.file_id → files.file_id объявлен ON DELETE CASCADE), затем
+// строка user_group_videos. Явное удаление files обязательно: FK video_assets.video_id →
+// user_group_videos.id тоже ON DELETE CASCADE, но он чистит только video_assets — без явного
+// шага строки files остались бы в БД сиротами, что недопустимо (Э1-Т21: сирота в S3 допустима,
+// сирота в БД — нет).
 func (r *VideoRepository) Delete(ctx context.Context, videoID uuid.UUID) error {
 	exec := r.provider.GetExecutor(ctx)
 
-	_, err := schema.UserGroupVideos.Delete(
-		dm.Where(schema.UserGroupVideos.Columns.ID.EQ(psql.Arg(videoID))),
-	).Exec(ctx, exec)
+	assetsDB, err := schema.VideoAssets.Query(
+		sm.Where(schema.VideoAssets.Columns.VideoID.EQ(psql.Arg(videoID))),
+	).All(ctx, exec)
 	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if len(assetsDB) > 0 {
+		fileIDArgs := make([]bob.Expression, len(assetsDB))
+		for i, asset := range assetsDB {
+			fileIDArgs[i] = psql.Arg(asset.FileID)
+		}
+
+		if _, deleteErr := schema.Files.Delete(
+			dm.Where(schema.Files.Columns.FileID.In(fileIDArgs...)),
+		).Exec(ctx, exec); deleteErr != nil {
+			zap.L().Error(deleteErr.Error())
+			return deleteErr
+		}
+	}
+
+	if _, err = schema.UserGroupVideos.Delete(
+		dm.Where(schema.UserGroupVideos.Columns.ID.EQ(psql.Arg(videoID))),
+	).Exec(ctx, exec); err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
