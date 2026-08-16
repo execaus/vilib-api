@@ -65,6 +65,13 @@ const (
 	VideoFailureClassTimeout   VideoFailureClass = "timeout"
 )
 
+// VideoPrefix вычисляет префикс всех ключей объектов видео в хранилище (§3.3 эпика): оригинал
+// и все результаты обработки лежат под одним префиксом videos/{video_id}/, поэтому удаление
+// видео стирает всё одним DeleteByPrefix.
+func VideoPrefix(videoID uuid.UUID) string {
+	return "videos/" + videoID.String() + "/"
+}
+
 // VideoOriginalObjectKey вычисляет ключ объекта оригинала видео в хранилище (§3.3 эпика).
 // Ключ выводится из одного video_id в любой точке (complete-ручка, watchdog, удаление) без
 // хранения промежуточного состояния между созданием загрузки и её подтверждением.
@@ -77,6 +84,21 @@ func VideoOriginalObjectKey(videoID uuid.UUID) string {
 // для best-effort зачистки результатов-сирот (§7.2) и повторной загрузки при обработке.
 func VideoHLSPrefix(videoID uuid.UUID) string {
 	return "videos/" + videoID.String() + "/hls/"
+}
+
+// VideoFailure описывает причину перевода видео в failed при таймауте watchdog'а (§8 дизайна
+// эпика): класс ошибки и человекочитаемая причина.
+type VideoFailure struct {
+	Class  VideoFailureClass
+	Reason string
+}
+
+// TimedOutReport — результат одного тика watchdog'а (§8 дизайна эпика): идентификаторы
+// видео, переведённых в failed по каждому из трёх таймаутов.
+type TimedOutReport struct {
+	Uploading   []uuid.UUID
+	Queued      []uuid.UUID
+	Compressing []uuid.UUID
 }
 
 // VideoUpload — результат создания загрузки видео: идентификатор видео и преподписанный
