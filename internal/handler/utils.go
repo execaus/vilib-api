@@ -27,6 +27,18 @@ func (h *Handler) GetPathUUIDValue(c *gin.Context, key PathKey) (uuid.UUID, erro
 	return parsedValue, nil
 }
 
+// GetPathStringValue возвращает строковое значение path-параметра как есть, без парсинга UUID
+// (например, имя профиля HLS-плейлиста).
+func (h *Handler) GetPathStringValue(c *gin.Context, key PathKey) (string, error) {
+	value := c.Param(strconv.FormatUint(uint64(key), 10))
+	if value == "" {
+		zap.L().Error(fmt.Sprintf("parameter not found: %v", key))
+		return "", fmt.Errorf("parameter not found: %v", key)
+	}
+
+	return value, nil
+}
+
 func sliceItemsToSingle[T1 any](fn func() ([]T1, error)) (T1, error) {
 	t1, t2 := fn()
 	val := reflect.ValueOf(t1)

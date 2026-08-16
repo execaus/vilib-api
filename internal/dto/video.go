@@ -26,8 +26,16 @@ type GetVideoQuery struct {
 	IsPreferOriginal bool `form:"is_prefer_original"`
 }
 
+// GetVideoResponse — ответ на получение точки доступа к видео (§4.4, §5 дизайна эпика).
+// Kind — "hls" (URL ведёт на мастер-плейлист с HLS-токеном в query) или "original"
+// (преподписанный GET оригинала). Profiles заполняется только для Kind == "hls".
 type GetVideoResponse struct {
-	PresignedURL domain.PreflightURL `json:"presigned_url"`
+	Kind       string    `json:"kind"`
+	URL        string    `json:"url"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	Status     uint      `json:"status"`
+	StatusName string    `json:"status_name"`
+	Profiles   []string  `json:"profiles"`
 }
 
 // CompleteVideoUploadResponse — ответ на подтверждение загрузки видео.

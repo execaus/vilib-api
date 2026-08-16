@@ -23,6 +23,7 @@ const (
 	pathKeyRoleID
 	pathKeyGroupRoleID
 	pathKeyGroupMemberUserID
+	pathKeyProfile
 )
 
 var (
@@ -38,6 +39,8 @@ var (
 	UploadVideoUrl         = NewURLSupplier("accounts/%s/user-groups/%s/video")
 	GetVideoUrl            = NewURLSupplier("accounts/%s/user-groups/%s/video/%s")
 	CompleteVideoUploadURL = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/complete")
+	GetVideoHLSMasterURL   = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/hls/master.m3u8")
+	GetVideoHLSPlaylistURL = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/hls/%s/playlist.m3u8")
 
 	ListUsersURL         = NewURLSupplier("accounts/%s/users")
 	ReactivateUserURL    = NewURLSupplier("accounts/%s/users/%s/reactivate")
@@ -144,6 +147,16 @@ func (h *Handler) GetRouter() *gin.Engine {
 		CompleteVideoUploadURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
 		h.RequireAuthMiddleware,
 		h.CompleteVideoUpload,
+	)
+	// Плейлисты HLS авторизуются HLS-токеном в query, а не заголовком Authorization —
+	// без RequireAuthMiddleware (§4.2 дизайна эпика).
+	v1.GET(
+		GetVideoHLSMasterURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		h.GetVideoHLSMaster,
+	)
+	v1.GET(
+		GetVideoHLSPlaylistURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID, pathKeyProfile),
+		h.GetVideoHLSPlaylist,
 	)
 
 	return engine
