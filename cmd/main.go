@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"vilib-api/config"
+	"vilib-api/internal/eventhandler"
 	"vilib-api/internal/handler"
 	"vilib-api/internal/kafka"
 	"vilib-api/internal/outbox"
@@ -81,6 +82,11 @@ func run() error {
 	relayCtx, stopRelay := context.WithCancel(context.Background())
 	relayDone := runRelay(relayCtx, relay)
 
+	consumer := kafka.NewConsumer(cfg.Kafka.Brokers, cfg.Kafka.ConsumerGroup, cfg.Kafka.TopicProcessingEvents)
+	eh := eventhandler.NewEventHandler(sagaRunner)
+	consumerCtx, stopConsumer := context.WithCancel(context.Background())
+	consumerDone := runConsumer(consumerCtx, consumer, eh)
+
 	h := handler.NewHandler(sagaRunner)
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
@@ -96,7 +102,7 @@ func run() error {
 
 	waitForShutdownSignal()
 
-	return shutdown(srv, stopRelay, relayDone, producer)
+	return shutdown(srv, stopConsumer, consumerDone, consumer, stopRelay, relayDone, producer)
 }
 
 // runRelay запускает релей outbox-очереди в фоновой горутине и возвращает канал, закрываемый
@@ -115,6 +121,23 @@ func runRelay(ctx context.Context, relay *outbox.Relay) <-chan struct{} {
 	return done
 }
 
+// runConsumer запускает консьюмер событий обработки видео (video.processing-events, §7.2
+// эпика) в фоновой горутине и возвращает канал, закрываемый после завершения consumer.Run —
+// по нему дожидаются остановки при graceful shutdown (Э1-Т26).
+func runConsumer(ctx context.Context, consumer *kafka.ReaderConsumer, eh *eventhandler.EventHandler) <-chan struct{} {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		if err := consumer.Run(ctx, eh.Handle); err != nil {
+			zap.L().Error("kafka consumer stopped with error", zap.Error(err))
+		}
+	}()
+
+	return done
+}
+
 // waitForShutdownSignal блокируется до получения SIGINT или SIGTERM.
 func waitForShutdownSignal() {
 	quit := make(chan os.Signal, 1)
@@ -122,11 +145,15 @@ func waitForShutdownSignal() {
 	<-quit
 }
 
-// shutdown останавливает компоненты приложения в порядке: HTTP-сервер → релей outbox →
-// продюсер Kafka (§7.1 эпика — сначала перестаём принимать новую работу и публиковать,
-// затем закрываем транспорт).
+// shutdown останавливает компоненты приложения в порядке: HTTP-сервер → консьюмер событий
+// обработки видео (дожидается завершения текущего обработчика и коммита offset'а, Э1-Т26) →
+// релей outbox → продюсер Kafka → читатель консьюмера (§7.1, §7.2 эпика — сначала перестаём
+// принимать новую работу и публиковать, затем закрываем транспорт).
 func shutdown(
 	srv *http.Server,
+	stopConsumer context.CancelFunc,
+	consumerDone <-chan struct{},
+	consumer *kafka.ReaderConsumer,
 	stopRelay context.CancelFunc,
 	relayDone <-chan struct{},
 	producer *kafka.WriterProducer,
@@ -140,11 +167,18 @@ func shutdown(
 		return fmt.Errorf("server forced to shutdown: %w", err)
 	}
 
+	stopConsumer()
+	<-consumerDone
+
 	stopRelay()
 	<-relayDone
 
 	if err := producer.Close(); err != nil {
 		zap.L().Error("failed to close kafka producer", zap.Error(err))
+	}
+
+	if err := consumer.Close(); err != nil {
+		zap.L().Error("failed to close kafka consumer", zap.Error(err))
 	}
 
 	zap.L().Info("server exited properly")
