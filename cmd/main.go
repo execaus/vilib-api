@@ -45,7 +45,9 @@ func run() error {
 		return fmt.Errorf("invalid config: %w", validateErr)
 	}
 
-	gin.SetMode(string(cfg.Server.Mode))
+	// gin по умолчанию стартует в debug-режиме; production-режим сервера включает release —
+	// остальные значения cfg.Server.Mode ("development", "hybrid") не являются валидными
+	// режимами gin, поэтому не передаются в SetMode напрямую.
 	if cfg.Server.Mode == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
