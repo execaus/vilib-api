@@ -21,6 +21,7 @@ import (
 //go:generate minimock -i Video -o ./service_mocks/video_mock.go
 //go:generate minimock -i VideoAsset -o ./service_mocks/video_asset_mock.go
 //go:generate minimock -i Access -o ./service_mocks/access_mock.go
+//go:generate minimock -i Outbox -o ./service_mocks/outbox_mock.go
 //go:generate minimock -i vilib-api/internal/s3.S3 -o ./service_mocks/s3_mock.go
 
 type Auth interface {
@@ -132,6 +133,12 @@ type Access interface {
 	) error
 }
 
+// Outbox публикует события в очередь Kafka внутри текущей транзакции саги (transactional
+// outbox, §7.1 эпика) — обёртка над repository.Outbox.Insert.
+type Outbox interface {
+	Publish(ctx context.Context, topic, key string, payload []byte) error
+}
+
 type Service struct {
 	Auth
 	Account
@@ -144,6 +151,7 @@ type Service struct {
 	Video
 	VideoAsset
 	Access
+	Outbox
 }
 
 func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *repository.Repository) *Service {
@@ -160,6 +168,7 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 	s.Video = NewVideoService(s3, r.Video, s, VideoServiceConfig{Bucket: cfg.S3.Bucket, Video: cfg.Video})
 	s.VideoAsset = NewVideoAssetService(r.VideoAsset, s)
 	s.Access = NewAccessService(s)
+	s.Outbox = NewOutboxService(r.Outbox, s)
 
 	return s
 }

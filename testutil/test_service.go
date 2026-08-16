@@ -41,6 +41,7 @@ func TestService(
 		Video:       mock_repository.NewVideoMock(mc),
 		VideoAsset:  mock_repository.NewVideoAssetMock(mc),
 		GroupMember: mock_repository.NewGroupMemberMock(mc),
+		Outbox:      mock_repository.NewOutboxMock(mc),
 	}
 
 	setupMocks(s, r)

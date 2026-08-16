@@ -14,6 +14,7 @@ type RepositoryMock struct {
 	Video       *mock_repository.VideoMock
 	VideoAsset  *mock_repository.VideoAssetMock
 	GroupMember *mock_repository.GroupMemberMock
+	Outbox      *mock_repository.OutboxMock
 }
 
 func (r *RepositoryMock) ToRepositories() *repository.Repository {
@@ -26,5 +27,6 @@ func (r *RepositoryMock) ToRepositories() *repository.Repository {
 		Video:       r.Video,
 		VideoAsset:  r.VideoAsset,
 		GroupMember: r.GroupMember,
+		Outbox:      r.Outbox,
 	}
 }

@@ -15,6 +15,7 @@ import (
 //go:generate minimock -i GroupRole -o ./repository_mocks/group_role_mock.go
 //go:generate minimock -i Video -o ./repository_mocks/video_mock.go
 //go:generate minimock -i VideoAsset -o ./repository_mocks/video_asset_mock.go
+//go:generate minimock -i Outbox -o ./repository_mocks/outbox_mock.go
 
 // UserStatus определяет фильтр по активности пользователей при выборке.
 type UserStatus string
@@ -102,6 +103,17 @@ type VideoAsset interface {
 	) (domain.VideoAsset, error)
 }
 
+// Outbox — репозиторий очереди исходящих событий Kafka (transactional outbox, §7.1 эпика).
+type Outbox interface {
+	// Insert кладёт событие в очередь публикации внутри текущей транзакции.
+	Insert(ctx context.Context, topic, key string, payload []byte) error
+	// SelectBatchForUpdate выбирает и блокирует (FOR UPDATE SKIP LOCKED) до limit старейших
+	// событий очереди для публикации релеем.
+	SelectBatchForUpdate(ctx context.Context, limit int) ([]domain.OutboxEvent, error)
+	// DeleteByIDs удаляет опубликованные события.
+	DeleteByIDs(ctx context.Context, ids []int64) error
+}
+
 type Repository struct {
 	Account
 	User
@@ -111,6 +123,7 @@ type Repository struct {
 	GroupRole
 	Video
 	VideoAsset
+	Outbox
 }
 
 func NewRepository(provider *ExecutorProvider) *Repository {
@@ -123,5 +136,6 @@ func NewRepository(provider *ExecutorProvider) *Repository {
 		GroupRole:   NewGroupRoleRepository(provider),
 		Video:       NewVideoRepository(provider),
 		VideoAsset:  NewVideoAssetRepository(provider),
+		Outbox:      NewOutboxRepository(provider),
 	}
 }
