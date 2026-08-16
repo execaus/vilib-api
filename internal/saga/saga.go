@@ -6,8 +6,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// ctxKey — приватный тип ключей контекста саги: защищает от коллизий с ключами контекста
+// других пакетов при использовании [context.WithValue].
+type ctxKey string
+
 const (
-	CtxKey = "saga-queries-key"
+	CtxKey ctxKey = "saga-queries-key"
 )
 
 type Func[ServiceT any] = func(ctx context.Context, services ServiceT) error
@@ -28,12 +32,14 @@ func (r *Runner[ServiceT]) Run(ctx context.Context, fn Func[ServiceT]) error {
 		return err
 	}
 
+	hooks := &Hooks{}
 	sagaCtx := context.WithValue(ctx, CtxKey, tx)
+	sagaCtx = context.WithValue(sagaCtx, HooksCtxKey, hooks)
 
 	if err = fn(sagaCtx, r.service); err != nil {
 		zap.L().Error(err.Error())
-		if err := tx.Rollback(ctx); err != nil {
-			zap.L().Error(err.Error())
+		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
+			zap.L().Error(rollbackErr.Error())
 		}
 		return err
 	}
@@ -42,6 +48,10 @@ func (r *Runner[ServiceT]) Run(ctx context.Context, fn Func[ServiceT]) error {
 		zap.L().Error(err.Error())
 		return err
 	}
+
+	// Хуки выполняются с исходным ctx (без транзакции в контексте): транзакция уже
+	// закоммичена, работа через ExecutorProvider должна идти мимо неё.
+	hooks.run(ctx)
 
 	return nil
 }
