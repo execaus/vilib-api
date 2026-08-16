@@ -80,8 +80,10 @@ func TestService_VideoAsset_Create(t *testing.T) {
 	t.Parallel()
 
 	testVideoID := uuid.New()
-	testTag := domain.VideoAssetTagOriginal
+	testKind := domain.VideoAssetKindOriginal
+	testProfile := domain.VideoProfile("")
 	testBucketName := "test-bucket"
+	testObjectKey := "videos/" + testVideoID.String() + "/original"
 	testContentType := "video/mp4"
 	testBytes := 1024
 
@@ -89,8 +91,10 @@ func TestService_VideoAsset_Create(t *testing.T) {
 
 	type args struct {
 		videoID     uuid.UUID
-		tag         domain.VideoAssetTag
+		kind        domain.VideoAssetKind
+		profile     domain.VideoProfile
 		bucketName  string
+		objectKey   string
 		contentType string
 		bytes       int
 	}
@@ -105,10 +109,11 @@ func TestService_VideoAsset_Create(t *testing.T) {
 		{
 			name: "create error",
 			setupMocks: func(repo *repository_mocks.VideoAssetMock) {
-				repo.CreateMock.Expect(minimock.AnyContext, testVideoID, testTag, testBucketName, testContentType, testBytes).
+				repo.CreateMock.
+					Expect(minimock.AnyContext, testVideoID, testKind, testProfile, testBucketName, testObjectKey, testContentType, testBytes).
 					Return(domain.VideoAsset{}, errSomeError)
 			},
-			args:    args{testVideoID, testTag, testBucketName, testContentType, testBytes},
+			args:    args{testVideoID, testKind, testProfile, testBucketName, testObjectKey, testContentType, testBytes},
 			want:    domain.VideoAsset{},
 			wantErr: errSomeError,
 		},
@@ -126,7 +131,16 @@ func TestService_VideoAsset_Create(t *testing.T) {
 				func(s *service.Service, r *repository.Repository) {
 					srv := service.NewVideoAssetService(r.VideoAsset, s)
 
-					got, err := srv.Create(t.Context(), tt.args.videoID, tt.args.tag, tt.args.bucketName, tt.args.contentType, tt.args.bytes)
+					got, err := srv.Create(
+						t.Context(),
+						tt.args.videoID,
+						tt.args.kind,
+						tt.args.profile,
+						tt.args.bucketName,
+						tt.args.objectKey,
+						tt.args.contentType,
+						tt.args.bytes,
+					)
 
 					require.Equal(t, tt.want, got)
 					require.Equal(t, tt.wantErr, err)

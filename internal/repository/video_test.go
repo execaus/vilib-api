@@ -147,12 +147,20 @@ func TestRepository_VideoAssetCreate_Success(t *testing.T) {
 		)
 		video, _ := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady)
 
-		asset, err := r.VideoAsset.Create(t.Context(), video.ID, domain.VideoAssetTagOriginal, "bucket", "video/mp4", 1024)
+		objectKey := "videos/" + video.ID.String() + "/original"
+		asset, err := r.VideoAsset.Create(
+			t.Context(), video.ID, domain.VideoAssetKindOriginal, domain.VideoProfile(""), "bucket", objectKey, "video/mp4", 1024,
+		)
 
 		require.Nil(t, err)
 		require.NotEmpty(t, asset.FileID)
 		require.Equal(t, video.ID, asset.VideoID)
-		require.Equal(t, domain.VideoAssetTagOriginal, asset.Tag)
+		require.Equal(t, domain.VideoAssetKindOriginal, asset.Kind)
+		require.Equal(t, domain.VideoProfile(""), asset.Profile)
+		require.Equal(t, "bucket", asset.Bucket)
+		require.Equal(t, objectKey, asset.ObjectKey)
+		require.Equal(t, "video/mp4", asset.ContentType)
+		require.Equal(t, int64(1024), asset.SizeBytes)
 	})
 }
 
@@ -180,13 +188,17 @@ func TestRepository_VideoAssetSelect_Success(t *testing.T) {
 			accountRole.ID,
 		)
 		video, _ := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady)
-		createdAsset, _ := r.VideoAsset.Create(t.Context(), video.ID, domain.VideoAssetTagOriginal, "bucket", "video/mp4", 1024)
+		objectKey := "videos/" + video.ID.String() + "/original"
+		createdAsset, _ := r.VideoAsset.Create(
+			t.Context(), video.ID, domain.VideoAssetKindOriginal, domain.VideoProfile(""), "bucket", objectKey, "video/mp4", 1024,
+		)
 
 		assets, err := r.VideoAsset.Select(t.Context(), video.ID)
 
 		require.Nil(t, err)
 		require.Len(t, assets, 1)
 		require.Equal(t, createdAsset.FileID, assets[0].FileID)
+		require.Equal(t, createdAsset.ObjectKey, assets[0].ObjectKey)
 	})
 }
 

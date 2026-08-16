@@ -11,9 +11,9 @@ import (
 	"time"
 	mm_time "time"
 	"vilib-api/internal/domain"
+	mm_s3 "vilib-api/internal/s3"
 
 	"github.com/gojuno/minimock/v3"
-	"github.com/google/uuid"
 )
 
 // S3Mock implements mm_s3.S3
@@ -21,19 +21,47 @@ type S3Mock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
-	funcGetPreflightURL          func(ctx context.Context, bucketName domain.VideoBucket, assetID uuid.UUID, ttl time.Duration) (p1 domain.PreflightURL, err error)
-	funcGetPreflightURLOrigin    string
-	inspectFuncGetPreflightURL   func(ctx context.Context, bucketName domain.VideoBucket, assetID uuid.UUID, ttl time.Duration)
-	afterGetPreflightURLCounter  uint64
-	beforeGetPreflightURLCounter uint64
-	GetPreflightURLMock          mS3MockGetPreflightURL
+	funcDeleteByPrefix          func(ctx context.Context, bucket string, prefix string) (i1 int, err error)
+	funcDeleteByPrefixOrigin    string
+	inspectFuncDeleteByPrefix   func(ctx context.Context, bucket string, prefix string)
+	afterDeleteByPrefixCounter  uint64
+	beforeDeleteByPrefixCounter uint64
+	DeleteByPrefixMock          mS3MockDeleteByPrefix
 
-	funcGetPreflightUploadURL          func(ctx context.Context, bucketName domain.VideoBucket, fileID uuid.UUID, ttl time.Duration) (p1 domain.PreflightURL, err error)
-	funcGetPreflightUploadURLOrigin    string
-	inspectFuncGetPreflightUploadURL   func(ctx context.Context, bucketName domain.VideoBucket, fileID uuid.UUID, ttl time.Duration)
-	afterGetPreflightUploadURLCounter  uint64
-	beforeGetPreflightUploadURLCounter uint64
-	GetPreflightUploadURLMock          mS3MockGetPreflightUploadURL
+	funcDeleteObject          func(ctx context.Context, bucket string, key string) (err error)
+	funcDeleteObjectOrigin    string
+	inspectFuncDeleteObject   func(ctx context.Context, bucket string, key string)
+	afterDeleteObjectCounter  uint64
+	beforeDeleteObjectCounter uint64
+	DeleteObjectMock          mS3MockDeleteObject
+
+	funcGetObject          func(ctx context.Context, bucket string, key string) (ba1 []byte, err error)
+	funcGetObjectOrigin    string
+	inspectFuncGetObject   func(ctx context.Context, bucket string, key string)
+	afterGetObjectCounter  uint64
+	beforeGetObjectCounter uint64
+	GetObjectMock          mS3MockGetObject
+
+	funcHeadObject          func(ctx context.Context, bucket string, key string) (o1 mm_s3.ObjectInfo, err error)
+	funcHeadObjectOrigin    string
+	inspectFuncHeadObject   func(ctx context.Context, bucket string, key string)
+	afterHeadObjectCounter  uint64
+	beforeHeadObjectCounter uint64
+	HeadObjectMock          mS3MockHeadObject
+
+	funcPresignGetObject          func(ctx context.Context, bucket string, key string, ttl time.Duration) (p1 domain.PreflightURL, err error)
+	funcPresignGetObjectOrigin    string
+	inspectFuncPresignGetObject   func(ctx context.Context, bucket string, key string, ttl time.Duration)
+	afterPresignGetObjectCounter  uint64
+	beforePresignGetObjectCounter uint64
+	PresignGetObjectMock          mS3MockPresignGetObject
+
+	funcPresignPutObject          func(ctx context.Context, bucket string, key string, contentType string, size int64, ttl time.Duration) (p1 domain.PreflightURL, err error)
+	funcPresignPutObjectOrigin    string
+	inspectFuncPresignPutObject   func(ctx context.Context, bucket string, key string, contentType string, size int64, ttl time.Duration)
+	afterPresignPutObjectCounter  uint64
+	beforePresignPutObjectCounter uint64
+	PresignPutObjectMock          mS3MockPresignPutObject
 }
 
 // NewS3Mock returns a mock for mm_s3.S3
@@ -44,70 +72,79 @@ func NewS3Mock(t minimock.Tester) *S3Mock {
 		controller.RegisterMocker(m)
 	}
 
-	m.GetPreflightURLMock = mS3MockGetPreflightURL{mock: m}
-	m.GetPreflightURLMock.callArgs = []*S3MockGetPreflightURLParams{}
+	m.DeleteByPrefixMock = mS3MockDeleteByPrefix{mock: m}
+	m.DeleteByPrefixMock.callArgs = []*S3MockDeleteByPrefixParams{}
 
-	m.GetPreflightUploadURLMock = mS3MockGetPreflightUploadURL{mock: m}
-	m.GetPreflightUploadURLMock.callArgs = []*S3MockGetPreflightUploadURLParams{}
+	m.DeleteObjectMock = mS3MockDeleteObject{mock: m}
+	m.DeleteObjectMock.callArgs = []*S3MockDeleteObjectParams{}
+
+	m.GetObjectMock = mS3MockGetObject{mock: m}
+	m.GetObjectMock.callArgs = []*S3MockGetObjectParams{}
+
+	m.HeadObjectMock = mS3MockHeadObject{mock: m}
+	m.HeadObjectMock.callArgs = []*S3MockHeadObjectParams{}
+
+	m.PresignGetObjectMock = mS3MockPresignGetObject{mock: m}
+	m.PresignGetObjectMock.callArgs = []*S3MockPresignGetObjectParams{}
+
+	m.PresignPutObjectMock = mS3MockPresignPutObject{mock: m}
+	m.PresignPutObjectMock.callArgs = []*S3MockPresignPutObjectParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
 	return m
 }
 
-type mS3MockGetPreflightURL struct {
+type mS3MockDeleteByPrefix struct {
 	optional           bool
 	mock               *S3Mock
-	defaultExpectation *S3MockGetPreflightURLExpectation
-	expectations       []*S3MockGetPreflightURLExpectation
+	defaultExpectation *S3MockDeleteByPrefixExpectation
+	expectations       []*S3MockDeleteByPrefixExpectation
 
-	callArgs []*S3MockGetPreflightURLParams
+	callArgs []*S3MockDeleteByPrefixParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// S3MockGetPreflightURLExpectation specifies expectation struct of the S3.GetPreflightURL
-type S3MockGetPreflightURLExpectation struct {
+// S3MockDeleteByPrefixExpectation specifies expectation struct of the S3.DeleteByPrefix
+type S3MockDeleteByPrefixExpectation struct {
 	mock               *S3Mock
-	params             *S3MockGetPreflightURLParams
-	paramPtrs          *S3MockGetPreflightURLParamPtrs
-	expectationOrigins S3MockGetPreflightURLExpectationOrigins
-	results            *S3MockGetPreflightURLResults
+	params             *S3MockDeleteByPrefixParams
+	paramPtrs          *S3MockDeleteByPrefixParamPtrs
+	expectationOrigins S3MockDeleteByPrefixExpectationOrigins
+	results            *S3MockDeleteByPrefixResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// S3MockGetPreflightURLParams contains parameters of the S3.GetPreflightURL
-type S3MockGetPreflightURLParams struct {
-	ctx        context.Context
-	bucketName domain.VideoBucket
-	assetID    uuid.UUID
-	ttl        time.Duration
+// S3MockDeleteByPrefixParams contains parameters of the S3.DeleteByPrefix
+type S3MockDeleteByPrefixParams struct {
+	ctx    context.Context
+	bucket string
+	prefix string
 }
 
-// S3MockGetPreflightURLParamPtrs contains pointers to parameters of the S3.GetPreflightURL
-type S3MockGetPreflightURLParamPtrs struct {
-	ctx        *context.Context
-	bucketName *domain.VideoBucket
-	assetID    *uuid.UUID
-	ttl        *time.Duration
+// S3MockDeleteByPrefixParamPtrs contains pointers to parameters of the S3.DeleteByPrefix
+type S3MockDeleteByPrefixParamPtrs struct {
+	ctx    *context.Context
+	bucket *string
+	prefix *string
 }
 
-// S3MockGetPreflightURLResults contains results of the S3.GetPreflightURL
-type S3MockGetPreflightURLResults struct {
-	p1  domain.PreflightURL
+// S3MockDeleteByPrefixResults contains results of the S3.DeleteByPrefix
+type S3MockDeleteByPrefixResults struct {
+	i1  int
 	err error
 }
 
-// S3MockGetPreflightURLOrigins contains origins of expectations of the S3.GetPreflightURL
-type S3MockGetPreflightURLExpectationOrigins struct {
-	origin           string
-	originCtx        string
-	originBucketName string
-	originAssetID    string
-	originTtl        string
+// S3MockDeleteByPrefixOrigins contains origins of expectations of the S3.DeleteByPrefix
+type S3MockDeleteByPrefixExpectationOrigins struct {
+	origin       string
+	originCtx    string
+	originBucket string
+	originPrefix string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -115,404 +152,372 @@ type S3MockGetPreflightURLExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmGetPreflightURL *mS3MockGetPreflightURL) Optional() *mS3MockGetPreflightURL {
-	mmGetPreflightURL.optional = true
-	return mmGetPreflightURL
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) Optional() *mS3MockDeleteByPrefix {
+	mmDeleteByPrefix.optional = true
+	return mmDeleteByPrefix
 }
 
-// Expect sets up expected params for S3.GetPreflightURL
-func (mmGetPreflightURL *mS3MockGetPreflightURL) Expect(ctx context.Context, bucketName domain.VideoBucket, assetID uuid.UUID, ttl time.Duration) *mS3MockGetPreflightURL {
-	if mmGetPreflightURL.mock.funcGetPreflightURL != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Set")
+// Expect sets up expected params for S3.DeleteByPrefix
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) Expect(ctx context.Context, bucket string, prefix string) *mS3MockDeleteByPrefix {
+	if mmDeleteByPrefix.mock.funcDeleteByPrefix != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("S3Mock.DeleteByPrefix mock is already set by Set")
 	}
 
-	if mmGetPreflightURL.defaultExpectation == nil {
-		mmGetPreflightURL.defaultExpectation = &S3MockGetPreflightURLExpectation{}
+	if mmDeleteByPrefix.defaultExpectation == nil {
+		mmDeleteByPrefix.defaultExpectation = &S3MockDeleteByPrefixExpectation{}
 	}
 
-	if mmGetPreflightURL.defaultExpectation.paramPtrs != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by ExpectParams functions")
+	if mmDeleteByPrefix.defaultExpectation.paramPtrs != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("S3Mock.DeleteByPrefix mock is already set by ExpectParams functions")
 	}
 
-	mmGetPreflightURL.defaultExpectation.params = &S3MockGetPreflightURLParams{ctx, bucketName, assetID, ttl}
-	mmGetPreflightURL.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmGetPreflightURL.expectations {
-		if minimock.Equal(e.params, mmGetPreflightURL.defaultExpectation.params) {
-			mmGetPreflightURL.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetPreflightURL.defaultExpectation.params)
+	mmDeleteByPrefix.defaultExpectation.params = &S3MockDeleteByPrefixParams{ctx, bucket, prefix}
+	mmDeleteByPrefix.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteByPrefix.expectations {
+		if minimock.Equal(e.params, mmDeleteByPrefix.defaultExpectation.params) {
+			mmDeleteByPrefix.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteByPrefix.defaultExpectation.params)
 		}
 	}
 
-	return mmGetPreflightURL
+	return mmDeleteByPrefix
 }
 
-// ExpectCtxParam1 sets up expected param ctx for S3.GetPreflightURL
-func (mmGetPreflightURL *mS3MockGetPreflightURL) ExpectCtxParam1(ctx context.Context) *mS3MockGetPreflightURL {
-	if mmGetPreflightURL.mock.funcGetPreflightURL != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for S3.DeleteByPrefix
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) ExpectCtxParam1(ctx context.Context) *mS3MockDeleteByPrefix {
+	if mmDeleteByPrefix.mock.funcDeleteByPrefix != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("S3Mock.DeleteByPrefix mock is already set by Set")
 	}
 
-	if mmGetPreflightURL.defaultExpectation == nil {
-		mmGetPreflightURL.defaultExpectation = &S3MockGetPreflightURLExpectation{}
+	if mmDeleteByPrefix.defaultExpectation == nil {
+		mmDeleteByPrefix.defaultExpectation = &S3MockDeleteByPrefixExpectation{}
 	}
 
-	if mmGetPreflightURL.defaultExpectation.params != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Expect")
+	if mmDeleteByPrefix.defaultExpectation.params != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("S3Mock.DeleteByPrefix mock is already set by Expect")
 	}
 
-	if mmGetPreflightURL.defaultExpectation.paramPtrs == nil {
-		mmGetPreflightURL.defaultExpectation.paramPtrs = &S3MockGetPreflightURLParamPtrs{}
+	if mmDeleteByPrefix.defaultExpectation.paramPtrs == nil {
+		mmDeleteByPrefix.defaultExpectation.paramPtrs = &S3MockDeleteByPrefixParamPtrs{}
 	}
-	mmGetPreflightURL.defaultExpectation.paramPtrs.ctx = &ctx
-	mmGetPreflightURL.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmDeleteByPrefix.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteByPrefix.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmGetPreflightURL
+	return mmDeleteByPrefix
 }
 
-// ExpectBucketNameParam2 sets up expected param bucketName for S3.GetPreflightURL
-func (mmGetPreflightURL *mS3MockGetPreflightURL) ExpectBucketNameParam2(bucketName domain.VideoBucket) *mS3MockGetPreflightURL {
-	if mmGetPreflightURL.mock.funcGetPreflightURL != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Set")
+// ExpectBucketParam2 sets up expected param bucket for S3.DeleteByPrefix
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) ExpectBucketParam2(bucket string) *mS3MockDeleteByPrefix {
+	if mmDeleteByPrefix.mock.funcDeleteByPrefix != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("S3Mock.DeleteByPrefix mock is already set by Set")
 	}
 
-	if mmGetPreflightURL.defaultExpectation == nil {
-		mmGetPreflightURL.defaultExpectation = &S3MockGetPreflightURLExpectation{}
+	if mmDeleteByPrefix.defaultExpectation == nil {
+		mmDeleteByPrefix.defaultExpectation = &S3MockDeleteByPrefixExpectation{}
 	}
 
-	if mmGetPreflightURL.defaultExpectation.params != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Expect")
+	if mmDeleteByPrefix.defaultExpectation.params != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("S3Mock.DeleteByPrefix mock is already set by Expect")
 	}
 
-	if mmGetPreflightURL.defaultExpectation.paramPtrs == nil {
-		mmGetPreflightURL.defaultExpectation.paramPtrs = &S3MockGetPreflightURLParamPtrs{}
+	if mmDeleteByPrefix.defaultExpectation.paramPtrs == nil {
+		mmDeleteByPrefix.defaultExpectation.paramPtrs = &S3MockDeleteByPrefixParamPtrs{}
 	}
-	mmGetPreflightURL.defaultExpectation.paramPtrs.bucketName = &bucketName
-	mmGetPreflightURL.defaultExpectation.expectationOrigins.originBucketName = minimock.CallerInfo(1)
+	mmDeleteByPrefix.defaultExpectation.paramPtrs.bucket = &bucket
+	mmDeleteByPrefix.defaultExpectation.expectationOrigins.originBucket = minimock.CallerInfo(1)
 
-	return mmGetPreflightURL
+	return mmDeleteByPrefix
 }
 
-// ExpectAssetIDParam3 sets up expected param assetID for S3.GetPreflightURL
-func (mmGetPreflightURL *mS3MockGetPreflightURL) ExpectAssetIDParam3(assetID uuid.UUID) *mS3MockGetPreflightURL {
-	if mmGetPreflightURL.mock.funcGetPreflightURL != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Set")
+// ExpectPrefixParam3 sets up expected param prefix for S3.DeleteByPrefix
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) ExpectPrefixParam3(prefix string) *mS3MockDeleteByPrefix {
+	if mmDeleteByPrefix.mock.funcDeleteByPrefix != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("S3Mock.DeleteByPrefix mock is already set by Set")
 	}
 
-	if mmGetPreflightURL.defaultExpectation == nil {
-		mmGetPreflightURL.defaultExpectation = &S3MockGetPreflightURLExpectation{}
+	if mmDeleteByPrefix.defaultExpectation == nil {
+		mmDeleteByPrefix.defaultExpectation = &S3MockDeleteByPrefixExpectation{}
 	}
 
-	if mmGetPreflightURL.defaultExpectation.params != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Expect")
+	if mmDeleteByPrefix.defaultExpectation.params != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("S3Mock.DeleteByPrefix mock is already set by Expect")
 	}
 
-	if mmGetPreflightURL.defaultExpectation.paramPtrs == nil {
-		mmGetPreflightURL.defaultExpectation.paramPtrs = &S3MockGetPreflightURLParamPtrs{}
+	if mmDeleteByPrefix.defaultExpectation.paramPtrs == nil {
+		mmDeleteByPrefix.defaultExpectation.paramPtrs = &S3MockDeleteByPrefixParamPtrs{}
 	}
-	mmGetPreflightURL.defaultExpectation.paramPtrs.assetID = &assetID
-	mmGetPreflightURL.defaultExpectation.expectationOrigins.originAssetID = minimock.CallerInfo(1)
+	mmDeleteByPrefix.defaultExpectation.paramPtrs.prefix = &prefix
+	mmDeleteByPrefix.defaultExpectation.expectationOrigins.originPrefix = minimock.CallerInfo(1)
 
-	return mmGetPreflightURL
+	return mmDeleteByPrefix
 }
 
-// ExpectTtlParam4 sets up expected param ttl for S3.GetPreflightURL
-func (mmGetPreflightURL *mS3MockGetPreflightURL) ExpectTtlParam4(ttl time.Duration) *mS3MockGetPreflightURL {
-	if mmGetPreflightURL.mock.funcGetPreflightURL != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Set")
+// Inspect accepts an inspector function that has same arguments as the S3.DeleteByPrefix
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) Inspect(f func(ctx context.Context, bucket string, prefix string)) *mS3MockDeleteByPrefix {
+	if mmDeleteByPrefix.mock.inspectFuncDeleteByPrefix != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("Inspect function is already set for S3Mock.DeleteByPrefix")
 	}
 
-	if mmGetPreflightURL.defaultExpectation == nil {
-		mmGetPreflightURL.defaultExpectation = &S3MockGetPreflightURLExpectation{}
-	}
+	mmDeleteByPrefix.mock.inspectFuncDeleteByPrefix = f
 
-	if mmGetPreflightURL.defaultExpectation.params != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Expect")
-	}
-
-	if mmGetPreflightURL.defaultExpectation.paramPtrs == nil {
-		mmGetPreflightURL.defaultExpectation.paramPtrs = &S3MockGetPreflightURLParamPtrs{}
-	}
-	mmGetPreflightURL.defaultExpectation.paramPtrs.ttl = &ttl
-	mmGetPreflightURL.defaultExpectation.expectationOrigins.originTtl = minimock.CallerInfo(1)
-
-	return mmGetPreflightURL
+	return mmDeleteByPrefix
 }
 
-// Inspect accepts an inspector function that has same arguments as the S3.GetPreflightURL
-func (mmGetPreflightURL *mS3MockGetPreflightURL) Inspect(f func(ctx context.Context, bucketName domain.VideoBucket, assetID uuid.UUID, ttl time.Duration)) *mS3MockGetPreflightURL {
-	if mmGetPreflightURL.mock.inspectFuncGetPreflightURL != nil {
-		mmGetPreflightURL.mock.t.Fatalf("Inspect function is already set for S3Mock.GetPreflightURL")
+// Return sets up results that will be returned by S3.DeleteByPrefix
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) Return(i1 int, err error) *S3Mock {
+	if mmDeleteByPrefix.mock.funcDeleteByPrefix != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("S3Mock.DeleteByPrefix mock is already set by Set")
 	}
 
-	mmGetPreflightURL.mock.inspectFuncGetPreflightURL = f
-
-	return mmGetPreflightURL
+	if mmDeleteByPrefix.defaultExpectation == nil {
+		mmDeleteByPrefix.defaultExpectation = &S3MockDeleteByPrefixExpectation{mock: mmDeleteByPrefix.mock}
+	}
+	mmDeleteByPrefix.defaultExpectation.results = &S3MockDeleteByPrefixResults{i1, err}
+	mmDeleteByPrefix.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteByPrefix.mock
 }
 
-// Return sets up results that will be returned by S3.GetPreflightURL
-func (mmGetPreflightURL *mS3MockGetPreflightURL) Return(p1 domain.PreflightURL, err error) *S3Mock {
-	if mmGetPreflightURL.mock.funcGetPreflightURL != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Set")
+// Set uses given function f to mock the S3.DeleteByPrefix method
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) Set(f func(ctx context.Context, bucket string, prefix string) (i1 int, err error)) *S3Mock {
+	if mmDeleteByPrefix.defaultExpectation != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("Default expectation is already set for the S3.DeleteByPrefix method")
 	}
 
-	if mmGetPreflightURL.defaultExpectation == nil {
-		mmGetPreflightURL.defaultExpectation = &S3MockGetPreflightURLExpectation{mock: mmGetPreflightURL.mock}
+	if len(mmDeleteByPrefix.expectations) > 0 {
+		mmDeleteByPrefix.mock.t.Fatalf("Some expectations are already set for the S3.DeleteByPrefix method")
 	}
-	mmGetPreflightURL.defaultExpectation.results = &S3MockGetPreflightURLResults{p1, err}
-	mmGetPreflightURL.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmGetPreflightURL.mock
+
+	mmDeleteByPrefix.mock.funcDeleteByPrefix = f
+	mmDeleteByPrefix.mock.funcDeleteByPrefixOrigin = minimock.CallerInfo(1)
+	return mmDeleteByPrefix.mock
 }
 
-// Set uses given function f to mock the S3.GetPreflightURL method
-func (mmGetPreflightURL *mS3MockGetPreflightURL) Set(f func(ctx context.Context, bucketName domain.VideoBucket, assetID uuid.UUID, ttl time.Duration) (p1 domain.PreflightURL, err error)) *S3Mock {
-	if mmGetPreflightURL.defaultExpectation != nil {
-		mmGetPreflightURL.mock.t.Fatalf("Default expectation is already set for the S3.GetPreflightURL method")
-	}
-
-	if len(mmGetPreflightURL.expectations) > 0 {
-		mmGetPreflightURL.mock.t.Fatalf("Some expectations are already set for the S3.GetPreflightURL method")
-	}
-
-	mmGetPreflightURL.mock.funcGetPreflightURL = f
-	mmGetPreflightURL.mock.funcGetPreflightURLOrigin = minimock.CallerInfo(1)
-	return mmGetPreflightURL.mock
-}
-
-// When sets expectation for the S3.GetPreflightURL which will trigger the result defined by the following
+// When sets expectation for the S3.DeleteByPrefix which will trigger the result defined by the following
 // Then helper
-func (mmGetPreflightURL *mS3MockGetPreflightURL) When(ctx context.Context, bucketName domain.VideoBucket, assetID uuid.UUID, ttl time.Duration) *S3MockGetPreflightURLExpectation {
-	if mmGetPreflightURL.mock.funcGetPreflightURL != nil {
-		mmGetPreflightURL.mock.t.Fatalf("S3Mock.GetPreflightURL mock is already set by Set")
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) When(ctx context.Context, bucket string, prefix string) *S3MockDeleteByPrefixExpectation {
+	if mmDeleteByPrefix.mock.funcDeleteByPrefix != nil {
+		mmDeleteByPrefix.mock.t.Fatalf("S3Mock.DeleteByPrefix mock is already set by Set")
 	}
 
-	expectation := &S3MockGetPreflightURLExpectation{
-		mock:               mmGetPreflightURL.mock,
-		params:             &S3MockGetPreflightURLParams{ctx, bucketName, assetID, ttl},
-		expectationOrigins: S3MockGetPreflightURLExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &S3MockDeleteByPrefixExpectation{
+		mock:               mmDeleteByPrefix.mock,
+		params:             &S3MockDeleteByPrefixParams{ctx, bucket, prefix},
+		expectationOrigins: S3MockDeleteByPrefixExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmGetPreflightURL.expectations = append(mmGetPreflightURL.expectations, expectation)
+	mmDeleteByPrefix.expectations = append(mmDeleteByPrefix.expectations, expectation)
 	return expectation
 }
 
-// Then sets up S3.GetPreflightURL return parameters for the expectation previously defined by the When method
-func (e *S3MockGetPreflightURLExpectation) Then(p1 domain.PreflightURL, err error) *S3Mock {
-	e.results = &S3MockGetPreflightURLResults{p1, err}
+// Then sets up S3.DeleteByPrefix return parameters for the expectation previously defined by the When method
+func (e *S3MockDeleteByPrefixExpectation) Then(i1 int, err error) *S3Mock {
+	e.results = &S3MockDeleteByPrefixResults{i1, err}
 	return e.mock
 }
 
-// Times sets number of times S3.GetPreflightURL should be invoked
-func (mmGetPreflightURL *mS3MockGetPreflightURL) Times(n uint64) *mS3MockGetPreflightURL {
+// Times sets number of times S3.DeleteByPrefix should be invoked
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) Times(n uint64) *mS3MockDeleteByPrefix {
 	if n == 0 {
-		mmGetPreflightURL.mock.t.Fatalf("Times of S3Mock.GetPreflightURL mock can not be zero")
+		mmDeleteByPrefix.mock.t.Fatalf("Times of S3Mock.DeleteByPrefix mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmGetPreflightURL.expectedInvocations, n)
-	mmGetPreflightURL.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmGetPreflightURL
+	mm_atomic.StoreUint64(&mmDeleteByPrefix.expectedInvocations, n)
+	mmDeleteByPrefix.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteByPrefix
 }
 
-func (mmGetPreflightURL *mS3MockGetPreflightURL) invocationsDone() bool {
-	if len(mmGetPreflightURL.expectations) == 0 && mmGetPreflightURL.defaultExpectation == nil && mmGetPreflightURL.mock.funcGetPreflightURL == nil {
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) invocationsDone() bool {
+	if len(mmDeleteByPrefix.expectations) == 0 && mmDeleteByPrefix.defaultExpectation == nil && mmDeleteByPrefix.mock.funcDeleteByPrefix == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmGetPreflightURL.mock.afterGetPreflightURLCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGetPreflightURL.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteByPrefix.mock.afterDeleteByPrefixCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteByPrefix.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// GetPreflightURL implements mm_s3.S3
-func (mmGetPreflightURL *S3Mock) GetPreflightURL(ctx context.Context, bucketName domain.VideoBucket, assetID uuid.UUID, ttl time.Duration) (p1 domain.PreflightURL, err error) {
-	mm_atomic.AddUint64(&mmGetPreflightURL.beforeGetPreflightURLCounter, 1)
-	defer mm_atomic.AddUint64(&mmGetPreflightURL.afterGetPreflightURLCounter, 1)
+// DeleteByPrefix implements mm_s3.S3
+func (mmDeleteByPrefix *S3Mock) DeleteByPrefix(ctx context.Context, bucket string, prefix string) (i1 int, err error) {
+	mm_atomic.AddUint64(&mmDeleteByPrefix.beforeDeleteByPrefixCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteByPrefix.afterDeleteByPrefixCounter, 1)
 
-	mmGetPreflightURL.t.Helper()
+	mmDeleteByPrefix.t.Helper()
 
-	if mmGetPreflightURL.inspectFuncGetPreflightURL != nil {
-		mmGetPreflightURL.inspectFuncGetPreflightURL(ctx, bucketName, assetID, ttl)
+	if mmDeleteByPrefix.inspectFuncDeleteByPrefix != nil {
+		mmDeleteByPrefix.inspectFuncDeleteByPrefix(ctx, bucket, prefix)
 	}
 
-	mm_params := S3MockGetPreflightURLParams{ctx, bucketName, assetID, ttl}
+	mm_params := S3MockDeleteByPrefixParams{ctx, bucket, prefix}
 
 	// Record call args
-	mmGetPreflightURL.GetPreflightURLMock.mutex.Lock()
-	mmGetPreflightURL.GetPreflightURLMock.callArgs = append(mmGetPreflightURL.GetPreflightURLMock.callArgs, &mm_params)
-	mmGetPreflightURL.GetPreflightURLMock.mutex.Unlock()
+	mmDeleteByPrefix.DeleteByPrefixMock.mutex.Lock()
+	mmDeleteByPrefix.DeleteByPrefixMock.callArgs = append(mmDeleteByPrefix.DeleteByPrefixMock.callArgs, &mm_params)
+	mmDeleteByPrefix.DeleteByPrefixMock.mutex.Unlock()
 
-	for _, e := range mmGetPreflightURL.GetPreflightURLMock.expectations {
+	for _, e := range mmDeleteByPrefix.DeleteByPrefixMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.p1, e.results.err
+			return e.results.i1, e.results.err
 		}
 	}
 
-	if mmGetPreflightURL.GetPreflightURLMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGetPreflightURL.GetPreflightURLMock.defaultExpectation.Counter, 1)
-		mm_want := mmGetPreflightURL.GetPreflightURLMock.defaultExpectation.params
-		mm_want_ptrs := mmGetPreflightURL.GetPreflightURLMock.defaultExpectation.paramPtrs
+	if mmDeleteByPrefix.DeleteByPrefixMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteByPrefix.DeleteByPrefixMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteByPrefix.DeleteByPrefixMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteByPrefix.DeleteByPrefixMock.defaultExpectation.paramPtrs
 
-		mm_got := S3MockGetPreflightURLParams{ctx, bucketName, assetID, ttl}
+		mm_got := S3MockDeleteByPrefixParams{ctx, bucket, prefix}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmGetPreflightURL.t.Errorf("S3Mock.GetPreflightURL got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetPreflightURL.GetPreflightURLMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmDeleteByPrefix.t.Errorf("S3Mock.DeleteByPrefix got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteByPrefix.DeleteByPrefixMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.bucketName != nil && !minimock.Equal(*mm_want_ptrs.bucketName, mm_got.bucketName) {
-				mmGetPreflightURL.t.Errorf("S3Mock.GetPreflightURL got unexpected parameter bucketName, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetPreflightURL.GetPreflightURLMock.defaultExpectation.expectationOrigins.originBucketName, *mm_want_ptrs.bucketName, mm_got.bucketName, minimock.Diff(*mm_want_ptrs.bucketName, mm_got.bucketName))
+			if mm_want_ptrs.bucket != nil && !minimock.Equal(*mm_want_ptrs.bucket, mm_got.bucket) {
+				mmDeleteByPrefix.t.Errorf("S3Mock.DeleteByPrefix got unexpected parameter bucket, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteByPrefix.DeleteByPrefixMock.defaultExpectation.expectationOrigins.originBucket, *mm_want_ptrs.bucket, mm_got.bucket, minimock.Diff(*mm_want_ptrs.bucket, mm_got.bucket))
 			}
 
-			if mm_want_ptrs.assetID != nil && !minimock.Equal(*mm_want_ptrs.assetID, mm_got.assetID) {
-				mmGetPreflightURL.t.Errorf("S3Mock.GetPreflightURL got unexpected parameter assetID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetPreflightURL.GetPreflightURLMock.defaultExpectation.expectationOrigins.originAssetID, *mm_want_ptrs.assetID, mm_got.assetID, minimock.Diff(*mm_want_ptrs.assetID, mm_got.assetID))
-			}
-
-			if mm_want_ptrs.ttl != nil && !minimock.Equal(*mm_want_ptrs.ttl, mm_got.ttl) {
-				mmGetPreflightURL.t.Errorf("S3Mock.GetPreflightURL got unexpected parameter ttl, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetPreflightURL.GetPreflightURLMock.defaultExpectation.expectationOrigins.originTtl, *mm_want_ptrs.ttl, mm_got.ttl, minimock.Diff(*mm_want_ptrs.ttl, mm_got.ttl))
+			if mm_want_ptrs.prefix != nil && !minimock.Equal(*mm_want_ptrs.prefix, mm_got.prefix) {
+				mmDeleteByPrefix.t.Errorf("S3Mock.DeleteByPrefix got unexpected parameter prefix, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteByPrefix.DeleteByPrefixMock.defaultExpectation.expectationOrigins.originPrefix, *mm_want_ptrs.prefix, mm_got.prefix, minimock.Diff(*mm_want_ptrs.prefix, mm_got.prefix))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmGetPreflightURL.t.Errorf("S3Mock.GetPreflightURL got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmGetPreflightURL.GetPreflightURLMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmDeleteByPrefix.t.Errorf("S3Mock.DeleteByPrefix got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteByPrefix.DeleteByPrefixMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmGetPreflightURL.GetPreflightURLMock.defaultExpectation.results
+		mm_results := mmDeleteByPrefix.DeleteByPrefixMock.defaultExpectation.results
 		if mm_results == nil {
-			mmGetPreflightURL.t.Fatal("No results are set for the S3Mock.GetPreflightURL")
+			mmDeleteByPrefix.t.Fatal("No results are set for the S3Mock.DeleteByPrefix")
 		}
-		return (*mm_results).p1, (*mm_results).err
+		return (*mm_results).i1, (*mm_results).err
 	}
-	if mmGetPreflightURL.funcGetPreflightURL != nil {
-		return mmGetPreflightURL.funcGetPreflightURL(ctx, bucketName, assetID, ttl)
+	if mmDeleteByPrefix.funcDeleteByPrefix != nil {
+		return mmDeleteByPrefix.funcDeleteByPrefix(ctx, bucket, prefix)
 	}
-	mmGetPreflightURL.t.Fatalf("Unexpected call to S3Mock.GetPreflightURL. %v %v %v %v", ctx, bucketName, assetID, ttl)
+	mmDeleteByPrefix.t.Fatalf("Unexpected call to S3Mock.DeleteByPrefix. %v %v %v", ctx, bucket, prefix)
 	return
 }
 
-// GetPreflightURLAfterCounter returns a count of finished S3Mock.GetPreflightURL invocations
-func (mmGetPreflightURL *S3Mock) GetPreflightURLAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetPreflightURL.afterGetPreflightURLCounter)
+// DeleteByPrefixAfterCounter returns a count of finished S3Mock.DeleteByPrefix invocations
+func (mmDeleteByPrefix *S3Mock) DeleteByPrefixAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteByPrefix.afterDeleteByPrefixCounter)
 }
 
-// GetPreflightURLBeforeCounter returns a count of S3Mock.GetPreflightURL invocations
-func (mmGetPreflightURL *S3Mock) GetPreflightURLBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetPreflightURL.beforeGetPreflightURLCounter)
+// DeleteByPrefixBeforeCounter returns a count of S3Mock.DeleteByPrefix invocations
+func (mmDeleteByPrefix *S3Mock) DeleteByPrefixBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteByPrefix.beforeDeleteByPrefixCounter)
 }
 
-// Calls returns a list of arguments used in each call to S3Mock.GetPreflightURL.
+// Calls returns a list of arguments used in each call to S3Mock.DeleteByPrefix.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmGetPreflightURL *mS3MockGetPreflightURL) Calls() []*S3MockGetPreflightURLParams {
-	mmGetPreflightURL.mutex.RLock()
+func (mmDeleteByPrefix *mS3MockDeleteByPrefix) Calls() []*S3MockDeleteByPrefixParams {
+	mmDeleteByPrefix.mutex.RLock()
 
-	argCopy := make([]*S3MockGetPreflightURLParams, len(mmGetPreflightURL.callArgs))
-	copy(argCopy, mmGetPreflightURL.callArgs)
+	argCopy := make([]*S3MockDeleteByPrefixParams, len(mmDeleteByPrefix.callArgs))
+	copy(argCopy, mmDeleteByPrefix.callArgs)
 
-	mmGetPreflightURL.mutex.RUnlock()
+	mmDeleteByPrefix.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockGetPreflightURLDone returns true if the count of the GetPreflightURL invocations corresponds
+// MinimockDeleteByPrefixDone returns true if the count of the DeleteByPrefix invocations corresponds
 // the number of defined expectations
-func (m *S3Mock) MinimockGetPreflightURLDone() bool {
-	if m.GetPreflightURLMock.optional {
+func (m *S3Mock) MinimockDeleteByPrefixDone() bool {
+	if m.DeleteByPrefixMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.GetPreflightURLMock.expectations {
+	for _, e := range m.DeleteByPrefixMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.GetPreflightURLMock.invocationsDone()
+	return m.DeleteByPrefixMock.invocationsDone()
 }
 
-// MinimockGetPreflightURLInspect logs each unmet expectation
-func (m *S3Mock) MinimockGetPreflightURLInspect() {
-	for _, e := range m.GetPreflightURLMock.expectations {
+// MinimockDeleteByPrefixInspect logs each unmet expectation
+func (m *S3Mock) MinimockDeleteByPrefixInspect() {
+	for _, e := range m.DeleteByPrefixMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to S3Mock.GetPreflightURL at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to S3Mock.DeleteByPrefix at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterGetPreflightURLCounter := mm_atomic.LoadUint64(&m.afterGetPreflightURLCounter)
+	afterDeleteByPrefixCounter := mm_atomic.LoadUint64(&m.afterDeleteByPrefixCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.GetPreflightURLMock.defaultExpectation != nil && afterGetPreflightURLCounter < 1 {
-		if m.GetPreflightURLMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to S3Mock.GetPreflightURL at\n%s", m.GetPreflightURLMock.defaultExpectation.returnOrigin)
+	if m.DeleteByPrefixMock.defaultExpectation != nil && afterDeleteByPrefixCounter < 1 {
+		if m.DeleteByPrefixMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to S3Mock.DeleteByPrefix at\n%s", m.DeleteByPrefixMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to S3Mock.GetPreflightURL at\n%s with params: %#v", m.GetPreflightURLMock.defaultExpectation.expectationOrigins.origin, *m.GetPreflightURLMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to S3Mock.DeleteByPrefix at\n%s with params: %#v", m.DeleteByPrefixMock.defaultExpectation.expectationOrigins.origin, *m.DeleteByPrefixMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcGetPreflightURL != nil && afterGetPreflightURLCounter < 1 {
-		m.t.Errorf("Expected call to S3Mock.GetPreflightURL at\n%s", m.funcGetPreflightURLOrigin)
+	if m.funcDeleteByPrefix != nil && afterDeleteByPrefixCounter < 1 {
+		m.t.Errorf("Expected call to S3Mock.DeleteByPrefix at\n%s", m.funcDeleteByPrefixOrigin)
 	}
 
-	if !m.GetPreflightURLMock.invocationsDone() && afterGetPreflightURLCounter > 0 {
-		m.t.Errorf("Expected %d calls to S3Mock.GetPreflightURL at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.GetPreflightURLMock.expectedInvocations), m.GetPreflightURLMock.expectedInvocationsOrigin, afterGetPreflightURLCounter)
+	if !m.DeleteByPrefixMock.invocationsDone() && afterDeleteByPrefixCounter > 0 {
+		m.t.Errorf("Expected %d calls to S3Mock.DeleteByPrefix at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteByPrefixMock.expectedInvocations), m.DeleteByPrefixMock.expectedInvocationsOrigin, afterDeleteByPrefixCounter)
 	}
 }
 
-type mS3MockGetPreflightUploadURL struct {
+type mS3MockDeleteObject struct {
 	optional           bool
 	mock               *S3Mock
-	defaultExpectation *S3MockGetPreflightUploadURLExpectation
-	expectations       []*S3MockGetPreflightUploadURLExpectation
+	defaultExpectation *S3MockDeleteObjectExpectation
+	expectations       []*S3MockDeleteObjectExpectation
 
-	callArgs []*S3MockGetPreflightUploadURLParams
+	callArgs []*S3MockDeleteObjectParams
 	mutex    sync.RWMutex
 
 	expectedInvocations       uint64
 	expectedInvocationsOrigin string
 }
 
-// S3MockGetPreflightUploadURLExpectation specifies expectation struct of the S3.GetPreflightUploadURL
-type S3MockGetPreflightUploadURLExpectation struct {
+// S3MockDeleteObjectExpectation specifies expectation struct of the S3.DeleteObject
+type S3MockDeleteObjectExpectation struct {
 	mock               *S3Mock
-	params             *S3MockGetPreflightUploadURLParams
-	paramPtrs          *S3MockGetPreflightUploadURLParamPtrs
-	expectationOrigins S3MockGetPreflightUploadURLExpectationOrigins
-	results            *S3MockGetPreflightUploadURLResults
+	params             *S3MockDeleteObjectParams
+	paramPtrs          *S3MockDeleteObjectParamPtrs
+	expectationOrigins S3MockDeleteObjectExpectationOrigins
+	results            *S3MockDeleteObjectResults
 	returnOrigin       string
 	Counter            uint64
 }
 
-// S3MockGetPreflightUploadURLParams contains parameters of the S3.GetPreflightUploadURL
-type S3MockGetPreflightUploadURLParams struct {
-	ctx        context.Context
-	bucketName domain.VideoBucket
-	fileID     uuid.UUID
-	ttl        time.Duration
+// S3MockDeleteObjectParams contains parameters of the S3.DeleteObject
+type S3MockDeleteObjectParams struct {
+	ctx    context.Context
+	bucket string
+	key    string
 }
 
-// S3MockGetPreflightUploadURLParamPtrs contains pointers to parameters of the S3.GetPreflightUploadURL
-type S3MockGetPreflightUploadURLParamPtrs struct {
-	ctx        *context.Context
-	bucketName *domain.VideoBucket
-	fileID     *uuid.UUID
-	ttl        *time.Duration
+// S3MockDeleteObjectParamPtrs contains pointers to parameters of the S3.DeleteObject
+type S3MockDeleteObjectParamPtrs struct {
+	ctx    *context.Context
+	bucket *string
+	key    *string
 }
 
-// S3MockGetPreflightUploadURLResults contains results of the S3.GetPreflightUploadURL
-type S3MockGetPreflightUploadURLResults struct {
-	p1  domain.PreflightURL
+// S3MockDeleteObjectResults contains results of the S3.DeleteObject
+type S3MockDeleteObjectResults struct {
 	err error
 }
 
-// S3MockGetPreflightUploadURLOrigins contains origins of expectations of the S3.GetPreflightUploadURL
-type S3MockGetPreflightUploadURLExpectationOrigins struct {
-	origin           string
-	originCtx        string
-	originBucketName string
-	originFileID     string
-	originTtl        string
+// S3MockDeleteObjectOrigins contains origins of expectations of the S3.DeleteObject
+type S3MockDeleteObjectExpectationOrigins struct {
+	origin       string
+	originCtx    string
+	originBucket string
+	originKey    string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -520,348 +525,1940 @@ type S3MockGetPreflightUploadURLExpectationOrigins struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) Optional() *mS3MockGetPreflightUploadURL {
-	mmGetPreflightUploadURL.optional = true
-	return mmGetPreflightUploadURL
+func (mmDeleteObject *mS3MockDeleteObject) Optional() *mS3MockDeleteObject {
+	mmDeleteObject.optional = true
+	return mmDeleteObject
 }
 
-// Expect sets up expected params for S3.GetPreflightUploadURL
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) Expect(ctx context.Context, bucketName domain.VideoBucket, fileID uuid.UUID, ttl time.Duration) *mS3MockGetPreflightUploadURL {
-	if mmGetPreflightUploadURL.mock.funcGetPreflightUploadURL != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Set")
+// Expect sets up expected params for S3.DeleteObject
+func (mmDeleteObject *mS3MockDeleteObject) Expect(ctx context.Context, bucket string, key string) *mS3MockDeleteObject {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("S3Mock.DeleteObject mock is already set by Set")
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation == nil {
-		mmGetPreflightUploadURL.defaultExpectation = &S3MockGetPreflightUploadURLExpectation{}
+	if mmDeleteObject.defaultExpectation == nil {
+		mmDeleteObject.defaultExpectation = &S3MockDeleteObjectExpectation{}
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation.paramPtrs != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by ExpectParams functions")
+	if mmDeleteObject.defaultExpectation.paramPtrs != nil {
+		mmDeleteObject.mock.t.Fatalf("S3Mock.DeleteObject mock is already set by ExpectParams functions")
 	}
 
-	mmGetPreflightUploadURL.defaultExpectation.params = &S3MockGetPreflightUploadURLParams{ctx, bucketName, fileID, ttl}
-	mmGetPreflightUploadURL.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
-	for _, e := range mmGetPreflightUploadURL.expectations {
-		if minimock.Equal(e.params, mmGetPreflightUploadURL.defaultExpectation.params) {
-			mmGetPreflightUploadURL.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetPreflightUploadURL.defaultExpectation.params)
+	mmDeleteObject.defaultExpectation.params = &S3MockDeleteObjectParams{ctx, bucket, key}
+	mmDeleteObject.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteObject.expectations {
+		if minimock.Equal(e.params, mmDeleteObject.defaultExpectation.params) {
+			mmDeleteObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteObject.defaultExpectation.params)
 		}
 	}
 
-	return mmGetPreflightUploadURL
+	return mmDeleteObject
 }
 
-// ExpectCtxParam1 sets up expected param ctx for S3.GetPreflightUploadURL
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) ExpectCtxParam1(ctx context.Context) *mS3MockGetPreflightUploadURL {
-	if mmGetPreflightUploadURL.mock.funcGetPreflightUploadURL != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for S3.DeleteObject
+func (mmDeleteObject *mS3MockDeleteObject) ExpectCtxParam1(ctx context.Context) *mS3MockDeleteObject {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("S3Mock.DeleteObject mock is already set by Set")
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation == nil {
-		mmGetPreflightUploadURL.defaultExpectation = &S3MockGetPreflightUploadURLExpectation{}
+	if mmDeleteObject.defaultExpectation == nil {
+		mmDeleteObject.defaultExpectation = &S3MockDeleteObjectExpectation{}
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation.params != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Expect")
+	if mmDeleteObject.defaultExpectation.params != nil {
+		mmDeleteObject.mock.t.Fatalf("S3Mock.DeleteObject mock is already set by Expect")
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation.paramPtrs == nil {
-		mmGetPreflightUploadURL.defaultExpectation.paramPtrs = &S3MockGetPreflightUploadURLParamPtrs{}
+	if mmDeleteObject.defaultExpectation.paramPtrs == nil {
+		mmDeleteObject.defaultExpectation.paramPtrs = &S3MockDeleteObjectParamPtrs{}
 	}
-	mmGetPreflightUploadURL.defaultExpectation.paramPtrs.ctx = &ctx
-	mmGetPreflightUploadURL.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+	mmDeleteObject.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteObject.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
 
-	return mmGetPreflightUploadURL
+	return mmDeleteObject
 }
 
-// ExpectBucketNameParam2 sets up expected param bucketName for S3.GetPreflightUploadURL
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) ExpectBucketNameParam2(bucketName domain.VideoBucket) *mS3MockGetPreflightUploadURL {
-	if mmGetPreflightUploadURL.mock.funcGetPreflightUploadURL != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Set")
+// ExpectBucketParam2 sets up expected param bucket for S3.DeleteObject
+func (mmDeleteObject *mS3MockDeleteObject) ExpectBucketParam2(bucket string) *mS3MockDeleteObject {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("S3Mock.DeleteObject mock is already set by Set")
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation == nil {
-		mmGetPreflightUploadURL.defaultExpectation = &S3MockGetPreflightUploadURLExpectation{}
+	if mmDeleteObject.defaultExpectation == nil {
+		mmDeleteObject.defaultExpectation = &S3MockDeleteObjectExpectation{}
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation.params != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Expect")
+	if mmDeleteObject.defaultExpectation.params != nil {
+		mmDeleteObject.mock.t.Fatalf("S3Mock.DeleteObject mock is already set by Expect")
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation.paramPtrs == nil {
-		mmGetPreflightUploadURL.defaultExpectation.paramPtrs = &S3MockGetPreflightUploadURLParamPtrs{}
+	if mmDeleteObject.defaultExpectation.paramPtrs == nil {
+		mmDeleteObject.defaultExpectation.paramPtrs = &S3MockDeleteObjectParamPtrs{}
 	}
-	mmGetPreflightUploadURL.defaultExpectation.paramPtrs.bucketName = &bucketName
-	mmGetPreflightUploadURL.defaultExpectation.expectationOrigins.originBucketName = minimock.CallerInfo(1)
+	mmDeleteObject.defaultExpectation.paramPtrs.bucket = &bucket
+	mmDeleteObject.defaultExpectation.expectationOrigins.originBucket = minimock.CallerInfo(1)
 
-	return mmGetPreflightUploadURL
+	return mmDeleteObject
 }
 
-// ExpectFileIDParam3 sets up expected param fileID for S3.GetPreflightUploadURL
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) ExpectFileIDParam3(fileID uuid.UUID) *mS3MockGetPreflightUploadURL {
-	if mmGetPreflightUploadURL.mock.funcGetPreflightUploadURL != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Set")
+// ExpectKeyParam3 sets up expected param key for S3.DeleteObject
+func (mmDeleteObject *mS3MockDeleteObject) ExpectKeyParam3(key string) *mS3MockDeleteObject {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("S3Mock.DeleteObject mock is already set by Set")
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation == nil {
-		mmGetPreflightUploadURL.defaultExpectation = &S3MockGetPreflightUploadURLExpectation{}
+	if mmDeleteObject.defaultExpectation == nil {
+		mmDeleteObject.defaultExpectation = &S3MockDeleteObjectExpectation{}
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation.params != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Expect")
+	if mmDeleteObject.defaultExpectation.params != nil {
+		mmDeleteObject.mock.t.Fatalf("S3Mock.DeleteObject mock is already set by Expect")
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation.paramPtrs == nil {
-		mmGetPreflightUploadURL.defaultExpectation.paramPtrs = &S3MockGetPreflightUploadURLParamPtrs{}
+	if mmDeleteObject.defaultExpectation.paramPtrs == nil {
+		mmDeleteObject.defaultExpectation.paramPtrs = &S3MockDeleteObjectParamPtrs{}
 	}
-	mmGetPreflightUploadURL.defaultExpectation.paramPtrs.fileID = &fileID
-	mmGetPreflightUploadURL.defaultExpectation.expectationOrigins.originFileID = minimock.CallerInfo(1)
+	mmDeleteObject.defaultExpectation.paramPtrs.key = &key
+	mmDeleteObject.defaultExpectation.expectationOrigins.originKey = minimock.CallerInfo(1)
 
-	return mmGetPreflightUploadURL
+	return mmDeleteObject
 }
 
-// ExpectTtlParam4 sets up expected param ttl for S3.GetPreflightUploadURL
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) ExpectTtlParam4(ttl time.Duration) *mS3MockGetPreflightUploadURL {
-	if mmGetPreflightUploadURL.mock.funcGetPreflightUploadURL != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Set")
+// Inspect accepts an inspector function that has same arguments as the S3.DeleteObject
+func (mmDeleteObject *mS3MockDeleteObject) Inspect(f func(ctx context.Context, bucket string, key string)) *mS3MockDeleteObject {
+	if mmDeleteObject.mock.inspectFuncDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("Inspect function is already set for S3Mock.DeleteObject")
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation == nil {
-		mmGetPreflightUploadURL.defaultExpectation = &S3MockGetPreflightUploadURLExpectation{}
-	}
+	mmDeleteObject.mock.inspectFuncDeleteObject = f
 
-	if mmGetPreflightUploadURL.defaultExpectation.params != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Expect")
-	}
-
-	if mmGetPreflightUploadURL.defaultExpectation.paramPtrs == nil {
-		mmGetPreflightUploadURL.defaultExpectation.paramPtrs = &S3MockGetPreflightUploadURLParamPtrs{}
-	}
-	mmGetPreflightUploadURL.defaultExpectation.paramPtrs.ttl = &ttl
-	mmGetPreflightUploadURL.defaultExpectation.expectationOrigins.originTtl = minimock.CallerInfo(1)
-
-	return mmGetPreflightUploadURL
+	return mmDeleteObject
 }
 
-// Inspect accepts an inspector function that has same arguments as the S3.GetPreflightUploadURL
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) Inspect(f func(ctx context.Context, bucketName domain.VideoBucket, fileID uuid.UUID, ttl time.Duration)) *mS3MockGetPreflightUploadURL {
-	if mmGetPreflightUploadURL.mock.inspectFuncGetPreflightUploadURL != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("Inspect function is already set for S3Mock.GetPreflightUploadURL")
+// Return sets up results that will be returned by S3.DeleteObject
+func (mmDeleteObject *mS3MockDeleteObject) Return(err error) *S3Mock {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("S3Mock.DeleteObject mock is already set by Set")
 	}
 
-	mmGetPreflightUploadURL.mock.inspectFuncGetPreflightUploadURL = f
-
-	return mmGetPreflightUploadURL
+	if mmDeleteObject.defaultExpectation == nil {
+		mmDeleteObject.defaultExpectation = &S3MockDeleteObjectExpectation{mock: mmDeleteObject.mock}
+	}
+	mmDeleteObject.defaultExpectation.results = &S3MockDeleteObjectResults{err}
+	mmDeleteObject.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteObject.mock
 }
 
-// Return sets up results that will be returned by S3.GetPreflightUploadURL
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) Return(p1 domain.PreflightURL, err error) *S3Mock {
-	if mmGetPreflightUploadURL.mock.funcGetPreflightUploadURL != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Set")
+// Set uses given function f to mock the S3.DeleteObject method
+func (mmDeleteObject *mS3MockDeleteObject) Set(f func(ctx context.Context, bucket string, key string) (err error)) *S3Mock {
+	if mmDeleteObject.defaultExpectation != nil {
+		mmDeleteObject.mock.t.Fatalf("Default expectation is already set for the S3.DeleteObject method")
 	}
 
-	if mmGetPreflightUploadURL.defaultExpectation == nil {
-		mmGetPreflightUploadURL.defaultExpectation = &S3MockGetPreflightUploadURLExpectation{mock: mmGetPreflightUploadURL.mock}
+	if len(mmDeleteObject.expectations) > 0 {
+		mmDeleteObject.mock.t.Fatalf("Some expectations are already set for the S3.DeleteObject method")
 	}
-	mmGetPreflightUploadURL.defaultExpectation.results = &S3MockGetPreflightUploadURLResults{p1, err}
-	mmGetPreflightUploadURL.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
-	return mmGetPreflightUploadURL.mock
+
+	mmDeleteObject.mock.funcDeleteObject = f
+	mmDeleteObject.mock.funcDeleteObjectOrigin = minimock.CallerInfo(1)
+	return mmDeleteObject.mock
 }
 
-// Set uses given function f to mock the S3.GetPreflightUploadURL method
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) Set(f func(ctx context.Context, bucketName domain.VideoBucket, fileID uuid.UUID, ttl time.Duration) (p1 domain.PreflightURL, err error)) *S3Mock {
-	if mmGetPreflightUploadURL.defaultExpectation != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("Default expectation is already set for the S3.GetPreflightUploadURL method")
-	}
-
-	if len(mmGetPreflightUploadURL.expectations) > 0 {
-		mmGetPreflightUploadURL.mock.t.Fatalf("Some expectations are already set for the S3.GetPreflightUploadURL method")
-	}
-
-	mmGetPreflightUploadURL.mock.funcGetPreflightUploadURL = f
-	mmGetPreflightUploadURL.mock.funcGetPreflightUploadURLOrigin = minimock.CallerInfo(1)
-	return mmGetPreflightUploadURL.mock
-}
-
-// When sets expectation for the S3.GetPreflightUploadURL which will trigger the result defined by the following
+// When sets expectation for the S3.DeleteObject which will trigger the result defined by the following
 // Then helper
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) When(ctx context.Context, bucketName domain.VideoBucket, fileID uuid.UUID, ttl time.Duration) *S3MockGetPreflightUploadURLExpectation {
-	if mmGetPreflightUploadURL.mock.funcGetPreflightUploadURL != nil {
-		mmGetPreflightUploadURL.mock.t.Fatalf("S3Mock.GetPreflightUploadURL mock is already set by Set")
+func (mmDeleteObject *mS3MockDeleteObject) When(ctx context.Context, bucket string, key string) *S3MockDeleteObjectExpectation {
+	if mmDeleteObject.mock.funcDeleteObject != nil {
+		mmDeleteObject.mock.t.Fatalf("S3Mock.DeleteObject mock is already set by Set")
 	}
 
-	expectation := &S3MockGetPreflightUploadURLExpectation{
-		mock:               mmGetPreflightUploadURL.mock,
-		params:             &S3MockGetPreflightUploadURLParams{ctx, bucketName, fileID, ttl},
-		expectationOrigins: S3MockGetPreflightUploadURLExpectationOrigins{origin: minimock.CallerInfo(1)},
+	expectation := &S3MockDeleteObjectExpectation{
+		mock:               mmDeleteObject.mock,
+		params:             &S3MockDeleteObjectParams{ctx, bucket, key},
+		expectationOrigins: S3MockDeleteObjectExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
-	mmGetPreflightUploadURL.expectations = append(mmGetPreflightUploadURL.expectations, expectation)
+	mmDeleteObject.expectations = append(mmDeleteObject.expectations, expectation)
 	return expectation
 }
 
-// Then sets up S3.GetPreflightUploadURL return parameters for the expectation previously defined by the When method
-func (e *S3MockGetPreflightUploadURLExpectation) Then(p1 domain.PreflightURL, err error) *S3Mock {
-	e.results = &S3MockGetPreflightUploadURLResults{p1, err}
+// Then sets up S3.DeleteObject return parameters for the expectation previously defined by the When method
+func (e *S3MockDeleteObjectExpectation) Then(err error) *S3Mock {
+	e.results = &S3MockDeleteObjectResults{err}
 	return e.mock
 }
 
-// Times sets number of times S3.GetPreflightUploadURL should be invoked
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) Times(n uint64) *mS3MockGetPreflightUploadURL {
+// Times sets number of times S3.DeleteObject should be invoked
+func (mmDeleteObject *mS3MockDeleteObject) Times(n uint64) *mS3MockDeleteObject {
 	if n == 0 {
-		mmGetPreflightUploadURL.mock.t.Fatalf("Times of S3Mock.GetPreflightUploadURL mock can not be zero")
+		mmDeleteObject.mock.t.Fatalf("Times of S3Mock.DeleteObject mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmGetPreflightUploadURL.expectedInvocations, n)
-	mmGetPreflightUploadURL.expectedInvocationsOrigin = minimock.CallerInfo(1)
-	return mmGetPreflightUploadURL
+	mm_atomic.StoreUint64(&mmDeleteObject.expectedInvocations, n)
+	mmDeleteObject.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteObject
 }
 
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) invocationsDone() bool {
-	if len(mmGetPreflightUploadURL.expectations) == 0 && mmGetPreflightUploadURL.defaultExpectation == nil && mmGetPreflightUploadURL.mock.funcGetPreflightUploadURL == nil {
+func (mmDeleteObject *mS3MockDeleteObject) invocationsDone() bool {
+	if len(mmDeleteObject.expectations) == 0 && mmDeleteObject.defaultExpectation == nil && mmDeleteObject.mock.funcDeleteObject == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmGetPreflightUploadURL.mock.afterGetPreflightUploadURLCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmGetPreflightUploadURL.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteObject.mock.afterDeleteObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteObject.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// GetPreflightUploadURL implements mm_s3.S3
-func (mmGetPreflightUploadURL *S3Mock) GetPreflightUploadURL(ctx context.Context, bucketName domain.VideoBucket, fileID uuid.UUID, ttl time.Duration) (p1 domain.PreflightURL, err error) {
-	mm_atomic.AddUint64(&mmGetPreflightUploadURL.beforeGetPreflightUploadURLCounter, 1)
-	defer mm_atomic.AddUint64(&mmGetPreflightUploadURL.afterGetPreflightUploadURLCounter, 1)
+// DeleteObject implements mm_s3.S3
+func (mmDeleteObject *S3Mock) DeleteObject(ctx context.Context, bucket string, key string) (err error) {
+	mm_atomic.AddUint64(&mmDeleteObject.beforeDeleteObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteObject.afterDeleteObjectCounter, 1)
 
-	mmGetPreflightUploadURL.t.Helper()
+	mmDeleteObject.t.Helper()
 
-	if mmGetPreflightUploadURL.inspectFuncGetPreflightUploadURL != nil {
-		mmGetPreflightUploadURL.inspectFuncGetPreflightUploadURL(ctx, bucketName, fileID, ttl)
+	if mmDeleteObject.inspectFuncDeleteObject != nil {
+		mmDeleteObject.inspectFuncDeleteObject(ctx, bucket, key)
 	}
 
-	mm_params := S3MockGetPreflightUploadURLParams{ctx, bucketName, fileID, ttl}
+	mm_params := S3MockDeleteObjectParams{ctx, bucket, key}
 
 	// Record call args
-	mmGetPreflightUploadURL.GetPreflightUploadURLMock.mutex.Lock()
-	mmGetPreflightUploadURL.GetPreflightUploadURLMock.callArgs = append(mmGetPreflightUploadURL.GetPreflightUploadURLMock.callArgs, &mm_params)
-	mmGetPreflightUploadURL.GetPreflightUploadURLMock.mutex.Unlock()
+	mmDeleteObject.DeleteObjectMock.mutex.Lock()
+	mmDeleteObject.DeleteObjectMock.callArgs = append(mmDeleteObject.DeleteObjectMock.callArgs, &mm_params)
+	mmDeleteObject.DeleteObjectMock.mutex.Unlock()
 
-	for _, e := range mmGetPreflightUploadURL.GetPreflightUploadURLMock.expectations {
+	for _, e := range mmDeleteObject.DeleteObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteObject.DeleteObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteObject.DeleteObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteObject.DeleteObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteObject.DeleteObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := S3MockDeleteObjectParams{ctx, bucket, key}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteObject.t.Errorf("S3Mock.DeleteObject got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteObject.DeleteObjectMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.bucket != nil && !minimock.Equal(*mm_want_ptrs.bucket, mm_got.bucket) {
+				mmDeleteObject.t.Errorf("S3Mock.DeleteObject got unexpected parameter bucket, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteObject.DeleteObjectMock.defaultExpectation.expectationOrigins.originBucket, *mm_want_ptrs.bucket, mm_got.bucket, minimock.Diff(*mm_want_ptrs.bucket, mm_got.bucket))
+			}
+
+			if mm_want_ptrs.key != nil && !minimock.Equal(*mm_want_ptrs.key, mm_got.key) {
+				mmDeleteObject.t.Errorf("S3Mock.DeleteObject got unexpected parameter key, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteObject.DeleteObjectMock.defaultExpectation.expectationOrigins.originKey, *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteObject.t.Errorf("S3Mock.DeleteObject got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteObject.DeleteObjectMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteObject.DeleteObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteObject.t.Fatal("No results are set for the S3Mock.DeleteObject")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteObject.funcDeleteObject != nil {
+		return mmDeleteObject.funcDeleteObject(ctx, bucket, key)
+	}
+	mmDeleteObject.t.Fatalf("Unexpected call to S3Mock.DeleteObject. %v %v %v", ctx, bucket, key)
+	return
+}
+
+// DeleteObjectAfterCounter returns a count of finished S3Mock.DeleteObject invocations
+func (mmDeleteObject *S3Mock) DeleteObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteObject.afterDeleteObjectCounter)
+}
+
+// DeleteObjectBeforeCounter returns a count of S3Mock.DeleteObject invocations
+func (mmDeleteObject *S3Mock) DeleteObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteObject.beforeDeleteObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to S3Mock.DeleteObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteObject *mS3MockDeleteObject) Calls() []*S3MockDeleteObjectParams {
+	mmDeleteObject.mutex.RLock()
+
+	argCopy := make([]*S3MockDeleteObjectParams, len(mmDeleteObject.callArgs))
+	copy(argCopy, mmDeleteObject.callArgs)
+
+	mmDeleteObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteObjectDone returns true if the count of the DeleteObject invocations corresponds
+// the number of defined expectations
+func (m *S3Mock) MinimockDeleteObjectDone() bool {
+	if m.DeleteObjectMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteObjectMock.invocationsDone()
+}
+
+// MinimockDeleteObjectInspect logs each unmet expectation
+func (m *S3Mock) MinimockDeleteObjectInspect() {
+	for _, e := range m.DeleteObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to S3Mock.DeleteObject at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteObjectCounter := mm_atomic.LoadUint64(&m.afterDeleteObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteObjectMock.defaultExpectation != nil && afterDeleteObjectCounter < 1 {
+		if m.DeleteObjectMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to S3Mock.DeleteObject at\n%s", m.DeleteObjectMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to S3Mock.DeleteObject at\n%s with params: %#v", m.DeleteObjectMock.defaultExpectation.expectationOrigins.origin, *m.DeleteObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteObject != nil && afterDeleteObjectCounter < 1 {
+		m.t.Errorf("Expected call to S3Mock.DeleteObject at\n%s", m.funcDeleteObjectOrigin)
+	}
+
+	if !m.DeleteObjectMock.invocationsDone() && afterDeleteObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to S3Mock.DeleteObject at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteObjectMock.expectedInvocations), m.DeleteObjectMock.expectedInvocationsOrigin, afterDeleteObjectCounter)
+	}
+}
+
+type mS3MockGetObject struct {
+	optional           bool
+	mock               *S3Mock
+	defaultExpectation *S3MockGetObjectExpectation
+	expectations       []*S3MockGetObjectExpectation
+
+	callArgs []*S3MockGetObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// S3MockGetObjectExpectation specifies expectation struct of the S3.GetObject
+type S3MockGetObjectExpectation struct {
+	mock               *S3Mock
+	params             *S3MockGetObjectParams
+	paramPtrs          *S3MockGetObjectParamPtrs
+	expectationOrigins S3MockGetObjectExpectationOrigins
+	results            *S3MockGetObjectResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// S3MockGetObjectParams contains parameters of the S3.GetObject
+type S3MockGetObjectParams struct {
+	ctx    context.Context
+	bucket string
+	key    string
+}
+
+// S3MockGetObjectParamPtrs contains pointers to parameters of the S3.GetObject
+type S3MockGetObjectParamPtrs struct {
+	ctx    *context.Context
+	bucket *string
+	key    *string
+}
+
+// S3MockGetObjectResults contains results of the S3.GetObject
+type S3MockGetObjectResults struct {
+	ba1 []byte
+	err error
+}
+
+// S3MockGetObjectOrigins contains origins of expectations of the S3.GetObject
+type S3MockGetObjectExpectationOrigins struct {
+	origin       string
+	originCtx    string
+	originBucket string
+	originKey    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetObject *mS3MockGetObject) Optional() *mS3MockGetObject {
+	mmGetObject.optional = true
+	return mmGetObject
+}
+
+// Expect sets up expected params for S3.GetObject
+func (mmGetObject *mS3MockGetObject) Expect(ctx context.Context, bucket string, key string) *mS3MockGetObject {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("S3Mock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &S3MockGetObjectExpectation{}
+	}
+
+	if mmGetObject.defaultExpectation.paramPtrs != nil {
+		mmGetObject.mock.t.Fatalf("S3Mock.GetObject mock is already set by ExpectParams functions")
+	}
+
+	mmGetObject.defaultExpectation.params = &S3MockGetObjectParams{ctx, bucket, key}
+	mmGetObject.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetObject.expectations {
+		if minimock.Equal(e.params, mmGetObject.defaultExpectation.params) {
+			mmGetObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetObject.defaultExpectation.params)
+		}
+	}
+
+	return mmGetObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for S3.GetObject
+func (mmGetObject *mS3MockGetObject) ExpectCtxParam1(ctx context.Context) *mS3MockGetObject {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("S3Mock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &S3MockGetObjectExpectation{}
+	}
+
+	if mmGetObject.defaultExpectation.params != nil {
+		mmGetObject.mock.t.Fatalf("S3Mock.GetObject mock is already set by Expect")
+	}
+
+	if mmGetObject.defaultExpectation.paramPtrs == nil {
+		mmGetObject.defaultExpectation.paramPtrs = &S3MockGetObjectParamPtrs{}
+	}
+	mmGetObject.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetObject.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetObject
+}
+
+// ExpectBucketParam2 sets up expected param bucket for S3.GetObject
+func (mmGetObject *mS3MockGetObject) ExpectBucketParam2(bucket string) *mS3MockGetObject {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("S3Mock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &S3MockGetObjectExpectation{}
+	}
+
+	if mmGetObject.defaultExpectation.params != nil {
+		mmGetObject.mock.t.Fatalf("S3Mock.GetObject mock is already set by Expect")
+	}
+
+	if mmGetObject.defaultExpectation.paramPtrs == nil {
+		mmGetObject.defaultExpectation.paramPtrs = &S3MockGetObjectParamPtrs{}
+	}
+	mmGetObject.defaultExpectation.paramPtrs.bucket = &bucket
+	mmGetObject.defaultExpectation.expectationOrigins.originBucket = minimock.CallerInfo(1)
+
+	return mmGetObject
+}
+
+// ExpectKeyParam3 sets up expected param key for S3.GetObject
+func (mmGetObject *mS3MockGetObject) ExpectKeyParam3(key string) *mS3MockGetObject {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("S3Mock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &S3MockGetObjectExpectation{}
+	}
+
+	if mmGetObject.defaultExpectation.params != nil {
+		mmGetObject.mock.t.Fatalf("S3Mock.GetObject mock is already set by Expect")
+	}
+
+	if mmGetObject.defaultExpectation.paramPtrs == nil {
+		mmGetObject.defaultExpectation.paramPtrs = &S3MockGetObjectParamPtrs{}
+	}
+	mmGetObject.defaultExpectation.paramPtrs.key = &key
+	mmGetObject.defaultExpectation.expectationOrigins.originKey = minimock.CallerInfo(1)
+
+	return mmGetObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the S3.GetObject
+func (mmGetObject *mS3MockGetObject) Inspect(f func(ctx context.Context, bucket string, key string)) *mS3MockGetObject {
+	if mmGetObject.mock.inspectFuncGetObject != nil {
+		mmGetObject.mock.t.Fatalf("Inspect function is already set for S3Mock.GetObject")
+	}
+
+	mmGetObject.mock.inspectFuncGetObject = f
+
+	return mmGetObject
+}
+
+// Return sets up results that will be returned by S3.GetObject
+func (mmGetObject *mS3MockGetObject) Return(ba1 []byte, err error) *S3Mock {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("S3Mock.GetObject mock is already set by Set")
+	}
+
+	if mmGetObject.defaultExpectation == nil {
+		mmGetObject.defaultExpectation = &S3MockGetObjectExpectation{mock: mmGetObject.mock}
+	}
+	mmGetObject.defaultExpectation.results = &S3MockGetObjectResults{ba1, err}
+	mmGetObject.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetObject.mock
+}
+
+// Set uses given function f to mock the S3.GetObject method
+func (mmGetObject *mS3MockGetObject) Set(f func(ctx context.Context, bucket string, key string) (ba1 []byte, err error)) *S3Mock {
+	if mmGetObject.defaultExpectation != nil {
+		mmGetObject.mock.t.Fatalf("Default expectation is already set for the S3.GetObject method")
+	}
+
+	if len(mmGetObject.expectations) > 0 {
+		mmGetObject.mock.t.Fatalf("Some expectations are already set for the S3.GetObject method")
+	}
+
+	mmGetObject.mock.funcGetObject = f
+	mmGetObject.mock.funcGetObjectOrigin = minimock.CallerInfo(1)
+	return mmGetObject.mock
+}
+
+// When sets expectation for the S3.GetObject which will trigger the result defined by the following
+// Then helper
+func (mmGetObject *mS3MockGetObject) When(ctx context.Context, bucket string, key string) *S3MockGetObjectExpectation {
+	if mmGetObject.mock.funcGetObject != nil {
+		mmGetObject.mock.t.Fatalf("S3Mock.GetObject mock is already set by Set")
+	}
+
+	expectation := &S3MockGetObjectExpectation{
+		mock:               mmGetObject.mock,
+		params:             &S3MockGetObjectParams{ctx, bucket, key},
+		expectationOrigins: S3MockGetObjectExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetObject.expectations = append(mmGetObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up S3.GetObject return parameters for the expectation previously defined by the When method
+func (e *S3MockGetObjectExpectation) Then(ba1 []byte, err error) *S3Mock {
+	e.results = &S3MockGetObjectResults{ba1, err}
+	return e.mock
+}
+
+// Times sets number of times S3.GetObject should be invoked
+func (mmGetObject *mS3MockGetObject) Times(n uint64) *mS3MockGetObject {
+	if n == 0 {
+		mmGetObject.mock.t.Fatalf("Times of S3Mock.GetObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetObject.expectedInvocations, n)
+	mmGetObject.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetObject
+}
+
+func (mmGetObject *mS3MockGetObject) invocationsDone() bool {
+	if len(mmGetObject.expectations) == 0 && mmGetObject.defaultExpectation == nil && mmGetObject.mock.funcGetObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetObject.mock.afterGetObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetObject implements mm_s3.S3
+func (mmGetObject *S3Mock) GetObject(ctx context.Context, bucket string, key string) (ba1 []byte, err error) {
+	mm_atomic.AddUint64(&mmGetObject.beforeGetObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetObject.afterGetObjectCounter, 1)
+
+	mmGetObject.t.Helper()
+
+	if mmGetObject.inspectFuncGetObject != nil {
+		mmGetObject.inspectFuncGetObject(ctx, bucket, key)
+	}
+
+	mm_params := S3MockGetObjectParams{ctx, bucket, key}
+
+	// Record call args
+	mmGetObject.GetObjectMock.mutex.Lock()
+	mmGetObject.GetObjectMock.callArgs = append(mmGetObject.GetObjectMock.callArgs, &mm_params)
+	mmGetObject.GetObjectMock.mutex.Unlock()
+
+	for _, e := range mmGetObject.GetObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ba1, e.results.err
+		}
+	}
+
+	if mmGetObject.GetObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetObject.GetObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetObject.GetObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmGetObject.GetObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := S3MockGetObjectParams{ctx, bucket, key}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetObject.t.Errorf("S3Mock.GetObject got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.bucket != nil && !minimock.Equal(*mm_want_ptrs.bucket, mm_got.bucket) {
+				mmGetObject.t.Errorf("S3Mock.GetObject got unexpected parameter bucket, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.originBucket, *mm_want_ptrs.bucket, mm_got.bucket, minimock.Diff(*mm_want_ptrs.bucket, mm_got.bucket))
+			}
+
+			if mm_want_ptrs.key != nil && !minimock.Equal(*mm_want_ptrs.key, mm_got.key) {
+				mmGetObject.t.Errorf("S3Mock.GetObject got unexpected parameter key, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.originKey, *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetObject.t.Errorf("S3Mock.GetObject got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetObject.GetObjectMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetObject.GetObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetObject.t.Fatal("No results are set for the S3Mock.GetObject")
+		}
+		return (*mm_results).ba1, (*mm_results).err
+	}
+	if mmGetObject.funcGetObject != nil {
+		return mmGetObject.funcGetObject(ctx, bucket, key)
+	}
+	mmGetObject.t.Fatalf("Unexpected call to S3Mock.GetObject. %v %v %v", ctx, bucket, key)
+	return
+}
+
+// GetObjectAfterCounter returns a count of finished S3Mock.GetObject invocations
+func (mmGetObject *S3Mock) GetObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObject.afterGetObjectCounter)
+}
+
+// GetObjectBeforeCounter returns a count of S3Mock.GetObject invocations
+func (mmGetObject *S3Mock) GetObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetObject.beforeGetObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to S3Mock.GetObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetObject *mS3MockGetObject) Calls() []*S3MockGetObjectParams {
+	mmGetObject.mutex.RLock()
+
+	argCopy := make([]*S3MockGetObjectParams, len(mmGetObject.callArgs))
+	copy(argCopy, mmGetObject.callArgs)
+
+	mmGetObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetObjectDone returns true if the count of the GetObject invocations corresponds
+// the number of defined expectations
+func (m *S3Mock) MinimockGetObjectDone() bool {
+	if m.GetObjectMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetObjectMock.invocationsDone()
+}
+
+// MinimockGetObjectInspect logs each unmet expectation
+func (m *S3Mock) MinimockGetObjectInspect() {
+	for _, e := range m.GetObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to S3Mock.GetObject at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetObjectCounter := mm_atomic.LoadUint64(&m.afterGetObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetObjectMock.defaultExpectation != nil && afterGetObjectCounter < 1 {
+		if m.GetObjectMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to S3Mock.GetObject at\n%s", m.GetObjectMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to S3Mock.GetObject at\n%s with params: %#v", m.GetObjectMock.defaultExpectation.expectationOrigins.origin, *m.GetObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetObject != nil && afterGetObjectCounter < 1 {
+		m.t.Errorf("Expected call to S3Mock.GetObject at\n%s", m.funcGetObjectOrigin)
+	}
+
+	if !m.GetObjectMock.invocationsDone() && afterGetObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to S3Mock.GetObject at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetObjectMock.expectedInvocations), m.GetObjectMock.expectedInvocationsOrigin, afterGetObjectCounter)
+	}
+}
+
+type mS3MockHeadObject struct {
+	optional           bool
+	mock               *S3Mock
+	defaultExpectation *S3MockHeadObjectExpectation
+	expectations       []*S3MockHeadObjectExpectation
+
+	callArgs []*S3MockHeadObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// S3MockHeadObjectExpectation specifies expectation struct of the S3.HeadObject
+type S3MockHeadObjectExpectation struct {
+	mock               *S3Mock
+	params             *S3MockHeadObjectParams
+	paramPtrs          *S3MockHeadObjectParamPtrs
+	expectationOrigins S3MockHeadObjectExpectationOrigins
+	results            *S3MockHeadObjectResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// S3MockHeadObjectParams contains parameters of the S3.HeadObject
+type S3MockHeadObjectParams struct {
+	ctx    context.Context
+	bucket string
+	key    string
+}
+
+// S3MockHeadObjectParamPtrs contains pointers to parameters of the S3.HeadObject
+type S3MockHeadObjectParamPtrs struct {
+	ctx    *context.Context
+	bucket *string
+	key    *string
+}
+
+// S3MockHeadObjectResults contains results of the S3.HeadObject
+type S3MockHeadObjectResults struct {
+	o1  mm_s3.ObjectInfo
+	err error
+}
+
+// S3MockHeadObjectOrigins contains origins of expectations of the S3.HeadObject
+type S3MockHeadObjectExpectationOrigins struct {
+	origin       string
+	originCtx    string
+	originBucket string
+	originKey    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmHeadObject *mS3MockHeadObject) Optional() *mS3MockHeadObject {
+	mmHeadObject.optional = true
+	return mmHeadObject
+}
+
+// Expect sets up expected params for S3.HeadObject
+func (mmHeadObject *mS3MockHeadObject) Expect(ctx context.Context, bucket string, key string) *mS3MockHeadObject {
+	if mmHeadObject.mock.funcHeadObject != nil {
+		mmHeadObject.mock.t.Fatalf("S3Mock.HeadObject mock is already set by Set")
+	}
+
+	if mmHeadObject.defaultExpectation == nil {
+		mmHeadObject.defaultExpectation = &S3MockHeadObjectExpectation{}
+	}
+
+	if mmHeadObject.defaultExpectation.paramPtrs != nil {
+		mmHeadObject.mock.t.Fatalf("S3Mock.HeadObject mock is already set by ExpectParams functions")
+	}
+
+	mmHeadObject.defaultExpectation.params = &S3MockHeadObjectParams{ctx, bucket, key}
+	mmHeadObject.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmHeadObject.expectations {
+		if minimock.Equal(e.params, mmHeadObject.defaultExpectation.params) {
+			mmHeadObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHeadObject.defaultExpectation.params)
+		}
+	}
+
+	return mmHeadObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for S3.HeadObject
+func (mmHeadObject *mS3MockHeadObject) ExpectCtxParam1(ctx context.Context) *mS3MockHeadObject {
+	if mmHeadObject.mock.funcHeadObject != nil {
+		mmHeadObject.mock.t.Fatalf("S3Mock.HeadObject mock is already set by Set")
+	}
+
+	if mmHeadObject.defaultExpectation == nil {
+		mmHeadObject.defaultExpectation = &S3MockHeadObjectExpectation{}
+	}
+
+	if mmHeadObject.defaultExpectation.params != nil {
+		mmHeadObject.mock.t.Fatalf("S3Mock.HeadObject mock is already set by Expect")
+	}
+
+	if mmHeadObject.defaultExpectation.paramPtrs == nil {
+		mmHeadObject.defaultExpectation.paramPtrs = &S3MockHeadObjectParamPtrs{}
+	}
+	mmHeadObject.defaultExpectation.paramPtrs.ctx = &ctx
+	mmHeadObject.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmHeadObject
+}
+
+// ExpectBucketParam2 sets up expected param bucket for S3.HeadObject
+func (mmHeadObject *mS3MockHeadObject) ExpectBucketParam2(bucket string) *mS3MockHeadObject {
+	if mmHeadObject.mock.funcHeadObject != nil {
+		mmHeadObject.mock.t.Fatalf("S3Mock.HeadObject mock is already set by Set")
+	}
+
+	if mmHeadObject.defaultExpectation == nil {
+		mmHeadObject.defaultExpectation = &S3MockHeadObjectExpectation{}
+	}
+
+	if mmHeadObject.defaultExpectation.params != nil {
+		mmHeadObject.mock.t.Fatalf("S3Mock.HeadObject mock is already set by Expect")
+	}
+
+	if mmHeadObject.defaultExpectation.paramPtrs == nil {
+		mmHeadObject.defaultExpectation.paramPtrs = &S3MockHeadObjectParamPtrs{}
+	}
+	mmHeadObject.defaultExpectation.paramPtrs.bucket = &bucket
+	mmHeadObject.defaultExpectation.expectationOrigins.originBucket = minimock.CallerInfo(1)
+
+	return mmHeadObject
+}
+
+// ExpectKeyParam3 sets up expected param key for S3.HeadObject
+func (mmHeadObject *mS3MockHeadObject) ExpectKeyParam3(key string) *mS3MockHeadObject {
+	if mmHeadObject.mock.funcHeadObject != nil {
+		mmHeadObject.mock.t.Fatalf("S3Mock.HeadObject mock is already set by Set")
+	}
+
+	if mmHeadObject.defaultExpectation == nil {
+		mmHeadObject.defaultExpectation = &S3MockHeadObjectExpectation{}
+	}
+
+	if mmHeadObject.defaultExpectation.params != nil {
+		mmHeadObject.mock.t.Fatalf("S3Mock.HeadObject mock is already set by Expect")
+	}
+
+	if mmHeadObject.defaultExpectation.paramPtrs == nil {
+		mmHeadObject.defaultExpectation.paramPtrs = &S3MockHeadObjectParamPtrs{}
+	}
+	mmHeadObject.defaultExpectation.paramPtrs.key = &key
+	mmHeadObject.defaultExpectation.expectationOrigins.originKey = minimock.CallerInfo(1)
+
+	return mmHeadObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the S3.HeadObject
+func (mmHeadObject *mS3MockHeadObject) Inspect(f func(ctx context.Context, bucket string, key string)) *mS3MockHeadObject {
+	if mmHeadObject.mock.inspectFuncHeadObject != nil {
+		mmHeadObject.mock.t.Fatalf("Inspect function is already set for S3Mock.HeadObject")
+	}
+
+	mmHeadObject.mock.inspectFuncHeadObject = f
+
+	return mmHeadObject
+}
+
+// Return sets up results that will be returned by S3.HeadObject
+func (mmHeadObject *mS3MockHeadObject) Return(o1 mm_s3.ObjectInfo, err error) *S3Mock {
+	if mmHeadObject.mock.funcHeadObject != nil {
+		mmHeadObject.mock.t.Fatalf("S3Mock.HeadObject mock is already set by Set")
+	}
+
+	if mmHeadObject.defaultExpectation == nil {
+		mmHeadObject.defaultExpectation = &S3MockHeadObjectExpectation{mock: mmHeadObject.mock}
+	}
+	mmHeadObject.defaultExpectation.results = &S3MockHeadObjectResults{o1, err}
+	mmHeadObject.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmHeadObject.mock
+}
+
+// Set uses given function f to mock the S3.HeadObject method
+func (mmHeadObject *mS3MockHeadObject) Set(f func(ctx context.Context, bucket string, key string) (o1 mm_s3.ObjectInfo, err error)) *S3Mock {
+	if mmHeadObject.defaultExpectation != nil {
+		mmHeadObject.mock.t.Fatalf("Default expectation is already set for the S3.HeadObject method")
+	}
+
+	if len(mmHeadObject.expectations) > 0 {
+		mmHeadObject.mock.t.Fatalf("Some expectations are already set for the S3.HeadObject method")
+	}
+
+	mmHeadObject.mock.funcHeadObject = f
+	mmHeadObject.mock.funcHeadObjectOrigin = minimock.CallerInfo(1)
+	return mmHeadObject.mock
+}
+
+// When sets expectation for the S3.HeadObject which will trigger the result defined by the following
+// Then helper
+func (mmHeadObject *mS3MockHeadObject) When(ctx context.Context, bucket string, key string) *S3MockHeadObjectExpectation {
+	if mmHeadObject.mock.funcHeadObject != nil {
+		mmHeadObject.mock.t.Fatalf("S3Mock.HeadObject mock is already set by Set")
+	}
+
+	expectation := &S3MockHeadObjectExpectation{
+		mock:               mmHeadObject.mock,
+		params:             &S3MockHeadObjectParams{ctx, bucket, key},
+		expectationOrigins: S3MockHeadObjectExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmHeadObject.expectations = append(mmHeadObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up S3.HeadObject return parameters for the expectation previously defined by the When method
+func (e *S3MockHeadObjectExpectation) Then(o1 mm_s3.ObjectInfo, err error) *S3Mock {
+	e.results = &S3MockHeadObjectResults{o1, err}
+	return e.mock
+}
+
+// Times sets number of times S3.HeadObject should be invoked
+func (mmHeadObject *mS3MockHeadObject) Times(n uint64) *mS3MockHeadObject {
+	if n == 0 {
+		mmHeadObject.mock.t.Fatalf("Times of S3Mock.HeadObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmHeadObject.expectedInvocations, n)
+	mmHeadObject.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmHeadObject
+}
+
+func (mmHeadObject *mS3MockHeadObject) invocationsDone() bool {
+	if len(mmHeadObject.expectations) == 0 && mmHeadObject.defaultExpectation == nil && mmHeadObject.mock.funcHeadObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmHeadObject.mock.afterHeadObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmHeadObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// HeadObject implements mm_s3.S3
+func (mmHeadObject *S3Mock) HeadObject(ctx context.Context, bucket string, key string) (o1 mm_s3.ObjectInfo, err error) {
+	mm_atomic.AddUint64(&mmHeadObject.beforeHeadObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmHeadObject.afterHeadObjectCounter, 1)
+
+	mmHeadObject.t.Helper()
+
+	if mmHeadObject.inspectFuncHeadObject != nil {
+		mmHeadObject.inspectFuncHeadObject(ctx, bucket, key)
+	}
+
+	mm_params := S3MockHeadObjectParams{ctx, bucket, key}
+
+	// Record call args
+	mmHeadObject.HeadObjectMock.mutex.Lock()
+	mmHeadObject.HeadObjectMock.callArgs = append(mmHeadObject.HeadObjectMock.callArgs, &mm_params)
+	mmHeadObject.HeadObjectMock.mutex.Unlock()
+
+	for _, e := range mmHeadObject.HeadObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.o1, e.results.err
+		}
+	}
+
+	if mmHeadObject.HeadObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmHeadObject.HeadObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmHeadObject.HeadObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmHeadObject.HeadObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := S3MockHeadObjectParams{ctx, bucket, key}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmHeadObject.t.Errorf("S3Mock.HeadObject got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmHeadObject.HeadObjectMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.bucket != nil && !minimock.Equal(*mm_want_ptrs.bucket, mm_got.bucket) {
+				mmHeadObject.t.Errorf("S3Mock.HeadObject got unexpected parameter bucket, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmHeadObject.HeadObjectMock.defaultExpectation.expectationOrigins.originBucket, *mm_want_ptrs.bucket, mm_got.bucket, minimock.Diff(*mm_want_ptrs.bucket, mm_got.bucket))
+			}
+
+			if mm_want_ptrs.key != nil && !minimock.Equal(*mm_want_ptrs.key, mm_got.key) {
+				mmHeadObject.t.Errorf("S3Mock.HeadObject got unexpected parameter key, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmHeadObject.HeadObjectMock.defaultExpectation.expectationOrigins.originKey, *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmHeadObject.t.Errorf("S3Mock.HeadObject got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmHeadObject.HeadObjectMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmHeadObject.HeadObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmHeadObject.t.Fatal("No results are set for the S3Mock.HeadObject")
+		}
+		return (*mm_results).o1, (*mm_results).err
+	}
+	if mmHeadObject.funcHeadObject != nil {
+		return mmHeadObject.funcHeadObject(ctx, bucket, key)
+	}
+	mmHeadObject.t.Fatalf("Unexpected call to S3Mock.HeadObject. %v %v %v", ctx, bucket, key)
+	return
+}
+
+// HeadObjectAfterCounter returns a count of finished S3Mock.HeadObject invocations
+func (mmHeadObject *S3Mock) HeadObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHeadObject.afterHeadObjectCounter)
+}
+
+// HeadObjectBeforeCounter returns a count of S3Mock.HeadObject invocations
+func (mmHeadObject *S3Mock) HeadObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHeadObject.beforeHeadObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to S3Mock.HeadObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmHeadObject *mS3MockHeadObject) Calls() []*S3MockHeadObjectParams {
+	mmHeadObject.mutex.RLock()
+
+	argCopy := make([]*S3MockHeadObjectParams, len(mmHeadObject.callArgs))
+	copy(argCopy, mmHeadObject.callArgs)
+
+	mmHeadObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockHeadObjectDone returns true if the count of the HeadObject invocations corresponds
+// the number of defined expectations
+func (m *S3Mock) MinimockHeadObjectDone() bool {
+	if m.HeadObjectMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.HeadObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.HeadObjectMock.invocationsDone()
+}
+
+// MinimockHeadObjectInspect logs each unmet expectation
+func (m *S3Mock) MinimockHeadObjectInspect() {
+	for _, e := range m.HeadObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to S3Mock.HeadObject at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterHeadObjectCounter := mm_atomic.LoadUint64(&m.afterHeadObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.HeadObjectMock.defaultExpectation != nil && afterHeadObjectCounter < 1 {
+		if m.HeadObjectMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to S3Mock.HeadObject at\n%s", m.HeadObjectMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to S3Mock.HeadObject at\n%s with params: %#v", m.HeadObjectMock.defaultExpectation.expectationOrigins.origin, *m.HeadObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcHeadObject != nil && afterHeadObjectCounter < 1 {
+		m.t.Errorf("Expected call to S3Mock.HeadObject at\n%s", m.funcHeadObjectOrigin)
+	}
+
+	if !m.HeadObjectMock.invocationsDone() && afterHeadObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to S3Mock.HeadObject at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.HeadObjectMock.expectedInvocations), m.HeadObjectMock.expectedInvocationsOrigin, afterHeadObjectCounter)
+	}
+}
+
+type mS3MockPresignGetObject struct {
+	optional           bool
+	mock               *S3Mock
+	defaultExpectation *S3MockPresignGetObjectExpectation
+	expectations       []*S3MockPresignGetObjectExpectation
+
+	callArgs []*S3MockPresignGetObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// S3MockPresignGetObjectExpectation specifies expectation struct of the S3.PresignGetObject
+type S3MockPresignGetObjectExpectation struct {
+	mock               *S3Mock
+	params             *S3MockPresignGetObjectParams
+	paramPtrs          *S3MockPresignGetObjectParamPtrs
+	expectationOrigins S3MockPresignGetObjectExpectationOrigins
+	results            *S3MockPresignGetObjectResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// S3MockPresignGetObjectParams contains parameters of the S3.PresignGetObject
+type S3MockPresignGetObjectParams struct {
+	ctx    context.Context
+	bucket string
+	key    string
+	ttl    time.Duration
+}
+
+// S3MockPresignGetObjectParamPtrs contains pointers to parameters of the S3.PresignGetObject
+type S3MockPresignGetObjectParamPtrs struct {
+	ctx    *context.Context
+	bucket *string
+	key    *string
+	ttl    *time.Duration
+}
+
+// S3MockPresignGetObjectResults contains results of the S3.PresignGetObject
+type S3MockPresignGetObjectResults struct {
+	p1  domain.PreflightURL
+	err error
+}
+
+// S3MockPresignGetObjectOrigins contains origins of expectations of the S3.PresignGetObject
+type S3MockPresignGetObjectExpectationOrigins struct {
+	origin       string
+	originCtx    string
+	originBucket string
+	originKey    string
+	originTtl    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmPresignGetObject *mS3MockPresignGetObject) Optional() *mS3MockPresignGetObject {
+	mmPresignGetObject.optional = true
+	return mmPresignGetObject
+}
+
+// Expect sets up expected params for S3.PresignGetObject
+func (mmPresignGetObject *mS3MockPresignGetObject) Expect(ctx context.Context, bucket string, key string, ttl time.Duration) *mS3MockPresignGetObject {
+	if mmPresignGetObject.mock.funcPresignGetObject != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Set")
+	}
+
+	if mmPresignGetObject.defaultExpectation == nil {
+		mmPresignGetObject.defaultExpectation = &S3MockPresignGetObjectExpectation{}
+	}
+
+	if mmPresignGetObject.defaultExpectation.paramPtrs != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by ExpectParams functions")
+	}
+
+	mmPresignGetObject.defaultExpectation.params = &S3MockPresignGetObjectParams{ctx, bucket, key, ttl}
+	mmPresignGetObject.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmPresignGetObject.expectations {
+		if minimock.Equal(e.params, mmPresignGetObject.defaultExpectation.params) {
+			mmPresignGetObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmPresignGetObject.defaultExpectation.params)
+		}
+	}
+
+	return mmPresignGetObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for S3.PresignGetObject
+func (mmPresignGetObject *mS3MockPresignGetObject) ExpectCtxParam1(ctx context.Context) *mS3MockPresignGetObject {
+	if mmPresignGetObject.mock.funcPresignGetObject != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Set")
+	}
+
+	if mmPresignGetObject.defaultExpectation == nil {
+		mmPresignGetObject.defaultExpectation = &S3MockPresignGetObjectExpectation{}
+	}
+
+	if mmPresignGetObject.defaultExpectation.params != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Expect")
+	}
+
+	if mmPresignGetObject.defaultExpectation.paramPtrs == nil {
+		mmPresignGetObject.defaultExpectation.paramPtrs = &S3MockPresignGetObjectParamPtrs{}
+	}
+	mmPresignGetObject.defaultExpectation.paramPtrs.ctx = &ctx
+	mmPresignGetObject.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmPresignGetObject
+}
+
+// ExpectBucketParam2 sets up expected param bucket for S3.PresignGetObject
+func (mmPresignGetObject *mS3MockPresignGetObject) ExpectBucketParam2(bucket string) *mS3MockPresignGetObject {
+	if mmPresignGetObject.mock.funcPresignGetObject != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Set")
+	}
+
+	if mmPresignGetObject.defaultExpectation == nil {
+		mmPresignGetObject.defaultExpectation = &S3MockPresignGetObjectExpectation{}
+	}
+
+	if mmPresignGetObject.defaultExpectation.params != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Expect")
+	}
+
+	if mmPresignGetObject.defaultExpectation.paramPtrs == nil {
+		mmPresignGetObject.defaultExpectation.paramPtrs = &S3MockPresignGetObjectParamPtrs{}
+	}
+	mmPresignGetObject.defaultExpectation.paramPtrs.bucket = &bucket
+	mmPresignGetObject.defaultExpectation.expectationOrigins.originBucket = minimock.CallerInfo(1)
+
+	return mmPresignGetObject
+}
+
+// ExpectKeyParam3 sets up expected param key for S3.PresignGetObject
+func (mmPresignGetObject *mS3MockPresignGetObject) ExpectKeyParam3(key string) *mS3MockPresignGetObject {
+	if mmPresignGetObject.mock.funcPresignGetObject != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Set")
+	}
+
+	if mmPresignGetObject.defaultExpectation == nil {
+		mmPresignGetObject.defaultExpectation = &S3MockPresignGetObjectExpectation{}
+	}
+
+	if mmPresignGetObject.defaultExpectation.params != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Expect")
+	}
+
+	if mmPresignGetObject.defaultExpectation.paramPtrs == nil {
+		mmPresignGetObject.defaultExpectation.paramPtrs = &S3MockPresignGetObjectParamPtrs{}
+	}
+	mmPresignGetObject.defaultExpectation.paramPtrs.key = &key
+	mmPresignGetObject.defaultExpectation.expectationOrigins.originKey = minimock.CallerInfo(1)
+
+	return mmPresignGetObject
+}
+
+// ExpectTtlParam4 sets up expected param ttl for S3.PresignGetObject
+func (mmPresignGetObject *mS3MockPresignGetObject) ExpectTtlParam4(ttl time.Duration) *mS3MockPresignGetObject {
+	if mmPresignGetObject.mock.funcPresignGetObject != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Set")
+	}
+
+	if mmPresignGetObject.defaultExpectation == nil {
+		mmPresignGetObject.defaultExpectation = &S3MockPresignGetObjectExpectation{}
+	}
+
+	if mmPresignGetObject.defaultExpectation.params != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Expect")
+	}
+
+	if mmPresignGetObject.defaultExpectation.paramPtrs == nil {
+		mmPresignGetObject.defaultExpectation.paramPtrs = &S3MockPresignGetObjectParamPtrs{}
+	}
+	mmPresignGetObject.defaultExpectation.paramPtrs.ttl = &ttl
+	mmPresignGetObject.defaultExpectation.expectationOrigins.originTtl = minimock.CallerInfo(1)
+
+	return mmPresignGetObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the S3.PresignGetObject
+func (mmPresignGetObject *mS3MockPresignGetObject) Inspect(f func(ctx context.Context, bucket string, key string, ttl time.Duration)) *mS3MockPresignGetObject {
+	if mmPresignGetObject.mock.inspectFuncPresignGetObject != nil {
+		mmPresignGetObject.mock.t.Fatalf("Inspect function is already set for S3Mock.PresignGetObject")
+	}
+
+	mmPresignGetObject.mock.inspectFuncPresignGetObject = f
+
+	return mmPresignGetObject
+}
+
+// Return sets up results that will be returned by S3.PresignGetObject
+func (mmPresignGetObject *mS3MockPresignGetObject) Return(p1 domain.PreflightURL, err error) *S3Mock {
+	if mmPresignGetObject.mock.funcPresignGetObject != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Set")
+	}
+
+	if mmPresignGetObject.defaultExpectation == nil {
+		mmPresignGetObject.defaultExpectation = &S3MockPresignGetObjectExpectation{mock: mmPresignGetObject.mock}
+	}
+	mmPresignGetObject.defaultExpectation.results = &S3MockPresignGetObjectResults{p1, err}
+	mmPresignGetObject.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmPresignGetObject.mock
+}
+
+// Set uses given function f to mock the S3.PresignGetObject method
+func (mmPresignGetObject *mS3MockPresignGetObject) Set(f func(ctx context.Context, bucket string, key string, ttl time.Duration) (p1 domain.PreflightURL, err error)) *S3Mock {
+	if mmPresignGetObject.defaultExpectation != nil {
+		mmPresignGetObject.mock.t.Fatalf("Default expectation is already set for the S3.PresignGetObject method")
+	}
+
+	if len(mmPresignGetObject.expectations) > 0 {
+		mmPresignGetObject.mock.t.Fatalf("Some expectations are already set for the S3.PresignGetObject method")
+	}
+
+	mmPresignGetObject.mock.funcPresignGetObject = f
+	mmPresignGetObject.mock.funcPresignGetObjectOrigin = minimock.CallerInfo(1)
+	return mmPresignGetObject.mock
+}
+
+// When sets expectation for the S3.PresignGetObject which will trigger the result defined by the following
+// Then helper
+func (mmPresignGetObject *mS3MockPresignGetObject) When(ctx context.Context, bucket string, key string, ttl time.Duration) *S3MockPresignGetObjectExpectation {
+	if mmPresignGetObject.mock.funcPresignGetObject != nil {
+		mmPresignGetObject.mock.t.Fatalf("S3Mock.PresignGetObject mock is already set by Set")
+	}
+
+	expectation := &S3MockPresignGetObjectExpectation{
+		mock:               mmPresignGetObject.mock,
+		params:             &S3MockPresignGetObjectParams{ctx, bucket, key, ttl},
+		expectationOrigins: S3MockPresignGetObjectExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmPresignGetObject.expectations = append(mmPresignGetObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up S3.PresignGetObject return parameters for the expectation previously defined by the When method
+func (e *S3MockPresignGetObjectExpectation) Then(p1 domain.PreflightURL, err error) *S3Mock {
+	e.results = &S3MockPresignGetObjectResults{p1, err}
+	return e.mock
+}
+
+// Times sets number of times S3.PresignGetObject should be invoked
+func (mmPresignGetObject *mS3MockPresignGetObject) Times(n uint64) *mS3MockPresignGetObject {
+	if n == 0 {
+		mmPresignGetObject.mock.t.Fatalf("Times of S3Mock.PresignGetObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmPresignGetObject.expectedInvocations, n)
+	mmPresignGetObject.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmPresignGetObject
+}
+
+func (mmPresignGetObject *mS3MockPresignGetObject) invocationsDone() bool {
+	if len(mmPresignGetObject.expectations) == 0 && mmPresignGetObject.defaultExpectation == nil && mmPresignGetObject.mock.funcPresignGetObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmPresignGetObject.mock.afterPresignGetObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmPresignGetObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// PresignGetObject implements mm_s3.S3
+func (mmPresignGetObject *S3Mock) PresignGetObject(ctx context.Context, bucket string, key string, ttl time.Duration) (p1 domain.PreflightURL, err error) {
+	mm_atomic.AddUint64(&mmPresignGetObject.beforePresignGetObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmPresignGetObject.afterPresignGetObjectCounter, 1)
+
+	mmPresignGetObject.t.Helper()
+
+	if mmPresignGetObject.inspectFuncPresignGetObject != nil {
+		mmPresignGetObject.inspectFuncPresignGetObject(ctx, bucket, key, ttl)
+	}
+
+	mm_params := S3MockPresignGetObjectParams{ctx, bucket, key, ttl}
+
+	// Record call args
+	mmPresignGetObject.PresignGetObjectMock.mutex.Lock()
+	mmPresignGetObject.PresignGetObjectMock.callArgs = append(mmPresignGetObject.PresignGetObjectMock.callArgs, &mm_params)
+	mmPresignGetObject.PresignGetObjectMock.mutex.Unlock()
+
+	for _, e := range mmPresignGetObject.PresignGetObjectMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.p1, e.results.err
 		}
 	}
 
-	if mmGetPreflightUploadURL.GetPreflightUploadURLMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmGetPreflightUploadURL.GetPreflightUploadURLMock.defaultExpectation.Counter, 1)
-		mm_want := mmGetPreflightUploadURL.GetPreflightUploadURLMock.defaultExpectation.params
-		mm_want_ptrs := mmGetPreflightUploadURL.GetPreflightUploadURLMock.defaultExpectation.paramPtrs
+	if mmPresignGetObject.PresignGetObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmPresignGetObject.PresignGetObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmPresignGetObject.PresignGetObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmPresignGetObject.PresignGetObjectMock.defaultExpectation.paramPtrs
 
-		mm_got := S3MockGetPreflightUploadURLParams{ctx, bucketName, fileID, ttl}
+		mm_got := S3MockPresignGetObjectParams{ctx, bucket, key, ttl}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmGetPreflightUploadURL.t.Errorf("S3Mock.GetPreflightUploadURL got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetPreflightUploadURL.GetPreflightUploadURLMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmPresignGetObject.t.Errorf("S3Mock.PresignGetObject got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignGetObject.PresignGetObjectMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
-			if mm_want_ptrs.bucketName != nil && !minimock.Equal(*mm_want_ptrs.bucketName, mm_got.bucketName) {
-				mmGetPreflightUploadURL.t.Errorf("S3Mock.GetPreflightUploadURL got unexpected parameter bucketName, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetPreflightUploadURL.GetPreflightUploadURLMock.defaultExpectation.expectationOrigins.originBucketName, *mm_want_ptrs.bucketName, mm_got.bucketName, minimock.Diff(*mm_want_ptrs.bucketName, mm_got.bucketName))
+			if mm_want_ptrs.bucket != nil && !minimock.Equal(*mm_want_ptrs.bucket, mm_got.bucket) {
+				mmPresignGetObject.t.Errorf("S3Mock.PresignGetObject got unexpected parameter bucket, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignGetObject.PresignGetObjectMock.defaultExpectation.expectationOrigins.originBucket, *mm_want_ptrs.bucket, mm_got.bucket, minimock.Diff(*mm_want_ptrs.bucket, mm_got.bucket))
 			}
 
-			if mm_want_ptrs.fileID != nil && !minimock.Equal(*mm_want_ptrs.fileID, mm_got.fileID) {
-				mmGetPreflightUploadURL.t.Errorf("S3Mock.GetPreflightUploadURL got unexpected parameter fileID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetPreflightUploadURL.GetPreflightUploadURLMock.defaultExpectation.expectationOrigins.originFileID, *mm_want_ptrs.fileID, mm_got.fileID, minimock.Diff(*mm_want_ptrs.fileID, mm_got.fileID))
+			if mm_want_ptrs.key != nil && !minimock.Equal(*mm_want_ptrs.key, mm_got.key) {
+				mmPresignGetObject.t.Errorf("S3Mock.PresignGetObject got unexpected parameter key, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignGetObject.PresignGetObjectMock.defaultExpectation.expectationOrigins.originKey, *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
 			}
 
 			if mm_want_ptrs.ttl != nil && !minimock.Equal(*mm_want_ptrs.ttl, mm_got.ttl) {
-				mmGetPreflightUploadURL.t.Errorf("S3Mock.GetPreflightUploadURL got unexpected parameter ttl, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmGetPreflightUploadURL.GetPreflightUploadURLMock.defaultExpectation.expectationOrigins.originTtl, *mm_want_ptrs.ttl, mm_got.ttl, minimock.Diff(*mm_want_ptrs.ttl, mm_got.ttl))
+				mmPresignGetObject.t.Errorf("S3Mock.PresignGetObject got unexpected parameter ttl, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignGetObject.PresignGetObjectMock.defaultExpectation.expectationOrigins.originTtl, *mm_want_ptrs.ttl, mm_got.ttl, minimock.Diff(*mm_want_ptrs.ttl, mm_got.ttl))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmGetPreflightUploadURL.t.Errorf("S3Mock.GetPreflightUploadURL got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-				mmGetPreflightUploadURL.GetPreflightUploadURLMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmPresignGetObject.t.Errorf("S3Mock.PresignGetObject got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmPresignGetObject.PresignGetObjectMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmGetPreflightUploadURL.GetPreflightUploadURLMock.defaultExpectation.results
+		mm_results := mmPresignGetObject.PresignGetObjectMock.defaultExpectation.results
 		if mm_results == nil {
-			mmGetPreflightUploadURL.t.Fatal("No results are set for the S3Mock.GetPreflightUploadURL")
+			mmPresignGetObject.t.Fatal("No results are set for the S3Mock.PresignGetObject")
 		}
 		return (*mm_results).p1, (*mm_results).err
 	}
-	if mmGetPreflightUploadURL.funcGetPreflightUploadURL != nil {
-		return mmGetPreflightUploadURL.funcGetPreflightUploadURL(ctx, bucketName, fileID, ttl)
+	if mmPresignGetObject.funcPresignGetObject != nil {
+		return mmPresignGetObject.funcPresignGetObject(ctx, bucket, key, ttl)
 	}
-	mmGetPreflightUploadURL.t.Fatalf("Unexpected call to S3Mock.GetPreflightUploadURL. %v %v %v %v", ctx, bucketName, fileID, ttl)
+	mmPresignGetObject.t.Fatalf("Unexpected call to S3Mock.PresignGetObject. %v %v %v %v", ctx, bucket, key, ttl)
 	return
 }
 
-// GetPreflightUploadURLAfterCounter returns a count of finished S3Mock.GetPreflightUploadURL invocations
-func (mmGetPreflightUploadURL *S3Mock) GetPreflightUploadURLAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetPreflightUploadURL.afterGetPreflightUploadURLCounter)
+// PresignGetObjectAfterCounter returns a count of finished S3Mock.PresignGetObject invocations
+func (mmPresignGetObject *S3Mock) PresignGetObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmPresignGetObject.afterPresignGetObjectCounter)
 }
 
-// GetPreflightUploadURLBeforeCounter returns a count of S3Mock.GetPreflightUploadURL invocations
-func (mmGetPreflightUploadURL *S3Mock) GetPreflightUploadURLBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmGetPreflightUploadURL.beforeGetPreflightUploadURLCounter)
+// PresignGetObjectBeforeCounter returns a count of S3Mock.PresignGetObject invocations
+func (mmPresignGetObject *S3Mock) PresignGetObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmPresignGetObject.beforePresignGetObjectCounter)
 }
 
-// Calls returns a list of arguments used in each call to S3Mock.GetPreflightUploadURL.
+// Calls returns a list of arguments used in each call to S3Mock.PresignGetObject.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmGetPreflightUploadURL *mS3MockGetPreflightUploadURL) Calls() []*S3MockGetPreflightUploadURLParams {
-	mmGetPreflightUploadURL.mutex.RLock()
+func (mmPresignGetObject *mS3MockPresignGetObject) Calls() []*S3MockPresignGetObjectParams {
+	mmPresignGetObject.mutex.RLock()
 
-	argCopy := make([]*S3MockGetPreflightUploadURLParams, len(mmGetPreflightUploadURL.callArgs))
-	copy(argCopy, mmGetPreflightUploadURL.callArgs)
+	argCopy := make([]*S3MockPresignGetObjectParams, len(mmPresignGetObject.callArgs))
+	copy(argCopy, mmPresignGetObject.callArgs)
 
-	mmGetPreflightUploadURL.mutex.RUnlock()
+	mmPresignGetObject.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockGetPreflightUploadURLDone returns true if the count of the GetPreflightUploadURL invocations corresponds
+// MinimockPresignGetObjectDone returns true if the count of the PresignGetObject invocations corresponds
 // the number of defined expectations
-func (m *S3Mock) MinimockGetPreflightUploadURLDone() bool {
-	if m.GetPreflightUploadURLMock.optional {
+func (m *S3Mock) MinimockPresignGetObjectDone() bool {
+	if m.PresignGetObjectMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.GetPreflightUploadURLMock.expectations {
+	for _, e := range m.PresignGetObjectMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.GetPreflightUploadURLMock.invocationsDone()
+	return m.PresignGetObjectMock.invocationsDone()
 }
 
-// MinimockGetPreflightUploadURLInspect logs each unmet expectation
-func (m *S3Mock) MinimockGetPreflightUploadURLInspect() {
-	for _, e := range m.GetPreflightUploadURLMock.expectations {
+// MinimockPresignGetObjectInspect logs each unmet expectation
+func (m *S3Mock) MinimockPresignGetObjectInspect() {
+	for _, e := range m.PresignGetObjectMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to S3Mock.GetPreflightUploadURL at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+			m.t.Errorf("Expected call to S3Mock.PresignGetObject at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
 		}
 	}
 
-	afterGetPreflightUploadURLCounter := mm_atomic.LoadUint64(&m.afterGetPreflightUploadURLCounter)
+	afterPresignGetObjectCounter := mm_atomic.LoadUint64(&m.afterPresignGetObjectCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.GetPreflightUploadURLMock.defaultExpectation != nil && afterGetPreflightUploadURLCounter < 1 {
-		if m.GetPreflightUploadURLMock.defaultExpectation.params == nil {
-			m.t.Errorf("Expected call to S3Mock.GetPreflightUploadURL at\n%s", m.GetPreflightUploadURLMock.defaultExpectation.returnOrigin)
+	if m.PresignGetObjectMock.defaultExpectation != nil && afterPresignGetObjectCounter < 1 {
+		if m.PresignGetObjectMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to S3Mock.PresignGetObject at\n%s", m.PresignGetObjectMock.defaultExpectation.returnOrigin)
 		} else {
-			m.t.Errorf("Expected call to S3Mock.GetPreflightUploadURL at\n%s with params: %#v", m.GetPreflightUploadURLMock.defaultExpectation.expectationOrigins.origin, *m.GetPreflightUploadURLMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to S3Mock.PresignGetObject at\n%s with params: %#v", m.PresignGetObjectMock.defaultExpectation.expectationOrigins.origin, *m.PresignGetObjectMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcGetPreflightUploadURL != nil && afterGetPreflightUploadURLCounter < 1 {
-		m.t.Errorf("Expected call to S3Mock.GetPreflightUploadURL at\n%s", m.funcGetPreflightUploadURLOrigin)
+	if m.funcPresignGetObject != nil && afterPresignGetObjectCounter < 1 {
+		m.t.Errorf("Expected call to S3Mock.PresignGetObject at\n%s", m.funcPresignGetObjectOrigin)
 	}
 
-	if !m.GetPreflightUploadURLMock.invocationsDone() && afterGetPreflightUploadURLCounter > 0 {
-		m.t.Errorf("Expected %d calls to S3Mock.GetPreflightUploadURL at\n%s but found %d calls",
-			mm_atomic.LoadUint64(&m.GetPreflightUploadURLMock.expectedInvocations), m.GetPreflightUploadURLMock.expectedInvocationsOrigin, afterGetPreflightUploadURLCounter)
+	if !m.PresignGetObjectMock.invocationsDone() && afterPresignGetObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to S3Mock.PresignGetObject at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.PresignGetObjectMock.expectedInvocations), m.PresignGetObjectMock.expectedInvocationsOrigin, afterPresignGetObjectCounter)
+	}
+}
+
+type mS3MockPresignPutObject struct {
+	optional           bool
+	mock               *S3Mock
+	defaultExpectation *S3MockPresignPutObjectExpectation
+	expectations       []*S3MockPresignPutObjectExpectation
+
+	callArgs []*S3MockPresignPutObjectParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// S3MockPresignPutObjectExpectation specifies expectation struct of the S3.PresignPutObject
+type S3MockPresignPutObjectExpectation struct {
+	mock               *S3Mock
+	params             *S3MockPresignPutObjectParams
+	paramPtrs          *S3MockPresignPutObjectParamPtrs
+	expectationOrigins S3MockPresignPutObjectExpectationOrigins
+	results            *S3MockPresignPutObjectResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// S3MockPresignPutObjectParams contains parameters of the S3.PresignPutObject
+type S3MockPresignPutObjectParams struct {
+	ctx         context.Context
+	bucket      string
+	key         string
+	contentType string
+	size        int64
+	ttl         time.Duration
+}
+
+// S3MockPresignPutObjectParamPtrs contains pointers to parameters of the S3.PresignPutObject
+type S3MockPresignPutObjectParamPtrs struct {
+	ctx         *context.Context
+	bucket      *string
+	key         *string
+	contentType *string
+	size        *int64
+	ttl         *time.Duration
+}
+
+// S3MockPresignPutObjectResults contains results of the S3.PresignPutObject
+type S3MockPresignPutObjectResults struct {
+	p1  domain.PreflightURL
+	err error
+}
+
+// S3MockPresignPutObjectOrigins contains origins of expectations of the S3.PresignPutObject
+type S3MockPresignPutObjectExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originBucket      string
+	originKey         string
+	originContentType string
+	originSize        string
+	originTtl         string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmPresignPutObject *mS3MockPresignPutObject) Optional() *mS3MockPresignPutObject {
+	mmPresignPutObject.optional = true
+	return mmPresignPutObject
+}
+
+// Expect sets up expected params for S3.PresignPutObject
+func (mmPresignPutObject *mS3MockPresignPutObject) Expect(ctx context.Context, bucket string, key string, contentType string, size int64, ttl time.Duration) *mS3MockPresignPutObject {
+	if mmPresignPutObject.mock.funcPresignPutObject != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Set")
+	}
+
+	if mmPresignPutObject.defaultExpectation == nil {
+		mmPresignPutObject.defaultExpectation = &S3MockPresignPutObjectExpectation{}
+	}
+
+	if mmPresignPutObject.defaultExpectation.paramPtrs != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by ExpectParams functions")
+	}
+
+	mmPresignPutObject.defaultExpectation.params = &S3MockPresignPutObjectParams{ctx, bucket, key, contentType, size, ttl}
+	mmPresignPutObject.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmPresignPutObject.expectations {
+		if minimock.Equal(e.params, mmPresignPutObject.defaultExpectation.params) {
+			mmPresignPutObject.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmPresignPutObject.defaultExpectation.params)
+		}
+	}
+
+	return mmPresignPutObject
+}
+
+// ExpectCtxParam1 sets up expected param ctx for S3.PresignPutObject
+func (mmPresignPutObject *mS3MockPresignPutObject) ExpectCtxParam1(ctx context.Context) *mS3MockPresignPutObject {
+	if mmPresignPutObject.mock.funcPresignPutObject != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Set")
+	}
+
+	if mmPresignPutObject.defaultExpectation == nil {
+		mmPresignPutObject.defaultExpectation = &S3MockPresignPutObjectExpectation{}
+	}
+
+	if mmPresignPutObject.defaultExpectation.params != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Expect")
+	}
+
+	if mmPresignPutObject.defaultExpectation.paramPtrs == nil {
+		mmPresignPutObject.defaultExpectation.paramPtrs = &S3MockPresignPutObjectParamPtrs{}
+	}
+	mmPresignPutObject.defaultExpectation.paramPtrs.ctx = &ctx
+	mmPresignPutObject.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmPresignPutObject
+}
+
+// ExpectBucketParam2 sets up expected param bucket for S3.PresignPutObject
+func (mmPresignPutObject *mS3MockPresignPutObject) ExpectBucketParam2(bucket string) *mS3MockPresignPutObject {
+	if mmPresignPutObject.mock.funcPresignPutObject != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Set")
+	}
+
+	if mmPresignPutObject.defaultExpectation == nil {
+		mmPresignPutObject.defaultExpectation = &S3MockPresignPutObjectExpectation{}
+	}
+
+	if mmPresignPutObject.defaultExpectation.params != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Expect")
+	}
+
+	if mmPresignPutObject.defaultExpectation.paramPtrs == nil {
+		mmPresignPutObject.defaultExpectation.paramPtrs = &S3MockPresignPutObjectParamPtrs{}
+	}
+	mmPresignPutObject.defaultExpectation.paramPtrs.bucket = &bucket
+	mmPresignPutObject.defaultExpectation.expectationOrigins.originBucket = minimock.CallerInfo(1)
+
+	return mmPresignPutObject
+}
+
+// ExpectKeyParam3 sets up expected param key for S3.PresignPutObject
+func (mmPresignPutObject *mS3MockPresignPutObject) ExpectKeyParam3(key string) *mS3MockPresignPutObject {
+	if mmPresignPutObject.mock.funcPresignPutObject != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Set")
+	}
+
+	if mmPresignPutObject.defaultExpectation == nil {
+		mmPresignPutObject.defaultExpectation = &S3MockPresignPutObjectExpectation{}
+	}
+
+	if mmPresignPutObject.defaultExpectation.params != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Expect")
+	}
+
+	if mmPresignPutObject.defaultExpectation.paramPtrs == nil {
+		mmPresignPutObject.defaultExpectation.paramPtrs = &S3MockPresignPutObjectParamPtrs{}
+	}
+	mmPresignPutObject.defaultExpectation.paramPtrs.key = &key
+	mmPresignPutObject.defaultExpectation.expectationOrigins.originKey = minimock.CallerInfo(1)
+
+	return mmPresignPutObject
+}
+
+// ExpectContentTypeParam4 sets up expected param contentType for S3.PresignPutObject
+func (mmPresignPutObject *mS3MockPresignPutObject) ExpectContentTypeParam4(contentType string) *mS3MockPresignPutObject {
+	if mmPresignPutObject.mock.funcPresignPutObject != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Set")
+	}
+
+	if mmPresignPutObject.defaultExpectation == nil {
+		mmPresignPutObject.defaultExpectation = &S3MockPresignPutObjectExpectation{}
+	}
+
+	if mmPresignPutObject.defaultExpectation.params != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Expect")
+	}
+
+	if mmPresignPutObject.defaultExpectation.paramPtrs == nil {
+		mmPresignPutObject.defaultExpectation.paramPtrs = &S3MockPresignPutObjectParamPtrs{}
+	}
+	mmPresignPutObject.defaultExpectation.paramPtrs.contentType = &contentType
+	mmPresignPutObject.defaultExpectation.expectationOrigins.originContentType = minimock.CallerInfo(1)
+
+	return mmPresignPutObject
+}
+
+// ExpectSizeParam5 sets up expected param size for S3.PresignPutObject
+func (mmPresignPutObject *mS3MockPresignPutObject) ExpectSizeParam5(size int64) *mS3MockPresignPutObject {
+	if mmPresignPutObject.mock.funcPresignPutObject != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Set")
+	}
+
+	if mmPresignPutObject.defaultExpectation == nil {
+		mmPresignPutObject.defaultExpectation = &S3MockPresignPutObjectExpectation{}
+	}
+
+	if mmPresignPutObject.defaultExpectation.params != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Expect")
+	}
+
+	if mmPresignPutObject.defaultExpectation.paramPtrs == nil {
+		mmPresignPutObject.defaultExpectation.paramPtrs = &S3MockPresignPutObjectParamPtrs{}
+	}
+	mmPresignPutObject.defaultExpectation.paramPtrs.size = &size
+	mmPresignPutObject.defaultExpectation.expectationOrigins.originSize = minimock.CallerInfo(1)
+
+	return mmPresignPutObject
+}
+
+// ExpectTtlParam6 sets up expected param ttl for S3.PresignPutObject
+func (mmPresignPutObject *mS3MockPresignPutObject) ExpectTtlParam6(ttl time.Duration) *mS3MockPresignPutObject {
+	if mmPresignPutObject.mock.funcPresignPutObject != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Set")
+	}
+
+	if mmPresignPutObject.defaultExpectation == nil {
+		mmPresignPutObject.defaultExpectation = &S3MockPresignPutObjectExpectation{}
+	}
+
+	if mmPresignPutObject.defaultExpectation.params != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Expect")
+	}
+
+	if mmPresignPutObject.defaultExpectation.paramPtrs == nil {
+		mmPresignPutObject.defaultExpectation.paramPtrs = &S3MockPresignPutObjectParamPtrs{}
+	}
+	mmPresignPutObject.defaultExpectation.paramPtrs.ttl = &ttl
+	mmPresignPutObject.defaultExpectation.expectationOrigins.originTtl = minimock.CallerInfo(1)
+
+	return mmPresignPutObject
+}
+
+// Inspect accepts an inspector function that has same arguments as the S3.PresignPutObject
+func (mmPresignPutObject *mS3MockPresignPutObject) Inspect(f func(ctx context.Context, bucket string, key string, contentType string, size int64, ttl time.Duration)) *mS3MockPresignPutObject {
+	if mmPresignPutObject.mock.inspectFuncPresignPutObject != nil {
+		mmPresignPutObject.mock.t.Fatalf("Inspect function is already set for S3Mock.PresignPutObject")
+	}
+
+	mmPresignPutObject.mock.inspectFuncPresignPutObject = f
+
+	return mmPresignPutObject
+}
+
+// Return sets up results that will be returned by S3.PresignPutObject
+func (mmPresignPutObject *mS3MockPresignPutObject) Return(p1 domain.PreflightURL, err error) *S3Mock {
+	if mmPresignPutObject.mock.funcPresignPutObject != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Set")
+	}
+
+	if mmPresignPutObject.defaultExpectation == nil {
+		mmPresignPutObject.defaultExpectation = &S3MockPresignPutObjectExpectation{mock: mmPresignPutObject.mock}
+	}
+	mmPresignPutObject.defaultExpectation.results = &S3MockPresignPutObjectResults{p1, err}
+	mmPresignPutObject.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmPresignPutObject.mock
+}
+
+// Set uses given function f to mock the S3.PresignPutObject method
+func (mmPresignPutObject *mS3MockPresignPutObject) Set(f func(ctx context.Context, bucket string, key string, contentType string, size int64, ttl time.Duration) (p1 domain.PreflightURL, err error)) *S3Mock {
+	if mmPresignPutObject.defaultExpectation != nil {
+		mmPresignPutObject.mock.t.Fatalf("Default expectation is already set for the S3.PresignPutObject method")
+	}
+
+	if len(mmPresignPutObject.expectations) > 0 {
+		mmPresignPutObject.mock.t.Fatalf("Some expectations are already set for the S3.PresignPutObject method")
+	}
+
+	mmPresignPutObject.mock.funcPresignPutObject = f
+	mmPresignPutObject.mock.funcPresignPutObjectOrigin = minimock.CallerInfo(1)
+	return mmPresignPutObject.mock
+}
+
+// When sets expectation for the S3.PresignPutObject which will trigger the result defined by the following
+// Then helper
+func (mmPresignPutObject *mS3MockPresignPutObject) When(ctx context.Context, bucket string, key string, contentType string, size int64, ttl time.Duration) *S3MockPresignPutObjectExpectation {
+	if mmPresignPutObject.mock.funcPresignPutObject != nil {
+		mmPresignPutObject.mock.t.Fatalf("S3Mock.PresignPutObject mock is already set by Set")
+	}
+
+	expectation := &S3MockPresignPutObjectExpectation{
+		mock:               mmPresignPutObject.mock,
+		params:             &S3MockPresignPutObjectParams{ctx, bucket, key, contentType, size, ttl},
+		expectationOrigins: S3MockPresignPutObjectExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmPresignPutObject.expectations = append(mmPresignPutObject.expectations, expectation)
+	return expectation
+}
+
+// Then sets up S3.PresignPutObject return parameters for the expectation previously defined by the When method
+func (e *S3MockPresignPutObjectExpectation) Then(p1 domain.PreflightURL, err error) *S3Mock {
+	e.results = &S3MockPresignPutObjectResults{p1, err}
+	return e.mock
+}
+
+// Times sets number of times S3.PresignPutObject should be invoked
+func (mmPresignPutObject *mS3MockPresignPutObject) Times(n uint64) *mS3MockPresignPutObject {
+	if n == 0 {
+		mmPresignPutObject.mock.t.Fatalf("Times of S3Mock.PresignPutObject mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmPresignPutObject.expectedInvocations, n)
+	mmPresignPutObject.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmPresignPutObject
+}
+
+func (mmPresignPutObject *mS3MockPresignPutObject) invocationsDone() bool {
+	if len(mmPresignPutObject.expectations) == 0 && mmPresignPutObject.defaultExpectation == nil && mmPresignPutObject.mock.funcPresignPutObject == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmPresignPutObject.mock.afterPresignPutObjectCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmPresignPutObject.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// PresignPutObject implements mm_s3.S3
+func (mmPresignPutObject *S3Mock) PresignPutObject(ctx context.Context, bucket string, key string, contentType string, size int64, ttl time.Duration) (p1 domain.PreflightURL, err error) {
+	mm_atomic.AddUint64(&mmPresignPutObject.beforePresignPutObjectCounter, 1)
+	defer mm_atomic.AddUint64(&mmPresignPutObject.afterPresignPutObjectCounter, 1)
+
+	mmPresignPutObject.t.Helper()
+
+	if mmPresignPutObject.inspectFuncPresignPutObject != nil {
+		mmPresignPutObject.inspectFuncPresignPutObject(ctx, bucket, key, contentType, size, ttl)
+	}
+
+	mm_params := S3MockPresignPutObjectParams{ctx, bucket, key, contentType, size, ttl}
+
+	// Record call args
+	mmPresignPutObject.PresignPutObjectMock.mutex.Lock()
+	mmPresignPutObject.PresignPutObjectMock.callArgs = append(mmPresignPutObject.PresignPutObjectMock.callArgs, &mm_params)
+	mmPresignPutObject.PresignPutObjectMock.mutex.Unlock()
+
+	for _, e := range mmPresignPutObject.PresignPutObjectMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.p1, e.results.err
+		}
+	}
+
+	if mmPresignPutObject.PresignPutObjectMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmPresignPutObject.PresignPutObjectMock.defaultExpectation.Counter, 1)
+		mm_want := mmPresignPutObject.PresignPutObjectMock.defaultExpectation.params
+		mm_want_ptrs := mmPresignPutObject.PresignPutObjectMock.defaultExpectation.paramPtrs
+
+		mm_got := S3MockPresignPutObjectParams{ctx, bucket, key, contentType, size, ttl}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmPresignPutObject.t.Errorf("S3Mock.PresignPutObject got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignPutObject.PresignPutObjectMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.bucket != nil && !minimock.Equal(*mm_want_ptrs.bucket, mm_got.bucket) {
+				mmPresignPutObject.t.Errorf("S3Mock.PresignPutObject got unexpected parameter bucket, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignPutObject.PresignPutObjectMock.defaultExpectation.expectationOrigins.originBucket, *mm_want_ptrs.bucket, mm_got.bucket, minimock.Diff(*mm_want_ptrs.bucket, mm_got.bucket))
+			}
+
+			if mm_want_ptrs.key != nil && !minimock.Equal(*mm_want_ptrs.key, mm_got.key) {
+				mmPresignPutObject.t.Errorf("S3Mock.PresignPutObject got unexpected parameter key, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignPutObject.PresignPutObjectMock.defaultExpectation.expectationOrigins.originKey, *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
+			}
+
+			if mm_want_ptrs.contentType != nil && !minimock.Equal(*mm_want_ptrs.contentType, mm_got.contentType) {
+				mmPresignPutObject.t.Errorf("S3Mock.PresignPutObject got unexpected parameter contentType, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignPutObject.PresignPutObjectMock.defaultExpectation.expectationOrigins.originContentType, *mm_want_ptrs.contentType, mm_got.contentType, minimock.Diff(*mm_want_ptrs.contentType, mm_got.contentType))
+			}
+
+			if mm_want_ptrs.size != nil && !minimock.Equal(*mm_want_ptrs.size, mm_got.size) {
+				mmPresignPutObject.t.Errorf("S3Mock.PresignPutObject got unexpected parameter size, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignPutObject.PresignPutObjectMock.defaultExpectation.expectationOrigins.originSize, *mm_want_ptrs.size, mm_got.size, minimock.Diff(*mm_want_ptrs.size, mm_got.size))
+			}
+
+			if mm_want_ptrs.ttl != nil && !minimock.Equal(*mm_want_ptrs.ttl, mm_got.ttl) {
+				mmPresignPutObject.t.Errorf("S3Mock.PresignPutObject got unexpected parameter ttl, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmPresignPutObject.PresignPutObjectMock.defaultExpectation.expectationOrigins.originTtl, *mm_want_ptrs.ttl, mm_got.ttl, minimock.Diff(*mm_want_ptrs.ttl, mm_got.ttl))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmPresignPutObject.t.Errorf("S3Mock.PresignPutObject got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmPresignPutObject.PresignPutObjectMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmPresignPutObject.PresignPutObjectMock.defaultExpectation.results
+		if mm_results == nil {
+			mmPresignPutObject.t.Fatal("No results are set for the S3Mock.PresignPutObject")
+		}
+		return (*mm_results).p1, (*mm_results).err
+	}
+	if mmPresignPutObject.funcPresignPutObject != nil {
+		return mmPresignPutObject.funcPresignPutObject(ctx, bucket, key, contentType, size, ttl)
+	}
+	mmPresignPutObject.t.Fatalf("Unexpected call to S3Mock.PresignPutObject. %v %v %v %v %v %v", ctx, bucket, key, contentType, size, ttl)
+	return
+}
+
+// PresignPutObjectAfterCounter returns a count of finished S3Mock.PresignPutObject invocations
+func (mmPresignPutObject *S3Mock) PresignPutObjectAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmPresignPutObject.afterPresignPutObjectCounter)
+}
+
+// PresignPutObjectBeforeCounter returns a count of S3Mock.PresignPutObject invocations
+func (mmPresignPutObject *S3Mock) PresignPutObjectBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmPresignPutObject.beforePresignPutObjectCounter)
+}
+
+// Calls returns a list of arguments used in each call to S3Mock.PresignPutObject.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmPresignPutObject *mS3MockPresignPutObject) Calls() []*S3MockPresignPutObjectParams {
+	mmPresignPutObject.mutex.RLock()
+
+	argCopy := make([]*S3MockPresignPutObjectParams, len(mmPresignPutObject.callArgs))
+	copy(argCopy, mmPresignPutObject.callArgs)
+
+	mmPresignPutObject.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockPresignPutObjectDone returns true if the count of the PresignPutObject invocations corresponds
+// the number of defined expectations
+func (m *S3Mock) MinimockPresignPutObjectDone() bool {
+	if m.PresignPutObjectMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.PresignPutObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.PresignPutObjectMock.invocationsDone()
+}
+
+// MinimockPresignPutObjectInspect logs each unmet expectation
+func (m *S3Mock) MinimockPresignPutObjectInspect() {
+	for _, e := range m.PresignPutObjectMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to S3Mock.PresignPutObject at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterPresignPutObjectCounter := mm_atomic.LoadUint64(&m.afterPresignPutObjectCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.PresignPutObjectMock.defaultExpectation != nil && afterPresignPutObjectCounter < 1 {
+		if m.PresignPutObjectMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to S3Mock.PresignPutObject at\n%s", m.PresignPutObjectMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to S3Mock.PresignPutObject at\n%s with params: %#v", m.PresignPutObjectMock.defaultExpectation.expectationOrigins.origin, *m.PresignPutObjectMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcPresignPutObject != nil && afterPresignPutObjectCounter < 1 {
+		m.t.Errorf("Expected call to S3Mock.PresignPutObject at\n%s", m.funcPresignPutObjectOrigin)
+	}
+
+	if !m.PresignPutObjectMock.invocationsDone() && afterPresignPutObjectCounter > 0 {
+		m.t.Errorf("Expected %d calls to S3Mock.PresignPutObject at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.PresignPutObjectMock.expectedInvocations), m.PresignPutObjectMock.expectedInvocationsOrigin, afterPresignPutObjectCounter)
 	}
 }
 
@@ -869,9 +2466,17 @@ func (m *S3Mock) MinimockGetPreflightUploadURLInspect() {
 func (m *S3Mock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
-			m.MinimockGetPreflightURLInspect()
+			m.MinimockDeleteByPrefixInspect()
 
-			m.MinimockGetPreflightUploadURLInspect()
+			m.MinimockDeleteObjectInspect()
+
+			m.MinimockGetObjectInspect()
+
+			m.MinimockHeadObjectInspect()
+
+			m.MinimockPresignGetObjectInspect()
+
+			m.MinimockPresignPutObjectInspect()
 		}
 	})
 }
@@ -895,6 +2500,10 @@ func (m *S3Mock) MinimockWait(timeout mm_time.Duration) {
 func (m *S3Mock) minimockDone() bool {
 	done := true
 	return done &&
-		m.MinimockGetPreflightURLDone() &&
-		m.MinimockGetPreflightUploadURLDone()
+		m.MinimockDeleteByPrefixDone() &&
+		m.MinimockDeleteObjectDone() &&
+		m.MinimockGetObjectDone() &&
+		m.MinimockHeadObjectDone() &&
+		m.MinimockPresignGetObjectDone() &&
+		m.MinimockPresignPutObjectDone()
 }

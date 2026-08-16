@@ -65,7 +65,10 @@ func TestService_Video_GetPreflightUploadURL(t *testing.T) {
 				// Аккаунтное право есть — групповое не проверяется
 				acc.IsCheckAccountActionMock.Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).Return(nil)
 				repo.InsertMock.Expect(minimock.AnyContext, domain.DefaultVideoName, testGroupID, testUserID, domain.VideoStatusUploading).Return(testVideo, nil)
-				s3.GetPreflightUploadURLMock.Expect(minimock.AnyContext, domain.VideoBucketOriginal, testVideo.ID, domain.VideoUploadURLTTL).Return(testPreflightURL, nil)
+				// "vilib" и "application/octet-stream" повторяют временные заглушки service.tempUploadBucket/tempUploadContentType.
+				s3.PresignPutObjectMock.
+					Expect(minimock.AnyContext, "vilib", "videos/"+testVideo.ID.String()+"/original", "application/octet-stream", int64(0), domain.VideoUploadURLTTL).
+					Return(testPreflightURL, nil)
 			},
 			args: args{
 				accountID: testAccountID,
@@ -89,7 +92,10 @@ func TestService_Video_GetPreflightUploadURL(t *testing.T) {
 				gm.GetByUserIDAndGroupIDMock.Expect(minimock.AnyContext, testUserID, testGroupID).Return(domain.GroupMember{UserID: testUserID, RoleID: groupRoleID}, nil)
 				gr.GetByIDMock.Expect(minimock.AnyContext, groupRoleID).Return([]domain.GroupRole{{PermissionMask: domain.PermissionMask(1 << domain.GroupPermissionManageVideo)}}, nil)
 				repo.InsertMock.Expect(minimock.AnyContext, domain.DefaultVideoName, testGroupID, testUserID, domain.VideoStatusUploading).Return(testVideo, nil)
-				s3.GetPreflightUploadURLMock.Expect(minimock.AnyContext, domain.VideoBucketOriginal, testVideo.ID, domain.VideoUploadURLTTL).Return(testPreflightURL, nil)
+				// "vilib" и "application/octet-stream" повторяют временные заглушки service.tempUploadBucket/tempUploadContentType.
+				s3.PresignPutObjectMock.
+					Expect(minimock.AnyContext, "vilib", "videos/"+testVideo.ID.String()+"/original", "application/octet-stream", int64(0), domain.VideoUploadURLTTL).
+					Return(testPreflightURL, nil)
 			},
 			args: args{
 				accountID: testAccountID,

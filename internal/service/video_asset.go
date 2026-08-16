@@ -32,12 +32,13 @@ func NewVideoAssetService(repo repository.VideoAsset, srv *Service) *VideoAssetS
 func (s *VideoAssetService) Create(
 	ctx context.Context,
 	videoID uuid.UUID,
-	tag domain.VideoAssetTag,
-	bucketName, contentType string,
+	kind domain.VideoAssetKind,
+	profile domain.VideoProfile,
+	bucketName, objectKey, contentType string,
 	bytes int,
 ) (domain.VideoAsset, error) {
 	// Создание ассета видео
-	asset, err := s.repo.Create(ctx, videoID, tag, bucketName, contentType, bytes)
+	asset, err := s.repo.Create(ctx, videoID, kind, profile, bucketName, objectKey, contentType, bytes)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.VideoAsset{}, err

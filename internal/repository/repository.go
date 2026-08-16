@@ -95,8 +95,9 @@ type VideoAsset interface {
 	Create(
 		ctx context.Context,
 		videoID uuid.UUID,
-		tag domain.VideoAssetTag,
-		bucketName, contentType string,
+		kind domain.VideoAssetKind,
+		profile domain.VideoProfile,
+		bucketName, objectKey, contentType string,
 		bytes int,
 	) (domain.VideoAsset, error)
 }

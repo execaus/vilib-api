@@ -11,6 +11,13 @@ import (
 	"go.uber.org/zap"
 )
 
+// tempUploadBucket и tempUploadContentType — временные заглушки бакета и content-type
+// загрузки до реализации полного потока загрузки с параметрами файла (см. брифы В-3…В-4).
+const (
+	tempUploadBucket      = "vilib"
+	tempUploadContentType = "application/octet-stream"
+)
+
 type VideoService struct {
 	s3   s3.S3
 	repo repository.Video
@@ -19,6 +26,22 @@ type VideoService struct {
 
 func NewVideoService(s3 s3.S3, repo repository.Video, srv *Service) *VideoService {
 	return &VideoService{s3: s3, repo: repo, srv: srv}
+}
+
+// videoObjectKey — временная схема ключа объекта оригинала видео (§3.3 эпика).
+func videoObjectKey(videoID uuid.UUID) string {
+	return "videos/" + videoID.String() + "/original"
+}
+
+// findAssetByKind ищет первый ассет указанного вида. Возвращает nil, если такого нет.
+func findAssetByKind(assets []domain.VideoAsset, kind domain.VideoAssetKind) *domain.VideoAsset {
+	for i := range assets {
+		if assets[i].Kind == kind {
+			return &assets[i]
+		}
+	}
+
+	return nil
 }
 
 func (s *VideoService) Get(
@@ -53,45 +76,26 @@ func (s *VideoService) Get(
 		return "", err
 	}
 
-	// Определение, какой ассет использовать
-	var (
-		bucketName domain.VideoBucket
-		assetID    uuid.UUID
-	)
+	// Определение, какой ассет использовать. Ассет hls_master — временная замена
+	// «сжатой» версии до полноценной HLS-выдачи (В-7).
+	var selected *domain.VideoAsset
 
 	if isPreferOriginal {
-		// Всегда возвращаем оригинал
-		for _, asset := range assets {
-			if asset.Tag == domain.VideoAssetTagOriginal {
-				assetID = asset.FileID
-				bucketName = domain.VideoBucketOriginal
-				break
-			}
-		}
+		selected = findAssetByKind(assets, domain.VideoAssetKindOriginal)
 	} else {
-		// Пробуем сначала сжатую версию, если нет — оригинал
-		hasCompressed := false
-		for _, asset := range assets {
-			if asset.Tag == domain.VideoAssetTagCompressed {
-				assetID = asset.FileID
-				bucketName = domain.VideoBucketCompressed
-				hasCompressed = true
-				break
-			}
-		}
-		if !hasCompressed {
-			for _, asset := range assets {
-				if asset.Tag == domain.VideoAssetTagOriginal {
-					assetID = asset.FileID
-					bucketName = domain.VideoBucketOriginal
-					break
-				}
-			}
+		selected = findAssetByKind(assets, domain.VideoAssetKindHLSMaster)
+		if selected == nil {
+			selected = findAssetByKind(assets, domain.VideoAssetKindOriginal)
 		}
 	}
 
+	if selected == nil {
+		zap.L().Error("no suitable video asset found")
+		return "", ErrNotFound
+	}
+
 	// Получение URL для стриминга видео
-	preflightURL, err := s.s3.GetPreflightURL(ctx, bucketName, assetID, domain.VideoStreamURLTTL)
+	preflightURL, err := s.s3.PresignGetObject(ctx, selected.Bucket, selected.ObjectKey, domain.VideoStreamURLTTL)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return "", err
@@ -119,7 +123,14 @@ func (s *VideoService) GetPreflightUploadURL(
 	}
 
 	// Получение URL для загрузки видео
-	url, err := s.s3.GetPreflightUploadURL(ctx, domain.VideoBucketOriginal, video.ID, domain.VideoUploadURLTTL)
+	url, err := s.s3.PresignPutObject(
+		ctx,
+		tempUploadBucket,
+		videoObjectKey(video.ID),
+		tempUploadContentType,
+		0,
+		domain.VideoUploadURLTTL,
+	)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return "", err
