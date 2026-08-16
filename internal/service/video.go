@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"vilib-api/config"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/dberrors"
+	"vilib-api/internal/hls"
 	"vilib-api/internal/repository"
 	"vilib-api/internal/s3"
 	"vilib-api/internal/saga"
@@ -58,15 +61,24 @@ func findAssetByKind(assets []domain.VideoAsset, kind domain.VideoAssetKind) *do
 	return nil
 }
 
+// Get выбирает точку доступа к видео по таблице статус→ответ (§4.4 дизайна эпика): готовое
+// видео без предпочтения оригинала при наличии мастер-плейлиста — HLS-токен, иначе, если
+// оригинал загружен, — преподписанный URL на оригинал. Если ни один вариант недоступен
+// (uploading или failed без оригинала) — ConflictError.
 func (s *VideoService) Get(
 	ctx context.Context,
 	accountID, groupID, initiatorID, videoID uuid.UUID,
 	isPreferOriginal bool,
-) (domain.PreflightURL, error) {
+) (domain.VideoAccess, error) {
 	// OR-логика: аккаунтное право ИЛИ групповое право
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionVideoWatch); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionVideoWatch,
+	); err != nil {
 		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionVideoWatch); err != nil {
-			return "", ErrForbidden
+			return domain.VideoAccess{}, ErrForbidden
 		}
 	}
 
@@ -74,48 +86,238 @@ func (s *VideoService) Get(
 	video, err := s.repo.Select(ctx, videoID)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return "", err
+		return domain.VideoAccess{}, err
 	}
 
 	// Проверка, что видео принадлежит указанной группе
 	if video.GroupID != groupID {
 		zap.L().Error("video does not belong to the specified group")
-		return "", ErrForbidden
+		return domain.VideoAccess{}, ErrForbidden
 	}
 
 	// Получение ассетов видео
 	assets, err := s.srv.VideoAsset.Get(ctx, videoID)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return "", err
+		return domain.VideoAccess{}, err
 	}
 
-	// Определение, какой ассет использовать. Ассет hls_master — временная замена
-	// «сжатой» версии до полноценной HLS-выдачи (В-7).
-	var selected *domain.VideoAsset
+	master := findAssetByKind(assets, domain.VideoAssetKindHLSMaster)
+	if video.Status == domain.VideoStatusReady && !isPreferOriginal && master != nil {
+		return s.hlsVideoAccess(*video, assets)
+	}
 
-	if isPreferOriginal {
-		selected = findAssetByKind(assets, domain.VideoAssetKindOriginal)
-	} else {
-		selected = findAssetByKind(assets, domain.VideoAssetKindHLSMaster)
-		if selected == nil {
-			selected = findAssetByKind(assets, domain.VideoAssetKindOriginal)
+	original := findAssetByKind(assets, domain.VideoAssetKindOriginal)
+	if original != nil {
+		return s.originalVideoAccess(ctx, *video, original)
+	}
+
+	return domain.VideoAccess{}, NewConflictError("video is not available")
+}
+
+// hlsVideoAccess собирает точку доступа "hls": выпускает HLS-токен на мастер-плейлист и
+// список профилей видео, отсортированных по возрастанию качества.
+func (s *VideoService) hlsVideoAccess(video domain.Video, assets []domain.VideoAsset) (domain.VideoAccess, error) {
+	token, err := s.srv.Auth.IssueHLSToken(video.ID, s.cfg.Video.HLSURLTTL)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.VideoAccess{}, err
+	}
+
+	return domain.VideoAccess{
+		Kind:      domain.VideoAccessKindHLS,
+		HLSToken:  token,
+		ExpiresAt: time.Now().Add(s.cfg.Video.HLSURLTTL),
+		Video:     video,
+		Profiles:  variantProfiles(assets),
+	}, nil
+}
+
+// originalVideoAccess собирает точку доступа "original": преподписанный URL на GET оригинала.
+func (s *VideoService) originalVideoAccess(
+	ctx context.Context,
+	video domain.Video,
+	original *domain.VideoAsset,
+) (domain.VideoAccess, error) {
+	url, err := s.s3.PresignGetObject(ctx, original.Bucket, original.ObjectKey, domain.VideoStreamURLTTL)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.VideoAccess{}, err
+	}
+
+	return domain.VideoAccess{
+		Kind:      domain.VideoAccessKindOriginal,
+		URL:       url,
+		ExpiresAt: time.Now().Add(domain.VideoStreamURLTTL),
+		Video:     video,
+	}, nil
+}
+
+// GetHLSMaster проверяет HLS-токен (§4.2 дизайна эпика), убеждается, что видео готово и у
+// него есть мастер-плейлист, читает его из хранилища и переписывает URI вариантов на
+// относительные ссылки с тем же токеном (§4.3 дизайна эпика).
+func (s *VideoService) GetHLSMaster(ctx context.Context, videoID uuid.UUID, token string) ([]byte, error) {
+	assets, err := s.hlsRequestAssets(ctx, videoID, token)
+	if err != nil {
+		return nil, err
+	}
+
+	master := findAssetByKind(assets, domain.VideoAssetKindHLSMaster)
+	if master == nil {
+		zap.L().Warn("hls master asset not found")
+		return nil, ErrNotFound
+	}
+
+	raw, err := s.s3.GetObject(ctx, master.Bucket, master.ObjectKey)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	rewritten, err := hls.RewriteMaster(raw, func(profile string) string {
+		return profile + "/playlist.m3u8?token=" + token
+	})
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return rewritten, nil
+}
+
+// GetHLSPlaylist проверяет HLS-токен, убеждается, что видео готово и у него есть медиаплейлист
+// запрошенного профиля, читает его из хранилища и переписывает имена сегментов на
+// преподписанные URL хранилища (§4.2, §4.3 дизайна эпика).
+func (s *VideoService) GetHLSPlaylist(
+	ctx context.Context,
+	videoID uuid.UUID,
+	profile domain.VideoProfile,
+	token string,
+) ([]byte, error) {
+	assets, err := s.hlsRequestAssets(ctx, videoID, token)
+	if err != nil {
+		return nil, err
+	}
+
+	variant := findVariantAsset(assets, profile)
+	if variant == nil {
+		zap.L().Warn("hls variant asset not found")
+		return nil, ErrNotFound
+	}
+
+	raw, err := s.s3.GetObject(ctx, variant.Bucket, variant.ObjectKey)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	// Ключи сегментов лежат рядом с медиаплейлистом профиля (§3.3 дизайна эпика).
+	prefix := segmentPrefix(variant.ObjectKey)
+	segmentTTL := s.cfg.Video.HLSSegmentTTL
+
+	rewritten, err := hls.RewriteMedia(raw, func(name string) (string, error) {
+		url, presignErr := s.s3.PresignGetObject(ctx, variant.Bucket, prefix+name, segmentTTL)
+		if presignErr != nil {
+			return "", presignErr
+		}
+		return string(url), nil
+	})
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return rewritten, nil
+}
+
+// hlsRequestAssets проверяет HLS-токен: подпись/срок/purpose (ParseHLSToken), принадлежность
+// токена запрошенному видео и готовность видео (статус ready), затем возвращает его ассеты
+// для поиска нужного плейлиста (§4.2 дизайна эпика).
+func (s *VideoService) hlsRequestAssets(
+	ctx context.Context,
+	videoID uuid.UUID,
+	token string,
+) ([]domain.VideoAsset, error) {
+	claims, err := s.srv.Auth.ParseHLSToken(token)
+	if err != nil {
+		return nil, err
+	}
+
+	if claims.VideoID != videoID {
+		zap.L().Warn("hls token video id mismatch")
+		return nil, ErrForbidden
+	}
+
+	video, err := s.repo.Select(ctx, videoID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	if video.Status != domain.VideoStatusReady {
+		return nil, NewConflictError("video is not available")
+	}
+
+	assets, err := s.srv.VideoAsset.Get(ctx, videoID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return assets, nil
+}
+
+// findVariantAsset ищет ассет hls_variant с указанным профилем. Возвращает nil, если такого нет.
+func findVariantAsset(assets []domain.VideoAsset, profile domain.VideoProfile) *domain.VideoAsset {
+	for i := range assets {
+		if assets[i].Kind == domain.VideoAssetKindHLSVariant && assets[i].Profile == profile {
+			return &assets[i]
 		}
 	}
 
-	if selected == nil {
-		zap.L().Error("no suitable video asset found")
-		return "", ErrNotFound
+	return nil
+}
+
+// variantProfiles собирает имена профилей hls_variant-ассетов, отсортированные по возрастанию
+// числовой части имени ("360p" < "720p" < "1080p").
+func variantProfiles(assets []domain.VideoAsset) []string {
+	var profiles []string
+
+	for _, asset := range assets {
+		if asset.Kind == domain.VideoAssetKindHLSVariant {
+			profiles = append(profiles, string(asset.Profile))
+		}
 	}
 
-	// Получение URL для стриминга видео
-	preflightURL, err := s.s3.PresignGetObject(ctx, selected.Bucket, selected.ObjectKey, domain.VideoStreamURLTTL)
-	if err != nil {
-		zap.L().Error(err.Error())
-		return "", err
+	sort.Slice(profiles, func(i, j int) bool {
+		return profileNumericPrefix(profiles[i]) < profileNumericPrefix(profiles[j])
+	})
+
+	return profiles
+}
+
+// profileNumericPrefix извлекает числовую часть имени профиля ("720p" → 720). Профили без
+// числового префикса сортируются как 0.
+func profileNumericPrefix(profile string) int {
+	end := 0
+	for end < len(profile) && profile[end] >= '0' && profile[end] <= '9' {
+		end++
 	}
 
-	return preflightURL, nil
+	n, _ := strconv.Atoi(profile[:end])
+
+	return n
+}
+
+// segmentPrefix вычисляет префикс ключей сегментов из ключа медиаплейлиста: тот же путь без
+// последнего сегмента (§3.3 дизайна эпика — сегменты лежат рядом с плейлистом профиля).
+func segmentPrefix(playlistKey string) string {
+	idx := strings.LastIndex(playlistKey, "/")
+	if idx < 0 {
+		return ""
+	}
+
+	return playlistKey[:idx+1]
 }
 
 // CreateUpload проверяет права ManageVideo, валидирует content-type и размер файла,
@@ -128,7 +330,12 @@ func (s *VideoService) CreateUpload(
 	size int64,
 ) (domain.VideoUpload, error) {
 	// OR-логика: аккаунтное право ИЛИ групповое право
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, userID, domain.AccountPermissionManageVideo); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		userID,
+		domain.AccountPermissionManageVideo,
+	); err != nil {
 		if groupErr := s.isCheckGroupAction(ctx, groupID, userID, domain.GroupPermissionManageVideo); groupErr != nil {
 			return domain.VideoUpload{}, ErrForbidden
 		}
@@ -177,7 +384,12 @@ func (s *VideoService) CompleteUpload(
 	accountID, groupID, userID, videoID uuid.UUID,
 ) (domain.Video, error) {
 	// OR-логика: аккаунтное право ИЛИ групповое право
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, userID, domain.AccountPermissionManageVideo); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		userID,
+		domain.AccountPermissionManageVideo,
+	); err != nil {
 		if groupErr := s.isCheckGroupAction(ctx, groupID, userID, domain.GroupPermissionManageVideo); groupErr != nil {
 			return domain.Video{}, ErrForbidden
 		}
@@ -306,7 +518,12 @@ func (s *VideoService) publishOriginalUploaded(
 		return err
 	}
 
-	if publishErr := s.srv.Outbox.Publish(ctx, s.cfg.TopicOriginalUploaded, videoID.String(), payload); publishErr != nil {
+	if publishErr := s.srv.Outbox.Publish(
+		ctx,
+		s.cfg.TopicOriginalUploaded,
+		videoID.String(),
+		payload,
+	); publishErr != nil {
 		zap.L().Error(publishErr.Error())
 		return publishErr
 	}
@@ -571,7 +788,12 @@ func (s *VideoService) GetAll(
 	accountID, groupID, initiatorID uuid.UUID,
 ) ([]domain.Video, error) {
 	// OR-логика: аккаунтное право ИЛИ групповое право
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionVideoWatch); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionVideoWatch,
+	); err != nil {
 		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionVideoWatch); err != nil {
 			return nil, ErrForbidden
 		}
@@ -593,7 +815,12 @@ func (s *VideoService) Rename(
 	name string,
 ) (domain.Video, error) {
 	// OR-логика: аккаунтное право ИЛИ групповое право
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageVideo); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageVideo,
+	); err != nil {
 		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo); err != nil {
 			return domain.Video{}, ErrForbidden
 		}
@@ -614,7 +841,12 @@ func (s *VideoService) Delete(
 	accountID, groupID, initiatorID, videoID uuid.UUID,
 ) error {
 	// OR-логика: аккаунтное право ИЛИ групповое право
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageVideo); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageVideo,
+	); err != nil {
 		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo); err != nil {
 			return ErrForbidden
 		}

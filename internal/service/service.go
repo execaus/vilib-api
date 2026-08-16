@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 	"vilib-api/config"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
@@ -33,6 +34,13 @@ type Auth interface {
 	GeneratePassword() (string, error)
 	Login(ctx context.Context, email, password string) (string, error)
 	GetClaimsFromToken(token string) (*domain.AuthClaims, error)
+	// IssueHLSToken выпускает короткоживущий JWT-токен доступа к HLS-плейлистам видео
+	// (claims purpose/video_id/exp, §4.2 дизайна эпика).
+	IssueHLSToken(videoID uuid.UUID, ttl time.Duration) (string, error)
+	// ParseHLSToken проверяет подпись, срок действия и purpose HLS-токена. Любая ошибка
+	// проверки возвращается как ErrUnauthorized (HTTP 401) — принадлежность токена конкретному
+	// видео проверяет вызывающий сервис отдельно (HTTP 403 при несовпадении).
+	ParseHLSToken(token string) (domain.HLSClaims, error)
 }
 
 type Account interface {
@@ -117,11 +125,21 @@ type Video interface {
 	// событие OriginalUploaded через outbox. Идемпотентна для видео, уже поставленных
 	// в очередь/обрабатываемых/готовых.
 	CompleteUpload(ctx context.Context, accountID, groupID, userID, videoID uuid.UUID) (domain.Video, error)
+	// Get выбирает точку доступа к видео по статусу видео и флагу isPreferOriginal (§4.4
+	// дизайна эпика): готовое видео без предпочтения оригинала — HLS-токен на мастер-плейлист,
+	// иначе — преподписанный URL на оригинал. Возвращает ConflictError, если ни один из
+	// вариантов недоступен (uploading или failed без загруженного оригинала).
 	Get(
 		ctx context.Context,
 		accountID, groupID, initiatorID, videoID uuid.UUID,
 		isPreferOriginal bool,
-	) (domain.PreflightURL, error)
+	) (domain.VideoAccess, error)
+	// GetHLSMaster проверяет HLS-токен и отдаёт мастер-плейлист видео с URI вариантов,
+	// переписанными на относительные ссылки с тем же токеном (§4.2, §4.3 дизайна эпика).
+	GetHLSMaster(ctx context.Context, videoID uuid.UUID, token string) ([]byte, error)
+	// GetHLSPlaylist проверяет HLS-токен и отдаёт медиаплейлист профиля с сегментами,
+	// переписанными на преподписанные URL хранилища (§4.2, §4.3 дизайна эпика).
+	GetHLSPlaylist(ctx context.Context, videoID uuid.UUID, profile domain.VideoProfile, token string) ([]byte, error)
 	GetAll(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) ([]domain.Video, error)
 	Rename(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID, name string) (domain.Video, error)
 	Delete(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID) error

@@ -16,6 +16,66 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestService_Auth_IssueAndParseHLSToken(t *testing.T) {
+	t.Parallel()
+
+	testVideoID := uuid.New()
+	otherVideoID := uuid.New()
+	authSvc := service.NewAuthService(config.AuthConfig{Key: "test-secret-key"}, nil)
+
+	t.Run("valid token round-trips with matching video id", func(t *testing.T) {
+		t.Parallel()
+
+		token, err := authSvc.IssueHLSToken(testVideoID, time.Hour)
+		require.NoError(t, err)
+		require.NotEmpty(t, token)
+
+		claims, err := authSvc.ParseHLSToken(token)
+		require.NoError(t, err)
+		require.Equal(t, domain.HLSTokenPurpose, claims.Purpose)
+		require.Equal(t, testVideoID, claims.VideoID)
+		require.NotEqual(t, otherVideoID, claims.VideoID)
+	})
+
+	t.Run("expired token is unauthorized", func(t *testing.T) {
+		t.Parallel()
+
+		token, err := authSvc.IssueHLSToken(testVideoID, -time.Hour)
+		require.NoError(t, err)
+
+		_, err = authSvc.ParseHLSToken(token)
+		require.ErrorIs(t, err, service.ErrUnauthorized)
+	})
+
+	t.Run("malformed token is unauthorized", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := authSvc.ParseHLSToken("not-a-jwt")
+		require.ErrorIs(t, err, service.ErrUnauthorized)
+	})
+
+	t.Run("token signed with different key is unauthorized", func(t *testing.T) {
+		t.Parallel()
+
+		otherAuthSvc := service.NewAuthService(config.AuthConfig{Key: "other-secret-key"}, nil)
+		token, err := otherAuthSvc.IssueHLSToken(testVideoID, time.Hour)
+		require.NoError(t, err)
+
+		_, err = authSvc.ParseHLSToken(token)
+		require.ErrorIs(t, err, service.ErrUnauthorized)
+	})
+
+	t.Run("regular auth token is not accepted as hls token", func(t *testing.T) {
+		t.Parallel()
+
+		authToken, err := authSvc.GenerateToken(uuid.New(), []uuid.UUID{uuid.New()}, uuid.New())
+		require.NoError(t, err)
+
+		_, err = authSvc.ParseHLSToken(authToken)
+		require.ErrorIs(t, err, service.ErrUnauthorized)
+	})
+}
+
 func TestService_Auth_Login(t *testing.T) {
 	t.Parallel()
 

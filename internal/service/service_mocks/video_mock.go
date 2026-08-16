@@ -63,7 +63,7 @@ type VideoMock struct {
 	beforeDeleteCounter uint64
 	DeleteMock          mVideoMockDelete
 
-	funcGet          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, isPreferOriginal bool) (p1 domain.PreflightURL, err error)
+	funcGet          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, isPreferOriginal bool) (v1 domain.VideoAccess, err error)
 	funcGetOrigin    string
 	inspectFuncGet   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, isPreferOriginal bool)
 	afterGetCounter  uint64
@@ -76,6 +76,20 @@ type VideoMock struct {
 	afterGetAllCounter  uint64
 	beforeGetAllCounter uint64
 	GetAllMock          mVideoMockGetAll
+
+	funcGetHLSMaster          func(ctx context.Context, videoID uuid.UUID, token string) (ba1 []byte, err error)
+	funcGetHLSMasterOrigin    string
+	inspectFuncGetHLSMaster   func(ctx context.Context, videoID uuid.UUID, token string)
+	afterGetHLSMasterCounter  uint64
+	beforeGetHLSMasterCounter uint64
+	GetHLSMasterMock          mVideoMockGetHLSMaster
+
+	funcGetHLSPlaylist          func(ctx context.Context, videoID uuid.UUID, profile domain.VideoProfile, token string) (ba1 []byte, err error)
+	funcGetHLSPlaylistOrigin    string
+	inspectFuncGetHLSPlaylist   func(ctx context.Context, videoID uuid.UUID, profile domain.VideoProfile, token string)
+	afterGetHLSPlaylistCounter  uint64
+	beforeGetHLSPlaylistCounter uint64
+	GetHLSPlaylistMock          mVideoMockGetHLSPlaylist
 
 	funcRename          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) (v1 domain.Video, err error)
 	funcRenameOrigin    string
@@ -116,6 +130,12 @@ func NewVideoMock(t minimock.Tester) *VideoMock {
 
 	m.GetAllMock = mVideoMockGetAll{mock: m}
 	m.GetAllMock.callArgs = []*VideoMockGetAllParams{}
+
+	m.GetHLSMasterMock = mVideoMockGetHLSMaster{mock: m}
+	m.GetHLSMasterMock.callArgs = []*VideoMockGetHLSMasterParams{}
+
+	m.GetHLSPlaylistMock = mVideoMockGetHLSPlaylist{mock: m}
+	m.GetHLSPlaylistMock.callArgs = []*VideoMockGetHLSPlaylistParams{}
 
 	m.RenameMock = mVideoMockRename{mock: m}
 	m.RenameMock.callArgs = []*VideoMockRenameParams{}
@@ -2659,7 +2679,7 @@ type VideoMockGetParamPtrs struct {
 
 // VideoMockGetResults contains results of the Video.Get
 type VideoMockGetResults struct {
-	p1  domain.PreflightURL
+	v1  domain.VideoAccess
 	err error
 }
 
@@ -2859,7 +2879,7 @@ func (mmGet *mVideoMockGet) Inspect(f func(ctx context.Context, accountID uuid.U
 }
 
 // Return sets up results that will be returned by Video.Get
-func (mmGet *mVideoMockGet) Return(p1 domain.PreflightURL, err error) *VideoMock {
+func (mmGet *mVideoMockGet) Return(v1 domain.VideoAccess, err error) *VideoMock {
 	if mmGet.mock.funcGet != nil {
 		mmGet.mock.t.Fatalf("VideoMock.Get mock is already set by Set")
 	}
@@ -2867,13 +2887,13 @@ func (mmGet *mVideoMockGet) Return(p1 domain.PreflightURL, err error) *VideoMock
 	if mmGet.defaultExpectation == nil {
 		mmGet.defaultExpectation = &VideoMockGetExpectation{mock: mmGet.mock}
 	}
-	mmGet.defaultExpectation.results = &VideoMockGetResults{p1, err}
+	mmGet.defaultExpectation.results = &VideoMockGetResults{v1, err}
 	mmGet.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
 	return mmGet.mock
 }
 
 // Set uses given function f to mock the Video.Get method
-func (mmGet *mVideoMockGet) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, isPreferOriginal bool) (p1 domain.PreflightURL, err error)) *VideoMock {
+func (mmGet *mVideoMockGet) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, isPreferOriginal bool) (v1 domain.VideoAccess, err error)) *VideoMock {
 	if mmGet.defaultExpectation != nil {
 		mmGet.mock.t.Fatalf("Default expectation is already set for the Video.Get method")
 	}
@@ -2904,8 +2924,8 @@ func (mmGet *mVideoMockGet) When(ctx context.Context, accountID uuid.UUID, group
 }
 
 // Then sets up Video.Get return parameters for the expectation previously defined by the When method
-func (e *VideoMockGetExpectation) Then(p1 domain.PreflightURL, err error) *VideoMock {
-	e.results = &VideoMockGetResults{p1, err}
+func (e *VideoMockGetExpectation) Then(v1 domain.VideoAccess, err error) *VideoMock {
+	e.results = &VideoMockGetResults{v1, err}
 	return e.mock
 }
 
@@ -2931,7 +2951,7 @@ func (mmGet *mVideoMockGet) invocationsDone() bool {
 }
 
 // Get implements mm_service.Video
-func (mmGet *VideoMock) Get(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, isPreferOriginal bool) (p1 domain.PreflightURL, err error) {
+func (mmGet *VideoMock) Get(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, isPreferOriginal bool) (v1 domain.VideoAccess, err error) {
 	mm_atomic.AddUint64(&mmGet.beforeGetCounter, 1)
 	defer mm_atomic.AddUint64(&mmGet.afterGetCounter, 1)
 
@@ -2951,7 +2971,7 @@ func (mmGet *VideoMock) Get(ctx context.Context, accountID uuid.UUID, groupID uu
 	for _, e := range mmGet.GetMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.p1, e.results.err
+			return e.results.v1, e.results.err
 		}
 	}
 
@@ -3003,7 +3023,7 @@ func (mmGet *VideoMock) Get(ctx context.Context, accountID uuid.UUID, groupID uu
 		if mm_results == nil {
 			mmGet.t.Fatal("No results are set for the VideoMock.Get")
 		}
-		return (*mm_results).p1, (*mm_results).err
+		return (*mm_results).v1, (*mm_results).err
 	}
 	if mmGet.funcGet != nil {
 		return mmGet.funcGet(ctx, accountID, groupID, initiatorID, videoID, isPreferOriginal)
@@ -3482,6 +3502,785 @@ func (m *VideoMock) MinimockGetAllInspect() {
 	if !m.GetAllMock.invocationsDone() && afterGetAllCounter > 0 {
 		m.t.Errorf("Expected %d calls to VideoMock.GetAll at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetAllMock.expectedInvocations), m.GetAllMock.expectedInvocationsOrigin, afterGetAllCounter)
+	}
+}
+
+type mVideoMockGetHLSMaster struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockGetHLSMasterExpectation
+	expectations       []*VideoMockGetHLSMasterExpectation
+
+	callArgs []*VideoMockGetHLSMasterParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockGetHLSMasterExpectation specifies expectation struct of the Video.GetHLSMaster
+type VideoMockGetHLSMasterExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockGetHLSMasterParams
+	paramPtrs          *VideoMockGetHLSMasterParamPtrs
+	expectationOrigins VideoMockGetHLSMasterExpectationOrigins
+	results            *VideoMockGetHLSMasterResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockGetHLSMasterParams contains parameters of the Video.GetHLSMaster
+type VideoMockGetHLSMasterParams struct {
+	ctx     context.Context
+	videoID uuid.UUID
+	token   string
+}
+
+// VideoMockGetHLSMasterParamPtrs contains pointers to parameters of the Video.GetHLSMaster
+type VideoMockGetHLSMasterParamPtrs struct {
+	ctx     *context.Context
+	videoID *uuid.UUID
+	token   *string
+}
+
+// VideoMockGetHLSMasterResults contains results of the Video.GetHLSMaster
+type VideoMockGetHLSMasterResults struct {
+	ba1 []byte
+	err error
+}
+
+// VideoMockGetHLSMasterOrigins contains origins of expectations of the Video.GetHLSMaster
+type VideoMockGetHLSMasterExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originVideoID string
+	originToken   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) Optional() *mVideoMockGetHLSMaster {
+	mmGetHLSMaster.optional = true
+	return mmGetHLSMaster
+}
+
+// Expect sets up expected params for Video.GetHLSMaster
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) Expect(ctx context.Context, videoID uuid.UUID, token string) *mVideoMockGetHLSMaster {
+	if mmGetHLSMaster.mock.funcGetHLSMaster != nil {
+		mmGetHLSMaster.mock.t.Fatalf("VideoMock.GetHLSMaster mock is already set by Set")
+	}
+
+	if mmGetHLSMaster.defaultExpectation == nil {
+		mmGetHLSMaster.defaultExpectation = &VideoMockGetHLSMasterExpectation{}
+	}
+
+	if mmGetHLSMaster.defaultExpectation.paramPtrs != nil {
+		mmGetHLSMaster.mock.t.Fatalf("VideoMock.GetHLSMaster mock is already set by ExpectParams functions")
+	}
+
+	mmGetHLSMaster.defaultExpectation.params = &VideoMockGetHLSMasterParams{ctx, videoID, token}
+	mmGetHLSMaster.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetHLSMaster.expectations {
+		if minimock.Equal(e.params, mmGetHLSMaster.defaultExpectation.params) {
+			mmGetHLSMaster.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetHLSMaster.defaultExpectation.params)
+		}
+	}
+
+	return mmGetHLSMaster
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.GetHLSMaster
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) ExpectCtxParam1(ctx context.Context) *mVideoMockGetHLSMaster {
+	if mmGetHLSMaster.mock.funcGetHLSMaster != nil {
+		mmGetHLSMaster.mock.t.Fatalf("VideoMock.GetHLSMaster mock is already set by Set")
+	}
+
+	if mmGetHLSMaster.defaultExpectation == nil {
+		mmGetHLSMaster.defaultExpectation = &VideoMockGetHLSMasterExpectation{}
+	}
+
+	if mmGetHLSMaster.defaultExpectation.params != nil {
+		mmGetHLSMaster.mock.t.Fatalf("VideoMock.GetHLSMaster mock is already set by Expect")
+	}
+
+	if mmGetHLSMaster.defaultExpectation.paramPtrs == nil {
+		mmGetHLSMaster.defaultExpectation.paramPtrs = &VideoMockGetHLSMasterParamPtrs{}
+	}
+	mmGetHLSMaster.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetHLSMaster.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetHLSMaster
+}
+
+// ExpectVideoIDParam2 sets up expected param videoID for Video.GetHLSMaster
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) ExpectVideoIDParam2(videoID uuid.UUID) *mVideoMockGetHLSMaster {
+	if mmGetHLSMaster.mock.funcGetHLSMaster != nil {
+		mmGetHLSMaster.mock.t.Fatalf("VideoMock.GetHLSMaster mock is already set by Set")
+	}
+
+	if mmGetHLSMaster.defaultExpectation == nil {
+		mmGetHLSMaster.defaultExpectation = &VideoMockGetHLSMasterExpectation{}
+	}
+
+	if mmGetHLSMaster.defaultExpectation.params != nil {
+		mmGetHLSMaster.mock.t.Fatalf("VideoMock.GetHLSMaster mock is already set by Expect")
+	}
+
+	if mmGetHLSMaster.defaultExpectation.paramPtrs == nil {
+		mmGetHLSMaster.defaultExpectation.paramPtrs = &VideoMockGetHLSMasterParamPtrs{}
+	}
+	mmGetHLSMaster.defaultExpectation.paramPtrs.videoID = &videoID
+	mmGetHLSMaster.defaultExpectation.expectationOrigins.originVideoID = minimock.CallerInfo(1)
+
+	return mmGetHLSMaster
+}
+
+// ExpectTokenParam3 sets up expected param token for Video.GetHLSMaster
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) ExpectTokenParam3(token string) *mVideoMockGetHLSMaster {
+	if mmGetHLSMaster.mock.funcGetHLSMaster != nil {
+		mmGetHLSMaster.mock.t.Fatalf("VideoMock.GetHLSMaster mock is already set by Set")
+	}
+
+	if mmGetHLSMaster.defaultExpectation == nil {
+		mmGetHLSMaster.defaultExpectation = &VideoMockGetHLSMasterExpectation{}
+	}
+
+	if mmGetHLSMaster.defaultExpectation.params != nil {
+		mmGetHLSMaster.mock.t.Fatalf("VideoMock.GetHLSMaster mock is already set by Expect")
+	}
+
+	if mmGetHLSMaster.defaultExpectation.paramPtrs == nil {
+		mmGetHLSMaster.defaultExpectation.paramPtrs = &VideoMockGetHLSMasterParamPtrs{}
+	}
+	mmGetHLSMaster.defaultExpectation.paramPtrs.token = &token
+	mmGetHLSMaster.defaultExpectation.expectationOrigins.originToken = minimock.CallerInfo(1)
+
+	return mmGetHLSMaster
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.GetHLSMaster
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) Inspect(f func(ctx context.Context, videoID uuid.UUID, token string)) *mVideoMockGetHLSMaster {
+	if mmGetHLSMaster.mock.inspectFuncGetHLSMaster != nil {
+		mmGetHLSMaster.mock.t.Fatalf("Inspect function is already set for VideoMock.GetHLSMaster")
+	}
+
+	mmGetHLSMaster.mock.inspectFuncGetHLSMaster = f
+
+	return mmGetHLSMaster
+}
+
+// Return sets up results that will be returned by Video.GetHLSMaster
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) Return(ba1 []byte, err error) *VideoMock {
+	if mmGetHLSMaster.mock.funcGetHLSMaster != nil {
+		mmGetHLSMaster.mock.t.Fatalf("VideoMock.GetHLSMaster mock is already set by Set")
+	}
+
+	if mmGetHLSMaster.defaultExpectation == nil {
+		mmGetHLSMaster.defaultExpectation = &VideoMockGetHLSMasterExpectation{mock: mmGetHLSMaster.mock}
+	}
+	mmGetHLSMaster.defaultExpectation.results = &VideoMockGetHLSMasterResults{ba1, err}
+	mmGetHLSMaster.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetHLSMaster.mock
+}
+
+// Set uses given function f to mock the Video.GetHLSMaster method
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) Set(f func(ctx context.Context, videoID uuid.UUID, token string) (ba1 []byte, err error)) *VideoMock {
+	if mmGetHLSMaster.defaultExpectation != nil {
+		mmGetHLSMaster.mock.t.Fatalf("Default expectation is already set for the Video.GetHLSMaster method")
+	}
+
+	if len(mmGetHLSMaster.expectations) > 0 {
+		mmGetHLSMaster.mock.t.Fatalf("Some expectations are already set for the Video.GetHLSMaster method")
+	}
+
+	mmGetHLSMaster.mock.funcGetHLSMaster = f
+	mmGetHLSMaster.mock.funcGetHLSMasterOrigin = minimock.CallerInfo(1)
+	return mmGetHLSMaster.mock
+}
+
+// When sets expectation for the Video.GetHLSMaster which will trigger the result defined by the following
+// Then helper
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) When(ctx context.Context, videoID uuid.UUID, token string) *VideoMockGetHLSMasterExpectation {
+	if mmGetHLSMaster.mock.funcGetHLSMaster != nil {
+		mmGetHLSMaster.mock.t.Fatalf("VideoMock.GetHLSMaster mock is already set by Set")
+	}
+
+	expectation := &VideoMockGetHLSMasterExpectation{
+		mock:               mmGetHLSMaster.mock,
+		params:             &VideoMockGetHLSMasterParams{ctx, videoID, token},
+		expectationOrigins: VideoMockGetHLSMasterExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetHLSMaster.expectations = append(mmGetHLSMaster.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.GetHLSMaster return parameters for the expectation previously defined by the When method
+func (e *VideoMockGetHLSMasterExpectation) Then(ba1 []byte, err error) *VideoMock {
+	e.results = &VideoMockGetHLSMasterResults{ba1, err}
+	return e.mock
+}
+
+// Times sets number of times Video.GetHLSMaster should be invoked
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) Times(n uint64) *mVideoMockGetHLSMaster {
+	if n == 0 {
+		mmGetHLSMaster.mock.t.Fatalf("Times of VideoMock.GetHLSMaster mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetHLSMaster.expectedInvocations, n)
+	mmGetHLSMaster.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetHLSMaster
+}
+
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) invocationsDone() bool {
+	if len(mmGetHLSMaster.expectations) == 0 && mmGetHLSMaster.defaultExpectation == nil && mmGetHLSMaster.mock.funcGetHLSMaster == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetHLSMaster.mock.afterGetHLSMasterCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetHLSMaster.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetHLSMaster implements mm_service.Video
+func (mmGetHLSMaster *VideoMock) GetHLSMaster(ctx context.Context, videoID uuid.UUID, token string) (ba1 []byte, err error) {
+	mm_atomic.AddUint64(&mmGetHLSMaster.beforeGetHLSMasterCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetHLSMaster.afterGetHLSMasterCounter, 1)
+
+	mmGetHLSMaster.t.Helper()
+
+	if mmGetHLSMaster.inspectFuncGetHLSMaster != nil {
+		mmGetHLSMaster.inspectFuncGetHLSMaster(ctx, videoID, token)
+	}
+
+	mm_params := VideoMockGetHLSMasterParams{ctx, videoID, token}
+
+	// Record call args
+	mmGetHLSMaster.GetHLSMasterMock.mutex.Lock()
+	mmGetHLSMaster.GetHLSMasterMock.callArgs = append(mmGetHLSMaster.GetHLSMasterMock.callArgs, &mm_params)
+	mmGetHLSMaster.GetHLSMasterMock.mutex.Unlock()
+
+	for _, e := range mmGetHLSMaster.GetHLSMasterMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ba1, e.results.err
+		}
+	}
+
+	if mmGetHLSMaster.GetHLSMasterMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetHLSMaster.GetHLSMasterMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetHLSMaster.GetHLSMasterMock.defaultExpectation.params
+		mm_want_ptrs := mmGetHLSMaster.GetHLSMasterMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockGetHLSMasterParams{ctx, videoID, token}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetHLSMaster.t.Errorf("VideoMock.GetHLSMaster got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetHLSMaster.GetHLSMasterMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.videoID != nil && !minimock.Equal(*mm_want_ptrs.videoID, mm_got.videoID) {
+				mmGetHLSMaster.t.Errorf("VideoMock.GetHLSMaster got unexpected parameter videoID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetHLSMaster.GetHLSMasterMock.defaultExpectation.expectationOrigins.originVideoID, *mm_want_ptrs.videoID, mm_got.videoID, minimock.Diff(*mm_want_ptrs.videoID, mm_got.videoID))
+			}
+
+			if mm_want_ptrs.token != nil && !minimock.Equal(*mm_want_ptrs.token, mm_got.token) {
+				mmGetHLSMaster.t.Errorf("VideoMock.GetHLSMaster got unexpected parameter token, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetHLSMaster.GetHLSMasterMock.defaultExpectation.expectationOrigins.originToken, *mm_want_ptrs.token, mm_got.token, minimock.Diff(*mm_want_ptrs.token, mm_got.token))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetHLSMaster.t.Errorf("VideoMock.GetHLSMaster got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetHLSMaster.GetHLSMasterMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetHLSMaster.GetHLSMasterMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetHLSMaster.t.Fatal("No results are set for the VideoMock.GetHLSMaster")
+		}
+		return (*mm_results).ba1, (*mm_results).err
+	}
+	if mmGetHLSMaster.funcGetHLSMaster != nil {
+		return mmGetHLSMaster.funcGetHLSMaster(ctx, videoID, token)
+	}
+	mmGetHLSMaster.t.Fatalf("Unexpected call to VideoMock.GetHLSMaster. %v %v %v", ctx, videoID, token)
+	return
+}
+
+// GetHLSMasterAfterCounter returns a count of finished VideoMock.GetHLSMaster invocations
+func (mmGetHLSMaster *VideoMock) GetHLSMasterAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetHLSMaster.afterGetHLSMasterCounter)
+}
+
+// GetHLSMasterBeforeCounter returns a count of VideoMock.GetHLSMaster invocations
+func (mmGetHLSMaster *VideoMock) GetHLSMasterBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetHLSMaster.beforeGetHLSMasterCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.GetHLSMaster.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetHLSMaster *mVideoMockGetHLSMaster) Calls() []*VideoMockGetHLSMasterParams {
+	mmGetHLSMaster.mutex.RLock()
+
+	argCopy := make([]*VideoMockGetHLSMasterParams, len(mmGetHLSMaster.callArgs))
+	copy(argCopy, mmGetHLSMaster.callArgs)
+
+	mmGetHLSMaster.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetHLSMasterDone returns true if the count of the GetHLSMaster invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockGetHLSMasterDone() bool {
+	if m.GetHLSMasterMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetHLSMasterMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetHLSMasterMock.invocationsDone()
+}
+
+// MinimockGetHLSMasterInspect logs each unmet expectation
+func (m *VideoMock) MinimockGetHLSMasterInspect() {
+	for _, e := range m.GetHLSMasterMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.GetHLSMaster at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetHLSMasterCounter := mm_atomic.LoadUint64(&m.afterGetHLSMasterCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetHLSMasterMock.defaultExpectation != nil && afterGetHLSMasterCounter < 1 {
+		if m.GetHLSMasterMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.GetHLSMaster at\n%s", m.GetHLSMasterMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.GetHLSMaster at\n%s with params: %#v", m.GetHLSMasterMock.defaultExpectation.expectationOrigins.origin, *m.GetHLSMasterMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetHLSMaster != nil && afterGetHLSMasterCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.GetHLSMaster at\n%s", m.funcGetHLSMasterOrigin)
+	}
+
+	if !m.GetHLSMasterMock.invocationsDone() && afterGetHLSMasterCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.GetHLSMaster at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetHLSMasterMock.expectedInvocations), m.GetHLSMasterMock.expectedInvocationsOrigin, afterGetHLSMasterCounter)
+	}
+}
+
+type mVideoMockGetHLSPlaylist struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockGetHLSPlaylistExpectation
+	expectations       []*VideoMockGetHLSPlaylistExpectation
+
+	callArgs []*VideoMockGetHLSPlaylistParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockGetHLSPlaylistExpectation specifies expectation struct of the Video.GetHLSPlaylist
+type VideoMockGetHLSPlaylistExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockGetHLSPlaylistParams
+	paramPtrs          *VideoMockGetHLSPlaylistParamPtrs
+	expectationOrigins VideoMockGetHLSPlaylistExpectationOrigins
+	results            *VideoMockGetHLSPlaylistResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockGetHLSPlaylistParams contains parameters of the Video.GetHLSPlaylist
+type VideoMockGetHLSPlaylistParams struct {
+	ctx     context.Context
+	videoID uuid.UUID
+	profile domain.VideoProfile
+	token   string
+}
+
+// VideoMockGetHLSPlaylistParamPtrs contains pointers to parameters of the Video.GetHLSPlaylist
+type VideoMockGetHLSPlaylistParamPtrs struct {
+	ctx     *context.Context
+	videoID *uuid.UUID
+	profile *domain.VideoProfile
+	token   *string
+}
+
+// VideoMockGetHLSPlaylistResults contains results of the Video.GetHLSPlaylist
+type VideoMockGetHLSPlaylistResults struct {
+	ba1 []byte
+	err error
+}
+
+// VideoMockGetHLSPlaylistOrigins contains origins of expectations of the Video.GetHLSPlaylist
+type VideoMockGetHLSPlaylistExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originVideoID string
+	originProfile string
+	originToken   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) Optional() *mVideoMockGetHLSPlaylist {
+	mmGetHLSPlaylist.optional = true
+	return mmGetHLSPlaylist
+}
+
+// Expect sets up expected params for Video.GetHLSPlaylist
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) Expect(ctx context.Context, videoID uuid.UUID, profile domain.VideoProfile, token string) *mVideoMockGetHLSPlaylist {
+	if mmGetHLSPlaylist.mock.funcGetHLSPlaylist != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Set")
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation == nil {
+		mmGetHLSPlaylist.defaultExpectation = &VideoMockGetHLSPlaylistExpectation{}
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation.paramPtrs != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by ExpectParams functions")
+	}
+
+	mmGetHLSPlaylist.defaultExpectation.params = &VideoMockGetHLSPlaylistParams{ctx, videoID, profile, token}
+	mmGetHLSPlaylist.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetHLSPlaylist.expectations {
+		if minimock.Equal(e.params, mmGetHLSPlaylist.defaultExpectation.params) {
+			mmGetHLSPlaylist.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetHLSPlaylist.defaultExpectation.params)
+		}
+	}
+
+	return mmGetHLSPlaylist
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.GetHLSPlaylist
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) ExpectCtxParam1(ctx context.Context) *mVideoMockGetHLSPlaylist {
+	if mmGetHLSPlaylist.mock.funcGetHLSPlaylist != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Set")
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation == nil {
+		mmGetHLSPlaylist.defaultExpectation = &VideoMockGetHLSPlaylistExpectation{}
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation.params != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Expect")
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation.paramPtrs == nil {
+		mmGetHLSPlaylist.defaultExpectation.paramPtrs = &VideoMockGetHLSPlaylistParamPtrs{}
+	}
+	mmGetHLSPlaylist.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetHLSPlaylist.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetHLSPlaylist
+}
+
+// ExpectVideoIDParam2 sets up expected param videoID for Video.GetHLSPlaylist
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) ExpectVideoIDParam2(videoID uuid.UUID) *mVideoMockGetHLSPlaylist {
+	if mmGetHLSPlaylist.mock.funcGetHLSPlaylist != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Set")
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation == nil {
+		mmGetHLSPlaylist.defaultExpectation = &VideoMockGetHLSPlaylistExpectation{}
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation.params != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Expect")
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation.paramPtrs == nil {
+		mmGetHLSPlaylist.defaultExpectation.paramPtrs = &VideoMockGetHLSPlaylistParamPtrs{}
+	}
+	mmGetHLSPlaylist.defaultExpectation.paramPtrs.videoID = &videoID
+	mmGetHLSPlaylist.defaultExpectation.expectationOrigins.originVideoID = minimock.CallerInfo(1)
+
+	return mmGetHLSPlaylist
+}
+
+// ExpectProfileParam3 sets up expected param profile for Video.GetHLSPlaylist
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) ExpectProfileParam3(profile domain.VideoProfile) *mVideoMockGetHLSPlaylist {
+	if mmGetHLSPlaylist.mock.funcGetHLSPlaylist != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Set")
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation == nil {
+		mmGetHLSPlaylist.defaultExpectation = &VideoMockGetHLSPlaylistExpectation{}
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation.params != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Expect")
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation.paramPtrs == nil {
+		mmGetHLSPlaylist.defaultExpectation.paramPtrs = &VideoMockGetHLSPlaylistParamPtrs{}
+	}
+	mmGetHLSPlaylist.defaultExpectation.paramPtrs.profile = &profile
+	mmGetHLSPlaylist.defaultExpectation.expectationOrigins.originProfile = minimock.CallerInfo(1)
+
+	return mmGetHLSPlaylist
+}
+
+// ExpectTokenParam4 sets up expected param token for Video.GetHLSPlaylist
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) ExpectTokenParam4(token string) *mVideoMockGetHLSPlaylist {
+	if mmGetHLSPlaylist.mock.funcGetHLSPlaylist != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Set")
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation == nil {
+		mmGetHLSPlaylist.defaultExpectation = &VideoMockGetHLSPlaylistExpectation{}
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation.params != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Expect")
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation.paramPtrs == nil {
+		mmGetHLSPlaylist.defaultExpectation.paramPtrs = &VideoMockGetHLSPlaylistParamPtrs{}
+	}
+	mmGetHLSPlaylist.defaultExpectation.paramPtrs.token = &token
+	mmGetHLSPlaylist.defaultExpectation.expectationOrigins.originToken = minimock.CallerInfo(1)
+
+	return mmGetHLSPlaylist
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.GetHLSPlaylist
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) Inspect(f func(ctx context.Context, videoID uuid.UUID, profile domain.VideoProfile, token string)) *mVideoMockGetHLSPlaylist {
+	if mmGetHLSPlaylist.mock.inspectFuncGetHLSPlaylist != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("Inspect function is already set for VideoMock.GetHLSPlaylist")
+	}
+
+	mmGetHLSPlaylist.mock.inspectFuncGetHLSPlaylist = f
+
+	return mmGetHLSPlaylist
+}
+
+// Return sets up results that will be returned by Video.GetHLSPlaylist
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) Return(ba1 []byte, err error) *VideoMock {
+	if mmGetHLSPlaylist.mock.funcGetHLSPlaylist != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Set")
+	}
+
+	if mmGetHLSPlaylist.defaultExpectation == nil {
+		mmGetHLSPlaylist.defaultExpectation = &VideoMockGetHLSPlaylistExpectation{mock: mmGetHLSPlaylist.mock}
+	}
+	mmGetHLSPlaylist.defaultExpectation.results = &VideoMockGetHLSPlaylistResults{ba1, err}
+	mmGetHLSPlaylist.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetHLSPlaylist.mock
+}
+
+// Set uses given function f to mock the Video.GetHLSPlaylist method
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) Set(f func(ctx context.Context, videoID uuid.UUID, profile domain.VideoProfile, token string) (ba1 []byte, err error)) *VideoMock {
+	if mmGetHLSPlaylist.defaultExpectation != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("Default expectation is already set for the Video.GetHLSPlaylist method")
+	}
+
+	if len(mmGetHLSPlaylist.expectations) > 0 {
+		mmGetHLSPlaylist.mock.t.Fatalf("Some expectations are already set for the Video.GetHLSPlaylist method")
+	}
+
+	mmGetHLSPlaylist.mock.funcGetHLSPlaylist = f
+	mmGetHLSPlaylist.mock.funcGetHLSPlaylistOrigin = minimock.CallerInfo(1)
+	return mmGetHLSPlaylist.mock
+}
+
+// When sets expectation for the Video.GetHLSPlaylist which will trigger the result defined by the following
+// Then helper
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) When(ctx context.Context, videoID uuid.UUID, profile domain.VideoProfile, token string) *VideoMockGetHLSPlaylistExpectation {
+	if mmGetHLSPlaylist.mock.funcGetHLSPlaylist != nil {
+		mmGetHLSPlaylist.mock.t.Fatalf("VideoMock.GetHLSPlaylist mock is already set by Set")
+	}
+
+	expectation := &VideoMockGetHLSPlaylistExpectation{
+		mock:               mmGetHLSPlaylist.mock,
+		params:             &VideoMockGetHLSPlaylistParams{ctx, videoID, profile, token},
+		expectationOrigins: VideoMockGetHLSPlaylistExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetHLSPlaylist.expectations = append(mmGetHLSPlaylist.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.GetHLSPlaylist return parameters for the expectation previously defined by the When method
+func (e *VideoMockGetHLSPlaylistExpectation) Then(ba1 []byte, err error) *VideoMock {
+	e.results = &VideoMockGetHLSPlaylistResults{ba1, err}
+	return e.mock
+}
+
+// Times sets number of times Video.GetHLSPlaylist should be invoked
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) Times(n uint64) *mVideoMockGetHLSPlaylist {
+	if n == 0 {
+		mmGetHLSPlaylist.mock.t.Fatalf("Times of VideoMock.GetHLSPlaylist mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetHLSPlaylist.expectedInvocations, n)
+	mmGetHLSPlaylist.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetHLSPlaylist
+}
+
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) invocationsDone() bool {
+	if len(mmGetHLSPlaylist.expectations) == 0 && mmGetHLSPlaylist.defaultExpectation == nil && mmGetHLSPlaylist.mock.funcGetHLSPlaylist == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetHLSPlaylist.mock.afterGetHLSPlaylistCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetHLSPlaylist.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetHLSPlaylist implements mm_service.Video
+func (mmGetHLSPlaylist *VideoMock) GetHLSPlaylist(ctx context.Context, videoID uuid.UUID, profile domain.VideoProfile, token string) (ba1 []byte, err error) {
+	mm_atomic.AddUint64(&mmGetHLSPlaylist.beforeGetHLSPlaylistCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetHLSPlaylist.afterGetHLSPlaylistCounter, 1)
+
+	mmGetHLSPlaylist.t.Helper()
+
+	if mmGetHLSPlaylist.inspectFuncGetHLSPlaylist != nil {
+		mmGetHLSPlaylist.inspectFuncGetHLSPlaylist(ctx, videoID, profile, token)
+	}
+
+	mm_params := VideoMockGetHLSPlaylistParams{ctx, videoID, profile, token}
+
+	// Record call args
+	mmGetHLSPlaylist.GetHLSPlaylistMock.mutex.Lock()
+	mmGetHLSPlaylist.GetHLSPlaylistMock.callArgs = append(mmGetHLSPlaylist.GetHLSPlaylistMock.callArgs, &mm_params)
+	mmGetHLSPlaylist.GetHLSPlaylistMock.mutex.Unlock()
+
+	for _, e := range mmGetHLSPlaylist.GetHLSPlaylistMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ba1, e.results.err
+		}
+	}
+
+	if mmGetHLSPlaylist.GetHLSPlaylistMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetHLSPlaylist.GetHLSPlaylistMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetHLSPlaylist.GetHLSPlaylistMock.defaultExpectation.params
+		mm_want_ptrs := mmGetHLSPlaylist.GetHLSPlaylistMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockGetHLSPlaylistParams{ctx, videoID, profile, token}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetHLSPlaylist.t.Errorf("VideoMock.GetHLSPlaylist got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetHLSPlaylist.GetHLSPlaylistMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.videoID != nil && !minimock.Equal(*mm_want_ptrs.videoID, mm_got.videoID) {
+				mmGetHLSPlaylist.t.Errorf("VideoMock.GetHLSPlaylist got unexpected parameter videoID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetHLSPlaylist.GetHLSPlaylistMock.defaultExpectation.expectationOrigins.originVideoID, *mm_want_ptrs.videoID, mm_got.videoID, minimock.Diff(*mm_want_ptrs.videoID, mm_got.videoID))
+			}
+
+			if mm_want_ptrs.profile != nil && !minimock.Equal(*mm_want_ptrs.profile, mm_got.profile) {
+				mmGetHLSPlaylist.t.Errorf("VideoMock.GetHLSPlaylist got unexpected parameter profile, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetHLSPlaylist.GetHLSPlaylistMock.defaultExpectation.expectationOrigins.originProfile, *mm_want_ptrs.profile, mm_got.profile, minimock.Diff(*mm_want_ptrs.profile, mm_got.profile))
+			}
+
+			if mm_want_ptrs.token != nil && !minimock.Equal(*mm_want_ptrs.token, mm_got.token) {
+				mmGetHLSPlaylist.t.Errorf("VideoMock.GetHLSPlaylist got unexpected parameter token, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetHLSPlaylist.GetHLSPlaylistMock.defaultExpectation.expectationOrigins.originToken, *mm_want_ptrs.token, mm_got.token, minimock.Diff(*mm_want_ptrs.token, mm_got.token))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetHLSPlaylist.t.Errorf("VideoMock.GetHLSPlaylist got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetHLSPlaylist.GetHLSPlaylistMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetHLSPlaylist.GetHLSPlaylistMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetHLSPlaylist.t.Fatal("No results are set for the VideoMock.GetHLSPlaylist")
+		}
+		return (*mm_results).ba1, (*mm_results).err
+	}
+	if mmGetHLSPlaylist.funcGetHLSPlaylist != nil {
+		return mmGetHLSPlaylist.funcGetHLSPlaylist(ctx, videoID, profile, token)
+	}
+	mmGetHLSPlaylist.t.Fatalf("Unexpected call to VideoMock.GetHLSPlaylist. %v %v %v %v", ctx, videoID, profile, token)
+	return
+}
+
+// GetHLSPlaylistAfterCounter returns a count of finished VideoMock.GetHLSPlaylist invocations
+func (mmGetHLSPlaylist *VideoMock) GetHLSPlaylistAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetHLSPlaylist.afterGetHLSPlaylistCounter)
+}
+
+// GetHLSPlaylistBeforeCounter returns a count of VideoMock.GetHLSPlaylist invocations
+func (mmGetHLSPlaylist *VideoMock) GetHLSPlaylistBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetHLSPlaylist.beforeGetHLSPlaylistCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.GetHLSPlaylist.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetHLSPlaylist *mVideoMockGetHLSPlaylist) Calls() []*VideoMockGetHLSPlaylistParams {
+	mmGetHLSPlaylist.mutex.RLock()
+
+	argCopy := make([]*VideoMockGetHLSPlaylistParams, len(mmGetHLSPlaylist.callArgs))
+	copy(argCopy, mmGetHLSPlaylist.callArgs)
+
+	mmGetHLSPlaylist.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetHLSPlaylistDone returns true if the count of the GetHLSPlaylist invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockGetHLSPlaylistDone() bool {
+	if m.GetHLSPlaylistMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetHLSPlaylistMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetHLSPlaylistMock.invocationsDone()
+}
+
+// MinimockGetHLSPlaylistInspect logs each unmet expectation
+func (m *VideoMock) MinimockGetHLSPlaylistInspect() {
+	for _, e := range m.GetHLSPlaylistMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.GetHLSPlaylist at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetHLSPlaylistCounter := mm_atomic.LoadUint64(&m.afterGetHLSPlaylistCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetHLSPlaylistMock.defaultExpectation != nil && afterGetHLSPlaylistCounter < 1 {
+		if m.GetHLSPlaylistMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.GetHLSPlaylist at\n%s", m.GetHLSPlaylistMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.GetHLSPlaylist at\n%s with params: %#v", m.GetHLSPlaylistMock.defaultExpectation.expectationOrigins.origin, *m.GetHLSPlaylistMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetHLSPlaylist != nil && afterGetHLSPlaylistCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.GetHLSPlaylist at\n%s", m.funcGetHLSPlaylistOrigin)
+	}
+
+	if !m.GetHLSPlaylistMock.invocationsDone() && afterGetHLSPlaylistCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.GetHLSPlaylist at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetHLSPlaylistMock.expectedInvocations), m.GetHLSPlaylistMock.expectedInvocationsOrigin, afterGetHLSPlaylistCounter)
 	}
 }
 
@@ -3972,6 +4771,10 @@ func (m *VideoMock) MinimockFinish() {
 
 			m.MinimockGetAllInspect()
 
+			m.MinimockGetHLSMasterInspect()
+
+			m.MinimockGetHLSPlaylistInspect()
+
 			m.MinimockRenameInspect()
 		}
 	})
@@ -4004,5 +4807,7 @@ func (m *VideoMock) minimockDone() bool {
 		m.MinimockDeleteDone() &&
 		m.MinimockGetDone() &&
 		m.MinimockGetAllDone() &&
+		m.MinimockGetHLSMasterDone() &&
+		m.MinimockGetHLSPlaylistDone() &&
 		m.MinimockRenameDone()
 }

@@ -1005,3 +1005,507 @@ func TestService_Video_ApplyProcessingFailed(t *testing.T) {
 		require.ErrorIs(t, err, repoErr)
 	})
 }
+
+// videoGetMocks собирает моки, используемые Get.
+type videoGetMocks struct {
+	Access      *service_mocks.AccessMock
+	GroupMember *service_mocks.GroupMemberMock
+	GroupRole   *service_mocks.GroupRoleMock
+	Auth        *service_mocks.AuthMock
+	S3          *service_mocks.S3Mock
+	Video       *repository_mocks.VideoMock
+	VideoAsset  *service_mocks.VideoAssetMock
+}
+
+// TestService_Video_Get проверяет выбор точки доступа к видео по таблице статус→ответ
+// (§4.4 дизайна эпика).
+func TestService_Video_Get(t *testing.T) {
+	t.Parallel()
+
+	var (
+		testAccountID = uuid.New()
+		testGroupID   = uuid.New()
+		testUserID    = uuid.New()
+		testVideoID   = uuid.New()
+		testBucket    = "vilib"
+		testHLSToken  = "hls-token"
+		testHLSURLTTL = time.Hour
+		testOrigURL   = domain.PreflightURL("https://example.com/original")
+		testFailure   = "unsupported codec"
+	)
+
+	originalAsset := domain.VideoAsset{
+		Kind: domain.VideoAssetKindOriginal, Bucket: testBucket, ObjectKey: "videos/x/original",
+	}
+	masterAsset := domain.VideoAsset{
+		Kind: domain.VideoAssetKindHLSMaster, Bucket: testBucket, ObjectKey: "videos/x/hls/master.m3u8",
+	}
+	variant720 := domain.VideoAsset{Kind: domain.VideoAssetKindHLSVariant, Profile: "720p"}
+	variant360 := domain.VideoAsset{Kind: domain.VideoAssetKindHLSVariant, Profile: "360p"}
+
+	grantAccess := func(m videoGetMocks) {
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionVideoWatch).
+			Return(nil)
+	}
+
+	tests := []struct {
+		name             string
+		status           domain.VideoStatus
+		isPreferOriginal bool
+		assets           []domain.VideoAsset
+		failureReason    *string
+		setupMocks       func(m videoGetMocks)
+		wantKind         domain.VideoAccessKind
+		wantProfiles     []string
+		wantErr          error
+	}{
+		{
+			name:   "ready without prefer original returns hls with sorted profiles",
+			status: domain.VideoStatusReady,
+			assets: []domain.VideoAsset{originalAsset, masterAsset, variant720, variant360},
+			setupMocks: func(m videoGetMocks) {
+				m.Auth.IssueHLSTokenMock.Expect(testVideoID, testHLSURLTTL).Return(testHLSToken, nil)
+			},
+			wantKind:     domain.VideoAccessKindHLS,
+			wantProfiles: []string{"360p", "720p"},
+		},
+		{
+			name:             "ready with prefer original returns original",
+			status:           domain.VideoStatusReady,
+			isPreferOriginal: true,
+			assets:           []domain.VideoAsset{originalAsset, masterAsset},
+			setupMocks: func(m videoGetMocks) {
+				m.S3.PresignGetObjectMock.
+					Expect(minimock.AnyContext, testBucket, originalAsset.ObjectKey, domain.VideoStreamURLTTL).
+					Return(testOrigURL, nil)
+			},
+			wantKind: domain.VideoAccessKindOriginal,
+		},
+		{
+			name:   "ready without master falls back to original",
+			status: domain.VideoStatusReady,
+			assets: []domain.VideoAsset{originalAsset},
+			setupMocks: func(m videoGetMocks) {
+				m.S3.PresignGetObjectMock.
+					Expect(minimock.AnyContext, testBucket, originalAsset.ObjectKey, domain.VideoStreamURLTTL).
+					Return(testOrigURL, nil)
+			},
+			wantKind: domain.VideoAccessKindOriginal,
+		},
+		{
+			name:   "queued returns original",
+			status: domain.VideoStatusQueued,
+			assets: []domain.VideoAsset{originalAsset},
+			setupMocks: func(m videoGetMocks) {
+				m.S3.PresignGetObjectMock.
+					Expect(minimock.AnyContext, testBucket, originalAsset.ObjectKey, domain.VideoStreamURLTTL).
+					Return(testOrigURL, nil)
+			},
+			wantKind: domain.VideoAccessKindOriginal,
+		},
+		{
+			name:   "compressing returns original",
+			status: domain.VideoStatusCompressing,
+			assets: []domain.VideoAsset{originalAsset},
+			setupMocks: func(m videoGetMocks) {
+				m.S3.PresignGetObjectMock.
+					Expect(minimock.AnyContext, testBucket, originalAsset.ObjectKey, domain.VideoStreamURLTTL).
+					Return(testOrigURL, nil)
+			},
+			wantKind: domain.VideoAccessKindOriginal,
+		},
+		{
+			name:          "failed with original returns original",
+			status:        domain.VideoStatusFailed,
+			assets:        []domain.VideoAsset{originalAsset},
+			failureReason: &testFailure,
+			setupMocks: func(m videoGetMocks) {
+				m.S3.PresignGetObjectMock.
+					Expect(minimock.AnyContext, testBucket, originalAsset.ObjectKey, domain.VideoStreamURLTTL).
+					Return(testOrigURL, nil)
+			},
+			wantKind: domain.VideoAccessKindOriginal,
+		},
+		{
+			name:          "failed without original returns conflict",
+			status:        domain.VideoStatusFailed,
+			assets:        nil,
+			failureReason: &testFailure,
+			setupMocks:    func(_ videoGetMocks) {},
+			wantErr:       service.NewConflictError("video is not available"),
+		},
+		{
+			name:       "uploading returns conflict",
+			status:     domain.VideoStatusUploading,
+			assets:     nil,
+			setupMocks: func(_ videoGetMocks) {},
+			wantErr:    service.NewConflictError("video is not available"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			mc := minimock.NewController(t)
+
+			m := videoGetMocks{
+				Access:      service_mocks.NewAccessMock(mc),
+				GroupMember: service_mocks.NewGroupMemberMock(mc),
+				GroupRole:   service_mocks.NewGroupRoleMock(mc),
+				Auth:        service_mocks.NewAuthMock(mc),
+				S3:          service_mocks.NewS3Mock(mc),
+				Video:       repository_mocks.NewVideoMock(mc),
+				VideoAsset:  service_mocks.NewVideoAssetMock(mc),
+			}
+
+			grantAccess(m)
+
+			video := domain.Video{
+				ID: testVideoID, GroupID: testGroupID, Status: tt.status, FailureReason: tt.failureReason,
+			}
+			m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(&video, nil)
+			m.VideoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return(tt.assets, nil)
+
+			tt.setupMocks(m)
+
+			svc := service.Service{
+				Access:      m.Access,
+				GroupMember: m.GroupMember,
+				GroupRole:   m.GroupRole,
+				Auth:        m.Auth,
+				VideoAsset:  m.VideoAsset,
+			}
+
+			videoSvc := service.NewVideoService(m.S3, m.Video, &svc, service.VideoServiceConfig{
+				Bucket: testBucket,
+				Video:  config.VideoConfig{HLSURLTTL: testHLSURLTTL},
+			})
+
+			got, err := videoSvc.Get(
+				minimock.AnyContext,
+				testAccountID,
+				testGroupID,
+				testUserID,
+				testVideoID,
+				tt.isPreferOriginal,
+			)
+
+			require.Equal(t, tt.wantErr, err)
+			if tt.wantErr != nil {
+				return
+			}
+
+			require.Equal(t, tt.wantKind, got.Kind)
+			require.Equal(t, video, got.Video)
+			require.Equal(t, tt.wantProfiles, got.Profiles)
+
+			switch tt.wantKind {
+			case domain.VideoAccessKindHLS:
+				require.Equal(t, testHLSToken, got.HLSToken)
+				require.WithinDuration(t, time.Now().Add(testHLSURLTTL), got.ExpiresAt, time.Second)
+			case domain.VideoAccessKindOriginal:
+				require.Equal(t, testOrigURL, got.URL)
+				require.WithinDuration(t, time.Now().Add(domain.VideoStreamURLTTL), got.ExpiresAt, time.Second)
+			}
+		})
+	}
+
+	t.Run("forbidden without permissions", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+
+		access := service_mocks.NewAccessMock(mc)
+		groupMember := service_mocks.NewGroupMemberMock(mc)
+
+		access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionVideoWatch).
+			Return(service.ErrForbidden)
+		groupMember.GetByUserIDAndGroupIDMock.
+			Expect(minimock.AnyContext, testUserID, testGroupID).
+			Return(domain.GroupMember{}, service.ErrForbidden)
+
+		svc := service.Service{Access: access, GroupMember: groupMember}
+		videoSvc := service.NewVideoService(nil, repository_mocks.NewVideoMock(mc), &svc, service.VideoServiceConfig{})
+
+		_, err := videoSvc.Get(minimock.AnyContext, testAccountID, testGroupID, testUserID, testVideoID, false)
+
+		require.ErrorIs(t, err, service.ErrForbidden)
+	})
+
+	t.Run("video belongs to another group is forbidden", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+
+		access := service_mocks.NewAccessMock(mc)
+		videoRepo := repository_mocks.NewVideoMock(mc)
+
+		access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionVideoWatch).
+			Return(nil)
+		otherGroupVideo := domain.Video{ID: testVideoID, GroupID: uuid.New(), Status: domain.VideoStatusReady}
+		videoRepo.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(&otherGroupVideo, nil)
+
+		svc := service.Service{Access: access}
+		videoSvc := service.NewVideoService(nil, videoRepo, &svc, service.VideoServiceConfig{})
+
+		_, err := videoSvc.Get(minimock.AnyContext, testAccountID, testGroupID, testUserID, testVideoID, false)
+
+		require.ErrorIs(t, err, service.ErrForbidden)
+	})
+}
+
+// videoHLSMocks собирает моки, используемые GetHLSMaster/GetHLSPlaylist.
+type videoHLSMocks struct {
+	Auth       *service_mocks.AuthMock
+	S3         *service_mocks.S3Mock
+	Video      *repository_mocks.VideoMock
+	VideoAsset *service_mocks.VideoAssetMock
+}
+
+func newVideoHLSMocks(mc *minimock.Controller) videoHLSMocks {
+	return videoHLSMocks{
+		Auth:       service_mocks.NewAuthMock(mc),
+		S3:         service_mocks.NewS3Mock(mc),
+		Video:      repository_mocks.NewVideoMock(mc),
+		VideoAsset: service_mocks.NewVideoAssetMock(mc),
+	}
+}
+
+func newVideoHLSService(m videoHLSMocks, cfg service.VideoServiceConfig) *service.VideoService {
+	svc := &service.Service{Auth: m.Auth, VideoAsset: m.VideoAsset}
+	return service.NewVideoService(m.S3, m.Video, svc, cfg)
+}
+
+func TestService_Video_GetHLSMaster(t *testing.T) {
+	t.Parallel()
+
+	testVideoID := uuid.New()
+	testBucket := "vilib"
+	testToken := "hls-token"
+	testMasterKey := "videos/" + testVideoID.String() + "/hls/master.m3u8"
+	masterAsset := domain.VideoAsset{Kind: domain.VideoAssetKindHLSMaster, Bucket: testBucket, ObjectKey: testMasterKey}
+
+	t.Run("valid token returns master playlist with rewritten variant uris", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoHLSMocks(mc)
+
+		m.Auth.ParseHLSTokenMock.
+			Expect(testToken).
+			Return(domain.HLSClaims{Purpose: domain.HLSTokenPurpose, VideoID: testVideoID}, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, Status: domain.VideoStatusReady}, nil)
+		m.VideoAsset.GetMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return([]domain.VideoAsset{masterAsset}, nil)
+		m.S3.GetObjectMock.
+			Expect(minimock.AnyContext, testBucket, testMasterKey).
+			Return([]byte("#EXTM3U\n720p/playlist.m3u8\n"), nil)
+
+		videoSvc := newVideoHLSService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		got, err := videoSvc.GetHLSMaster(minimock.AnyContext, testVideoID, testToken)
+
+		require.NoError(t, err)
+		require.Equal(t, "#EXTM3U\n720p/playlist.m3u8?token="+testToken+"\n", string(got))
+	})
+
+	t.Run("expired or malformed token is unauthorized", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoHLSMocks(mc)
+
+		m.Auth.ParseHLSTokenMock.Expect(testToken).Return(domain.HLSClaims{}, service.ErrUnauthorized)
+
+		videoSvc := newVideoHLSService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		_, err := videoSvc.GetHLSMaster(minimock.AnyContext, testVideoID, testToken)
+
+		require.ErrorIs(t, err, service.ErrUnauthorized)
+	})
+
+	t.Run("token issued for another video is forbidden", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoHLSMocks(mc)
+
+		m.Auth.ParseHLSTokenMock.
+			Expect(testToken).
+			Return(domain.HLSClaims{Purpose: domain.HLSTokenPurpose, VideoID: uuid.New()}, nil)
+
+		videoSvc := newVideoHLSService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		_, err := videoSvc.GetHLSMaster(minimock.AnyContext, testVideoID, testToken)
+
+		require.ErrorIs(t, err, service.ErrForbidden)
+	})
+
+	t.Run("video not ready returns conflict", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoHLSMocks(mc)
+
+		m.Auth.ParseHLSTokenMock.
+			Expect(testToken).
+			Return(domain.HLSClaims{Purpose: domain.HLSTokenPurpose, VideoID: testVideoID}, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, Status: domain.VideoStatusCompressing}, nil)
+
+		videoSvc := newVideoHLSService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		_, err := videoSvc.GetHLSMaster(minimock.AnyContext, testVideoID, testToken)
+
+		require.Equal(t, service.NewConflictError("video is not available"), err)
+	})
+
+	t.Run("missing master asset returns not found", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoHLSMocks(mc)
+
+		m.Auth.ParseHLSTokenMock.
+			Expect(testToken).
+			Return(domain.HLSClaims{Purpose: domain.HLSTokenPurpose, VideoID: testVideoID}, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, Status: domain.VideoStatusReady}, nil)
+		m.VideoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return(nil, nil)
+
+		videoSvc := newVideoHLSService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		_, err := videoSvc.GetHLSMaster(minimock.AnyContext, testVideoID, testToken)
+
+		require.ErrorIs(t, err, service.ErrNotFound)
+	})
+}
+
+func TestService_Video_GetHLSPlaylist(t *testing.T) {
+	t.Parallel()
+
+	testVideoID := uuid.New()
+	testBucket := "vilib"
+	testToken := "hls-token"
+	testProfile := domain.VideoProfile("720p")
+	testSegmentTTL := time.Hour
+	testPlaylistKey := "videos/" + testVideoID.String() + "/hls/720p/playlist.m3u8"
+	testSegmentPrefix := "videos/" + testVideoID.String() + "/hls/720p/"
+	variantAsset := domain.VideoAsset{
+		Kind: domain.VideoAssetKindHLSVariant, Profile: testProfile, Bucket: testBucket, ObjectKey: testPlaylistKey,
+	}
+
+	t.Run("valid token returns playlist with signed segment urls", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoHLSMocks(mc)
+
+		m.Auth.ParseHLSTokenMock.
+			Expect(testToken).
+			Return(domain.HLSClaims{Purpose: domain.HLSTokenPurpose, VideoID: testVideoID}, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, Status: domain.VideoStatusReady}, nil)
+		m.VideoAsset.GetMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return([]domain.VideoAsset{variantAsset}, nil)
+		m.S3.GetObjectMock.
+			Expect(minimock.AnyContext, testBucket, testPlaylistKey).
+			Return([]byte("#EXTM3U\nseg_00001.ts\n"), nil)
+		m.S3.PresignGetObjectMock.
+			Expect(minimock.AnyContext, testBucket, testSegmentPrefix+"seg_00001.ts", testSegmentTTL).
+			Return(domain.PreflightURL("https://example.com/seg_00001.ts?sig=1"), nil)
+
+		videoSvc := newVideoHLSService(
+			m, service.VideoServiceConfig{Bucket: testBucket, Video: config.VideoConfig{HLSSegmentTTL: testSegmentTTL}},
+		)
+
+		got, err := videoSvc.GetHLSPlaylist(minimock.AnyContext, testVideoID, testProfile, testToken)
+
+		require.NoError(t, err)
+		require.Equal(t, "#EXTM3U\nhttps://example.com/seg_00001.ts?sig=1\n", string(got))
+	})
+
+	t.Run("segment presign error propagates", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoHLSMocks(mc)
+		presignErr := errors.New("presign failed")
+
+		m.Auth.ParseHLSTokenMock.
+			Expect(testToken).
+			Return(domain.HLSClaims{Purpose: domain.HLSTokenPurpose, VideoID: testVideoID}, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, Status: domain.VideoStatusReady}, nil)
+		m.VideoAsset.GetMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return([]domain.VideoAsset{variantAsset}, nil)
+		m.S3.GetObjectMock.
+			Expect(minimock.AnyContext, testBucket, testPlaylistKey).
+			Return([]byte("#EXTM3U\nseg_00001.ts\n"), nil)
+		m.S3.PresignGetObjectMock.
+			Expect(minimock.AnyContext, testBucket, testSegmentPrefix+"seg_00001.ts", testSegmentTTL).
+			Return("", presignErr)
+
+		videoSvc := newVideoHLSService(
+			m, service.VideoServiceConfig{Bucket: testBucket, Video: config.VideoConfig{HLSSegmentTTL: testSegmentTTL}},
+		)
+
+		_, err := videoSvc.GetHLSPlaylist(minimock.AnyContext, testVideoID, testProfile, testToken)
+
+		require.ErrorIs(t, err, presignErr)
+	})
+
+	t.Run("unknown profile returns not found", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoHLSMocks(mc)
+
+		m.Auth.ParseHLSTokenMock.
+			Expect(testToken).
+			Return(domain.HLSClaims{Purpose: domain.HLSTokenPurpose, VideoID: testVideoID}, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, Status: domain.VideoStatusReady}, nil)
+		m.VideoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return(nil, nil)
+
+		videoSvc := newVideoHLSService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		_, err := videoSvc.GetHLSPlaylist(minimock.AnyContext, testVideoID, testProfile, testToken)
+
+		require.ErrorIs(t, err, service.ErrNotFound)
+	})
+
+	t.Run("video not ready returns conflict", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoHLSMocks(mc)
+
+		m.Auth.ParseHLSTokenMock.
+			Expect(testToken).
+			Return(domain.HLSClaims{Purpose: domain.HLSTokenPurpose, VideoID: testVideoID}, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, Status: domain.VideoStatusQueued}, nil)
+
+		videoSvc := newVideoHLSService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		_, err := videoSvc.GetHLSPlaylist(minimock.AnyContext, testVideoID, testProfile, testToken)
+
+		require.Equal(t, service.NewConflictError("video is not available"), err)
+	})
+}

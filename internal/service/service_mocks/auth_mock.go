@@ -8,6 +8,7 @@ import (
 	"context"
 	"sync"
 	mm_atomic "sync/atomic"
+	"time"
 	mm_time "time"
 	"vilib-api/internal/domain"
 
@@ -55,12 +56,26 @@ type AuthMock struct {
 	beforeHashPasswordCounter uint64
 	HashPasswordMock          mAuthMockHashPassword
 
+	funcIssueHLSToken          func(videoID uuid.UUID, ttl time.Duration) (s1 string, err error)
+	funcIssueHLSTokenOrigin    string
+	inspectFuncIssueHLSToken   func(videoID uuid.UUID, ttl time.Duration)
+	afterIssueHLSTokenCounter  uint64
+	beforeIssueHLSTokenCounter uint64
+	IssueHLSTokenMock          mAuthMockIssueHLSToken
+
 	funcLogin          func(ctx context.Context, email string, password string) (s1 string, err error)
 	funcLoginOrigin    string
 	inspectFuncLogin   func(ctx context.Context, email string, password string)
 	afterLoginCounter  uint64
 	beforeLoginCounter uint64
 	LoginMock          mAuthMockLogin
+
+	funcParseHLSToken          func(token string) (h1 domain.HLSClaims, err error)
+	funcParseHLSTokenOrigin    string
+	inspectFuncParseHLSToken   func(token string)
+	afterParseHLSTokenCounter  uint64
+	beforeParseHLSTokenCounter uint64
+	ParseHLSTokenMock          mAuthMockParseHLSToken
 }
 
 // NewAuthMock returns a mock for mm_service.Auth
@@ -85,8 +100,14 @@ func NewAuthMock(t minimock.Tester) *AuthMock {
 	m.HashPasswordMock = mAuthMockHashPassword{mock: m}
 	m.HashPasswordMock.callArgs = []*AuthMockHashPasswordParams{}
 
+	m.IssueHLSTokenMock = mAuthMockIssueHLSToken{mock: m}
+	m.IssueHLSTokenMock.callArgs = []*AuthMockIssueHLSTokenParams{}
+
 	m.LoginMock = mAuthMockLogin{mock: m}
 	m.LoginMock.callArgs = []*AuthMockLoginParams{}
+
+	m.ParseHLSTokenMock = mAuthMockParseHLSToken{mock: m}
+	m.ParseHLSTokenMock.callArgs = []*AuthMockParseHLSTokenParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -1620,6 +1641,349 @@ func (m *AuthMock) MinimockHashPasswordInspect() {
 	}
 }
 
+type mAuthMockIssueHLSToken struct {
+	optional           bool
+	mock               *AuthMock
+	defaultExpectation *AuthMockIssueHLSTokenExpectation
+	expectations       []*AuthMockIssueHLSTokenExpectation
+
+	callArgs []*AuthMockIssueHLSTokenParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AuthMockIssueHLSTokenExpectation specifies expectation struct of the Auth.IssueHLSToken
+type AuthMockIssueHLSTokenExpectation struct {
+	mock               *AuthMock
+	params             *AuthMockIssueHLSTokenParams
+	paramPtrs          *AuthMockIssueHLSTokenParamPtrs
+	expectationOrigins AuthMockIssueHLSTokenExpectationOrigins
+	results            *AuthMockIssueHLSTokenResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AuthMockIssueHLSTokenParams contains parameters of the Auth.IssueHLSToken
+type AuthMockIssueHLSTokenParams struct {
+	videoID uuid.UUID
+	ttl     time.Duration
+}
+
+// AuthMockIssueHLSTokenParamPtrs contains pointers to parameters of the Auth.IssueHLSToken
+type AuthMockIssueHLSTokenParamPtrs struct {
+	videoID *uuid.UUID
+	ttl     *time.Duration
+}
+
+// AuthMockIssueHLSTokenResults contains results of the Auth.IssueHLSToken
+type AuthMockIssueHLSTokenResults struct {
+	s1  string
+	err error
+}
+
+// AuthMockIssueHLSTokenOrigins contains origins of expectations of the Auth.IssueHLSToken
+type AuthMockIssueHLSTokenExpectationOrigins struct {
+	origin        string
+	originVideoID string
+	originTtl     string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) Optional() *mAuthMockIssueHLSToken {
+	mmIssueHLSToken.optional = true
+	return mmIssueHLSToken
+}
+
+// Expect sets up expected params for Auth.IssueHLSToken
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) Expect(videoID uuid.UUID, ttl time.Duration) *mAuthMockIssueHLSToken {
+	if mmIssueHLSToken.mock.funcIssueHLSToken != nil {
+		mmIssueHLSToken.mock.t.Fatalf("AuthMock.IssueHLSToken mock is already set by Set")
+	}
+
+	if mmIssueHLSToken.defaultExpectation == nil {
+		mmIssueHLSToken.defaultExpectation = &AuthMockIssueHLSTokenExpectation{}
+	}
+
+	if mmIssueHLSToken.defaultExpectation.paramPtrs != nil {
+		mmIssueHLSToken.mock.t.Fatalf("AuthMock.IssueHLSToken mock is already set by ExpectParams functions")
+	}
+
+	mmIssueHLSToken.defaultExpectation.params = &AuthMockIssueHLSTokenParams{videoID, ttl}
+	mmIssueHLSToken.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmIssueHLSToken.expectations {
+		if minimock.Equal(e.params, mmIssueHLSToken.defaultExpectation.params) {
+			mmIssueHLSToken.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmIssueHLSToken.defaultExpectation.params)
+		}
+	}
+
+	return mmIssueHLSToken
+}
+
+// ExpectVideoIDParam1 sets up expected param videoID for Auth.IssueHLSToken
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) ExpectVideoIDParam1(videoID uuid.UUID) *mAuthMockIssueHLSToken {
+	if mmIssueHLSToken.mock.funcIssueHLSToken != nil {
+		mmIssueHLSToken.mock.t.Fatalf("AuthMock.IssueHLSToken mock is already set by Set")
+	}
+
+	if mmIssueHLSToken.defaultExpectation == nil {
+		mmIssueHLSToken.defaultExpectation = &AuthMockIssueHLSTokenExpectation{}
+	}
+
+	if mmIssueHLSToken.defaultExpectation.params != nil {
+		mmIssueHLSToken.mock.t.Fatalf("AuthMock.IssueHLSToken mock is already set by Expect")
+	}
+
+	if mmIssueHLSToken.defaultExpectation.paramPtrs == nil {
+		mmIssueHLSToken.defaultExpectation.paramPtrs = &AuthMockIssueHLSTokenParamPtrs{}
+	}
+	mmIssueHLSToken.defaultExpectation.paramPtrs.videoID = &videoID
+	mmIssueHLSToken.defaultExpectation.expectationOrigins.originVideoID = minimock.CallerInfo(1)
+
+	return mmIssueHLSToken
+}
+
+// ExpectTtlParam2 sets up expected param ttl for Auth.IssueHLSToken
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) ExpectTtlParam2(ttl time.Duration) *mAuthMockIssueHLSToken {
+	if mmIssueHLSToken.mock.funcIssueHLSToken != nil {
+		mmIssueHLSToken.mock.t.Fatalf("AuthMock.IssueHLSToken mock is already set by Set")
+	}
+
+	if mmIssueHLSToken.defaultExpectation == nil {
+		mmIssueHLSToken.defaultExpectation = &AuthMockIssueHLSTokenExpectation{}
+	}
+
+	if mmIssueHLSToken.defaultExpectation.params != nil {
+		mmIssueHLSToken.mock.t.Fatalf("AuthMock.IssueHLSToken mock is already set by Expect")
+	}
+
+	if mmIssueHLSToken.defaultExpectation.paramPtrs == nil {
+		mmIssueHLSToken.defaultExpectation.paramPtrs = &AuthMockIssueHLSTokenParamPtrs{}
+	}
+	mmIssueHLSToken.defaultExpectation.paramPtrs.ttl = &ttl
+	mmIssueHLSToken.defaultExpectation.expectationOrigins.originTtl = minimock.CallerInfo(1)
+
+	return mmIssueHLSToken
+}
+
+// Inspect accepts an inspector function that has same arguments as the Auth.IssueHLSToken
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) Inspect(f func(videoID uuid.UUID, ttl time.Duration)) *mAuthMockIssueHLSToken {
+	if mmIssueHLSToken.mock.inspectFuncIssueHLSToken != nil {
+		mmIssueHLSToken.mock.t.Fatalf("Inspect function is already set for AuthMock.IssueHLSToken")
+	}
+
+	mmIssueHLSToken.mock.inspectFuncIssueHLSToken = f
+
+	return mmIssueHLSToken
+}
+
+// Return sets up results that will be returned by Auth.IssueHLSToken
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) Return(s1 string, err error) *AuthMock {
+	if mmIssueHLSToken.mock.funcIssueHLSToken != nil {
+		mmIssueHLSToken.mock.t.Fatalf("AuthMock.IssueHLSToken mock is already set by Set")
+	}
+
+	if mmIssueHLSToken.defaultExpectation == nil {
+		mmIssueHLSToken.defaultExpectation = &AuthMockIssueHLSTokenExpectation{mock: mmIssueHLSToken.mock}
+	}
+	mmIssueHLSToken.defaultExpectation.results = &AuthMockIssueHLSTokenResults{s1, err}
+	mmIssueHLSToken.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmIssueHLSToken.mock
+}
+
+// Set uses given function f to mock the Auth.IssueHLSToken method
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) Set(f func(videoID uuid.UUID, ttl time.Duration) (s1 string, err error)) *AuthMock {
+	if mmIssueHLSToken.defaultExpectation != nil {
+		mmIssueHLSToken.mock.t.Fatalf("Default expectation is already set for the Auth.IssueHLSToken method")
+	}
+
+	if len(mmIssueHLSToken.expectations) > 0 {
+		mmIssueHLSToken.mock.t.Fatalf("Some expectations are already set for the Auth.IssueHLSToken method")
+	}
+
+	mmIssueHLSToken.mock.funcIssueHLSToken = f
+	mmIssueHLSToken.mock.funcIssueHLSTokenOrigin = minimock.CallerInfo(1)
+	return mmIssueHLSToken.mock
+}
+
+// When sets expectation for the Auth.IssueHLSToken which will trigger the result defined by the following
+// Then helper
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) When(videoID uuid.UUID, ttl time.Duration) *AuthMockIssueHLSTokenExpectation {
+	if mmIssueHLSToken.mock.funcIssueHLSToken != nil {
+		mmIssueHLSToken.mock.t.Fatalf("AuthMock.IssueHLSToken mock is already set by Set")
+	}
+
+	expectation := &AuthMockIssueHLSTokenExpectation{
+		mock:               mmIssueHLSToken.mock,
+		params:             &AuthMockIssueHLSTokenParams{videoID, ttl},
+		expectationOrigins: AuthMockIssueHLSTokenExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmIssueHLSToken.expectations = append(mmIssueHLSToken.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Auth.IssueHLSToken return parameters for the expectation previously defined by the When method
+func (e *AuthMockIssueHLSTokenExpectation) Then(s1 string, err error) *AuthMock {
+	e.results = &AuthMockIssueHLSTokenResults{s1, err}
+	return e.mock
+}
+
+// Times sets number of times Auth.IssueHLSToken should be invoked
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) Times(n uint64) *mAuthMockIssueHLSToken {
+	if n == 0 {
+		mmIssueHLSToken.mock.t.Fatalf("Times of AuthMock.IssueHLSToken mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmIssueHLSToken.expectedInvocations, n)
+	mmIssueHLSToken.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmIssueHLSToken
+}
+
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) invocationsDone() bool {
+	if len(mmIssueHLSToken.expectations) == 0 && mmIssueHLSToken.defaultExpectation == nil && mmIssueHLSToken.mock.funcIssueHLSToken == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmIssueHLSToken.mock.afterIssueHLSTokenCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmIssueHLSToken.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// IssueHLSToken implements mm_service.Auth
+func (mmIssueHLSToken *AuthMock) IssueHLSToken(videoID uuid.UUID, ttl time.Duration) (s1 string, err error) {
+	mm_atomic.AddUint64(&mmIssueHLSToken.beforeIssueHLSTokenCounter, 1)
+	defer mm_atomic.AddUint64(&mmIssueHLSToken.afterIssueHLSTokenCounter, 1)
+
+	mmIssueHLSToken.t.Helper()
+
+	if mmIssueHLSToken.inspectFuncIssueHLSToken != nil {
+		mmIssueHLSToken.inspectFuncIssueHLSToken(videoID, ttl)
+	}
+
+	mm_params := AuthMockIssueHLSTokenParams{videoID, ttl}
+
+	// Record call args
+	mmIssueHLSToken.IssueHLSTokenMock.mutex.Lock()
+	mmIssueHLSToken.IssueHLSTokenMock.callArgs = append(mmIssueHLSToken.IssueHLSTokenMock.callArgs, &mm_params)
+	mmIssueHLSToken.IssueHLSTokenMock.mutex.Unlock()
+
+	for _, e := range mmIssueHLSToken.IssueHLSTokenMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.s1, e.results.err
+		}
+	}
+
+	if mmIssueHLSToken.IssueHLSTokenMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmIssueHLSToken.IssueHLSTokenMock.defaultExpectation.Counter, 1)
+		mm_want := mmIssueHLSToken.IssueHLSTokenMock.defaultExpectation.params
+		mm_want_ptrs := mmIssueHLSToken.IssueHLSTokenMock.defaultExpectation.paramPtrs
+
+		mm_got := AuthMockIssueHLSTokenParams{videoID, ttl}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.videoID != nil && !minimock.Equal(*mm_want_ptrs.videoID, mm_got.videoID) {
+				mmIssueHLSToken.t.Errorf("AuthMock.IssueHLSToken got unexpected parameter videoID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIssueHLSToken.IssueHLSTokenMock.defaultExpectation.expectationOrigins.originVideoID, *mm_want_ptrs.videoID, mm_got.videoID, minimock.Diff(*mm_want_ptrs.videoID, mm_got.videoID))
+			}
+
+			if mm_want_ptrs.ttl != nil && !minimock.Equal(*mm_want_ptrs.ttl, mm_got.ttl) {
+				mmIssueHLSToken.t.Errorf("AuthMock.IssueHLSToken got unexpected parameter ttl, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIssueHLSToken.IssueHLSTokenMock.defaultExpectation.expectationOrigins.originTtl, *mm_want_ptrs.ttl, mm_got.ttl, minimock.Diff(*mm_want_ptrs.ttl, mm_got.ttl))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmIssueHLSToken.t.Errorf("AuthMock.IssueHLSToken got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmIssueHLSToken.IssueHLSTokenMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmIssueHLSToken.IssueHLSTokenMock.defaultExpectation.results
+		if mm_results == nil {
+			mmIssueHLSToken.t.Fatal("No results are set for the AuthMock.IssueHLSToken")
+		}
+		return (*mm_results).s1, (*mm_results).err
+	}
+	if mmIssueHLSToken.funcIssueHLSToken != nil {
+		return mmIssueHLSToken.funcIssueHLSToken(videoID, ttl)
+	}
+	mmIssueHLSToken.t.Fatalf("Unexpected call to AuthMock.IssueHLSToken. %v %v", videoID, ttl)
+	return
+}
+
+// IssueHLSTokenAfterCounter returns a count of finished AuthMock.IssueHLSToken invocations
+func (mmIssueHLSToken *AuthMock) IssueHLSTokenAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIssueHLSToken.afterIssueHLSTokenCounter)
+}
+
+// IssueHLSTokenBeforeCounter returns a count of AuthMock.IssueHLSToken invocations
+func (mmIssueHLSToken *AuthMock) IssueHLSTokenBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIssueHLSToken.beforeIssueHLSTokenCounter)
+}
+
+// Calls returns a list of arguments used in each call to AuthMock.IssueHLSToken.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmIssueHLSToken *mAuthMockIssueHLSToken) Calls() []*AuthMockIssueHLSTokenParams {
+	mmIssueHLSToken.mutex.RLock()
+
+	argCopy := make([]*AuthMockIssueHLSTokenParams, len(mmIssueHLSToken.callArgs))
+	copy(argCopy, mmIssueHLSToken.callArgs)
+
+	mmIssueHLSToken.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockIssueHLSTokenDone returns true if the count of the IssueHLSToken invocations corresponds
+// the number of defined expectations
+func (m *AuthMock) MinimockIssueHLSTokenDone() bool {
+	if m.IssueHLSTokenMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.IssueHLSTokenMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.IssueHLSTokenMock.invocationsDone()
+}
+
+// MinimockIssueHLSTokenInspect logs each unmet expectation
+func (m *AuthMock) MinimockIssueHLSTokenInspect() {
+	for _, e := range m.IssueHLSTokenMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AuthMock.IssueHLSToken at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterIssueHLSTokenCounter := mm_atomic.LoadUint64(&m.afterIssueHLSTokenCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.IssueHLSTokenMock.defaultExpectation != nil && afterIssueHLSTokenCounter < 1 {
+		if m.IssueHLSTokenMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AuthMock.IssueHLSToken at\n%s", m.IssueHLSTokenMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AuthMock.IssueHLSToken at\n%s with params: %#v", m.IssueHLSTokenMock.defaultExpectation.expectationOrigins.origin, *m.IssueHLSTokenMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcIssueHLSToken != nil && afterIssueHLSTokenCounter < 1 {
+		m.t.Errorf("Expected call to AuthMock.IssueHLSToken at\n%s", m.funcIssueHLSTokenOrigin)
+	}
+
+	if !m.IssueHLSTokenMock.invocationsDone() && afterIssueHLSTokenCounter > 0 {
+		m.t.Errorf("Expected %d calls to AuthMock.IssueHLSToken at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.IssueHLSTokenMock.expectedInvocations), m.IssueHLSTokenMock.expectedInvocationsOrigin, afterIssueHLSTokenCounter)
+	}
+}
+
 type mAuthMockLogin struct {
 	optional           bool
 	mock               *AuthMock
@@ -1994,6 +2358,318 @@ func (m *AuthMock) MinimockLoginInspect() {
 	}
 }
 
+type mAuthMockParseHLSToken struct {
+	optional           bool
+	mock               *AuthMock
+	defaultExpectation *AuthMockParseHLSTokenExpectation
+	expectations       []*AuthMockParseHLSTokenExpectation
+
+	callArgs []*AuthMockParseHLSTokenParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AuthMockParseHLSTokenExpectation specifies expectation struct of the Auth.ParseHLSToken
+type AuthMockParseHLSTokenExpectation struct {
+	mock               *AuthMock
+	params             *AuthMockParseHLSTokenParams
+	paramPtrs          *AuthMockParseHLSTokenParamPtrs
+	expectationOrigins AuthMockParseHLSTokenExpectationOrigins
+	results            *AuthMockParseHLSTokenResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AuthMockParseHLSTokenParams contains parameters of the Auth.ParseHLSToken
+type AuthMockParseHLSTokenParams struct {
+	token string
+}
+
+// AuthMockParseHLSTokenParamPtrs contains pointers to parameters of the Auth.ParseHLSToken
+type AuthMockParseHLSTokenParamPtrs struct {
+	token *string
+}
+
+// AuthMockParseHLSTokenResults contains results of the Auth.ParseHLSToken
+type AuthMockParseHLSTokenResults struct {
+	h1  domain.HLSClaims
+	err error
+}
+
+// AuthMockParseHLSTokenOrigins contains origins of expectations of the Auth.ParseHLSToken
+type AuthMockParseHLSTokenExpectationOrigins struct {
+	origin      string
+	originToken string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmParseHLSToken *mAuthMockParseHLSToken) Optional() *mAuthMockParseHLSToken {
+	mmParseHLSToken.optional = true
+	return mmParseHLSToken
+}
+
+// Expect sets up expected params for Auth.ParseHLSToken
+func (mmParseHLSToken *mAuthMockParseHLSToken) Expect(token string) *mAuthMockParseHLSToken {
+	if mmParseHLSToken.mock.funcParseHLSToken != nil {
+		mmParseHLSToken.mock.t.Fatalf("AuthMock.ParseHLSToken mock is already set by Set")
+	}
+
+	if mmParseHLSToken.defaultExpectation == nil {
+		mmParseHLSToken.defaultExpectation = &AuthMockParseHLSTokenExpectation{}
+	}
+
+	if mmParseHLSToken.defaultExpectation.paramPtrs != nil {
+		mmParseHLSToken.mock.t.Fatalf("AuthMock.ParseHLSToken mock is already set by ExpectParams functions")
+	}
+
+	mmParseHLSToken.defaultExpectation.params = &AuthMockParseHLSTokenParams{token}
+	mmParseHLSToken.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmParseHLSToken.expectations {
+		if minimock.Equal(e.params, mmParseHLSToken.defaultExpectation.params) {
+			mmParseHLSToken.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmParseHLSToken.defaultExpectation.params)
+		}
+	}
+
+	return mmParseHLSToken
+}
+
+// ExpectTokenParam1 sets up expected param token for Auth.ParseHLSToken
+func (mmParseHLSToken *mAuthMockParseHLSToken) ExpectTokenParam1(token string) *mAuthMockParseHLSToken {
+	if mmParseHLSToken.mock.funcParseHLSToken != nil {
+		mmParseHLSToken.mock.t.Fatalf("AuthMock.ParseHLSToken mock is already set by Set")
+	}
+
+	if mmParseHLSToken.defaultExpectation == nil {
+		mmParseHLSToken.defaultExpectation = &AuthMockParseHLSTokenExpectation{}
+	}
+
+	if mmParseHLSToken.defaultExpectation.params != nil {
+		mmParseHLSToken.mock.t.Fatalf("AuthMock.ParseHLSToken mock is already set by Expect")
+	}
+
+	if mmParseHLSToken.defaultExpectation.paramPtrs == nil {
+		mmParseHLSToken.defaultExpectation.paramPtrs = &AuthMockParseHLSTokenParamPtrs{}
+	}
+	mmParseHLSToken.defaultExpectation.paramPtrs.token = &token
+	mmParseHLSToken.defaultExpectation.expectationOrigins.originToken = minimock.CallerInfo(1)
+
+	return mmParseHLSToken
+}
+
+// Inspect accepts an inspector function that has same arguments as the Auth.ParseHLSToken
+func (mmParseHLSToken *mAuthMockParseHLSToken) Inspect(f func(token string)) *mAuthMockParseHLSToken {
+	if mmParseHLSToken.mock.inspectFuncParseHLSToken != nil {
+		mmParseHLSToken.mock.t.Fatalf("Inspect function is already set for AuthMock.ParseHLSToken")
+	}
+
+	mmParseHLSToken.mock.inspectFuncParseHLSToken = f
+
+	return mmParseHLSToken
+}
+
+// Return sets up results that will be returned by Auth.ParseHLSToken
+func (mmParseHLSToken *mAuthMockParseHLSToken) Return(h1 domain.HLSClaims, err error) *AuthMock {
+	if mmParseHLSToken.mock.funcParseHLSToken != nil {
+		mmParseHLSToken.mock.t.Fatalf("AuthMock.ParseHLSToken mock is already set by Set")
+	}
+
+	if mmParseHLSToken.defaultExpectation == nil {
+		mmParseHLSToken.defaultExpectation = &AuthMockParseHLSTokenExpectation{mock: mmParseHLSToken.mock}
+	}
+	mmParseHLSToken.defaultExpectation.results = &AuthMockParseHLSTokenResults{h1, err}
+	mmParseHLSToken.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmParseHLSToken.mock
+}
+
+// Set uses given function f to mock the Auth.ParseHLSToken method
+func (mmParseHLSToken *mAuthMockParseHLSToken) Set(f func(token string) (h1 domain.HLSClaims, err error)) *AuthMock {
+	if mmParseHLSToken.defaultExpectation != nil {
+		mmParseHLSToken.mock.t.Fatalf("Default expectation is already set for the Auth.ParseHLSToken method")
+	}
+
+	if len(mmParseHLSToken.expectations) > 0 {
+		mmParseHLSToken.mock.t.Fatalf("Some expectations are already set for the Auth.ParseHLSToken method")
+	}
+
+	mmParseHLSToken.mock.funcParseHLSToken = f
+	mmParseHLSToken.mock.funcParseHLSTokenOrigin = minimock.CallerInfo(1)
+	return mmParseHLSToken.mock
+}
+
+// When sets expectation for the Auth.ParseHLSToken which will trigger the result defined by the following
+// Then helper
+func (mmParseHLSToken *mAuthMockParseHLSToken) When(token string) *AuthMockParseHLSTokenExpectation {
+	if mmParseHLSToken.mock.funcParseHLSToken != nil {
+		mmParseHLSToken.mock.t.Fatalf("AuthMock.ParseHLSToken mock is already set by Set")
+	}
+
+	expectation := &AuthMockParseHLSTokenExpectation{
+		mock:               mmParseHLSToken.mock,
+		params:             &AuthMockParseHLSTokenParams{token},
+		expectationOrigins: AuthMockParseHLSTokenExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmParseHLSToken.expectations = append(mmParseHLSToken.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Auth.ParseHLSToken return parameters for the expectation previously defined by the When method
+func (e *AuthMockParseHLSTokenExpectation) Then(h1 domain.HLSClaims, err error) *AuthMock {
+	e.results = &AuthMockParseHLSTokenResults{h1, err}
+	return e.mock
+}
+
+// Times sets number of times Auth.ParseHLSToken should be invoked
+func (mmParseHLSToken *mAuthMockParseHLSToken) Times(n uint64) *mAuthMockParseHLSToken {
+	if n == 0 {
+		mmParseHLSToken.mock.t.Fatalf("Times of AuthMock.ParseHLSToken mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmParseHLSToken.expectedInvocations, n)
+	mmParseHLSToken.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmParseHLSToken
+}
+
+func (mmParseHLSToken *mAuthMockParseHLSToken) invocationsDone() bool {
+	if len(mmParseHLSToken.expectations) == 0 && mmParseHLSToken.defaultExpectation == nil && mmParseHLSToken.mock.funcParseHLSToken == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmParseHLSToken.mock.afterParseHLSTokenCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmParseHLSToken.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ParseHLSToken implements mm_service.Auth
+func (mmParseHLSToken *AuthMock) ParseHLSToken(token string) (h1 domain.HLSClaims, err error) {
+	mm_atomic.AddUint64(&mmParseHLSToken.beforeParseHLSTokenCounter, 1)
+	defer mm_atomic.AddUint64(&mmParseHLSToken.afterParseHLSTokenCounter, 1)
+
+	mmParseHLSToken.t.Helper()
+
+	if mmParseHLSToken.inspectFuncParseHLSToken != nil {
+		mmParseHLSToken.inspectFuncParseHLSToken(token)
+	}
+
+	mm_params := AuthMockParseHLSTokenParams{token}
+
+	// Record call args
+	mmParseHLSToken.ParseHLSTokenMock.mutex.Lock()
+	mmParseHLSToken.ParseHLSTokenMock.callArgs = append(mmParseHLSToken.ParseHLSTokenMock.callArgs, &mm_params)
+	mmParseHLSToken.ParseHLSTokenMock.mutex.Unlock()
+
+	for _, e := range mmParseHLSToken.ParseHLSTokenMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.h1, e.results.err
+		}
+	}
+
+	if mmParseHLSToken.ParseHLSTokenMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmParseHLSToken.ParseHLSTokenMock.defaultExpectation.Counter, 1)
+		mm_want := mmParseHLSToken.ParseHLSTokenMock.defaultExpectation.params
+		mm_want_ptrs := mmParseHLSToken.ParseHLSTokenMock.defaultExpectation.paramPtrs
+
+		mm_got := AuthMockParseHLSTokenParams{token}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.token != nil && !minimock.Equal(*mm_want_ptrs.token, mm_got.token) {
+				mmParseHLSToken.t.Errorf("AuthMock.ParseHLSToken got unexpected parameter token, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmParseHLSToken.ParseHLSTokenMock.defaultExpectation.expectationOrigins.originToken, *mm_want_ptrs.token, mm_got.token, minimock.Diff(*mm_want_ptrs.token, mm_got.token))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmParseHLSToken.t.Errorf("AuthMock.ParseHLSToken got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmParseHLSToken.ParseHLSTokenMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmParseHLSToken.ParseHLSTokenMock.defaultExpectation.results
+		if mm_results == nil {
+			mmParseHLSToken.t.Fatal("No results are set for the AuthMock.ParseHLSToken")
+		}
+		return (*mm_results).h1, (*mm_results).err
+	}
+	if mmParseHLSToken.funcParseHLSToken != nil {
+		return mmParseHLSToken.funcParseHLSToken(token)
+	}
+	mmParseHLSToken.t.Fatalf("Unexpected call to AuthMock.ParseHLSToken. %v", token)
+	return
+}
+
+// ParseHLSTokenAfterCounter returns a count of finished AuthMock.ParseHLSToken invocations
+func (mmParseHLSToken *AuthMock) ParseHLSTokenAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmParseHLSToken.afterParseHLSTokenCounter)
+}
+
+// ParseHLSTokenBeforeCounter returns a count of AuthMock.ParseHLSToken invocations
+func (mmParseHLSToken *AuthMock) ParseHLSTokenBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmParseHLSToken.beforeParseHLSTokenCounter)
+}
+
+// Calls returns a list of arguments used in each call to AuthMock.ParseHLSToken.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmParseHLSToken *mAuthMockParseHLSToken) Calls() []*AuthMockParseHLSTokenParams {
+	mmParseHLSToken.mutex.RLock()
+
+	argCopy := make([]*AuthMockParseHLSTokenParams, len(mmParseHLSToken.callArgs))
+	copy(argCopy, mmParseHLSToken.callArgs)
+
+	mmParseHLSToken.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockParseHLSTokenDone returns true if the count of the ParseHLSToken invocations corresponds
+// the number of defined expectations
+func (m *AuthMock) MinimockParseHLSTokenDone() bool {
+	if m.ParseHLSTokenMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ParseHLSTokenMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ParseHLSTokenMock.invocationsDone()
+}
+
+// MinimockParseHLSTokenInspect logs each unmet expectation
+func (m *AuthMock) MinimockParseHLSTokenInspect() {
+	for _, e := range m.ParseHLSTokenMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AuthMock.ParseHLSToken at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterParseHLSTokenCounter := mm_atomic.LoadUint64(&m.afterParseHLSTokenCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ParseHLSTokenMock.defaultExpectation != nil && afterParseHLSTokenCounter < 1 {
+		if m.ParseHLSTokenMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AuthMock.ParseHLSToken at\n%s", m.ParseHLSTokenMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AuthMock.ParseHLSToken at\n%s with params: %#v", m.ParseHLSTokenMock.defaultExpectation.expectationOrigins.origin, *m.ParseHLSTokenMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcParseHLSToken != nil && afterParseHLSTokenCounter < 1 {
+		m.t.Errorf("Expected call to AuthMock.ParseHLSToken at\n%s", m.funcParseHLSTokenOrigin)
+	}
+
+	if !m.ParseHLSTokenMock.invocationsDone() && afterParseHLSTokenCounter > 0 {
+		m.t.Errorf("Expected %d calls to AuthMock.ParseHLSToken at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ParseHLSTokenMock.expectedInvocations), m.ParseHLSTokenMock.expectedInvocationsOrigin, afterParseHLSTokenCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *AuthMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
@@ -2008,7 +2684,11 @@ func (m *AuthMock) MinimockFinish() {
 
 			m.MinimockHashPasswordInspect()
 
+			m.MinimockIssueHLSTokenInspect()
+
 			m.MinimockLoginInspect()
+
+			m.MinimockParseHLSTokenInspect()
 		}
 	})
 }
@@ -2037,5 +2717,7 @@ func (m *AuthMock) minimockDone() bool {
 		m.MinimockGenerateTokenDone() &&
 		m.MinimockGetClaimsFromTokenDone() &&
 		m.MinimockHashPasswordDone() &&
-		m.MinimockLoginDone()
+		m.MinimockIssueHLSTokenDone() &&
+		m.MinimockLoginDone() &&
+		m.MinimockParseHLSTokenDone()
 }

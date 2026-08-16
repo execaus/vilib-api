@@ -142,6 +142,54 @@ func (s *AuthService) GenerateToken(
 	return signedToken, nil
 }
 
+// IssueHLSToken выпускает короткоживущий JWT-токен доступа к HLS-плейлистам видео с claims
+// {purpose: "hls", video_id, exp} (§4.2 дизайна эпика). Подписывается тем же ключом, что и
+// обычные токены авторизации, но проверяется отдельным ParseHLSToken.
+func (s *AuthService) IssueHLSToken(videoID uuid.UUID, ttl time.Duration) (string, error) {
+	claims := domain.HLSClaims{
+		Purpose: domain.HLSTokenPurpose,
+		VideoID: videoID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signedToken, err := token.SignedString([]byte(s.secretKey))
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
+
+	return signedToken, nil
+}
+
+// ParseHLSToken проверяет подпись, срок действия и purpose HLS-токена. Любая проблема с
+// токеном (просрочен, битая подпись, неверный purpose) возвращается как ErrUnauthorized —
+// принадлежность токена конкретному видео проверяет вызывающий сервис отдельно.
+func (s *AuthService) ParseHLSToken(tokenString string) (domain.HLSClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &domain.HLSClaims{}, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			zap.L().Error(jwt.ErrTokenSignatureInvalid.Error())
+			return nil, jwt.ErrTokenSignatureInvalid
+		}
+		return []byte(s.secretKey), nil
+	})
+	if err != nil {
+		zap.L().Warn(err.Error())
+		return domain.HLSClaims{}, ErrUnauthorized
+	}
+
+	claims, ok := token.Claims.(*domain.HLSClaims)
+	if !ok || !token.Valid || claims.Purpose != domain.HLSTokenPurpose {
+		zap.L().Warn("invalid hls token claims")
+		return domain.HLSClaims{}, ErrUnauthorized
+	}
+
+	return *claims, nil
+}
+
 func (s *AuthService) ComparePassword(hashedPassword string, password string) bool {
 	// Проверка соответствия пароля хешу
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))

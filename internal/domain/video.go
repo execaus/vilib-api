@@ -87,6 +87,31 @@ type VideoUpload struct {
 	ExpiresAt time.Time
 }
 
+// VideoAccessKind определяет вид точки доступа к видео, возвращаемой Video.Get (§4.4 дизайна
+// эпика): "hls" — через мастер-плейлист по HLS-токену, "original" — преподписанный GET оригинала.
+type VideoAccessKind string
+
+const (
+	VideoAccessKindHLS      VideoAccessKind = "hls"
+	VideoAccessKindOriginal VideoAccessKind = "original"
+)
+
+// VideoAccess — результат Video.Get: точка доступа к видео, выбранная по статусу видео и
+// флагу is_prefer_original (§4.4 дизайна эпика). Handler собирает итоговый URL мастер-плейлиста
+// из HLSToken (сервису неизвестен адрес API), для оригинала — использует URL как есть.
+type VideoAccess struct {
+	Kind VideoAccessKind
+	// URL — преподписанный URL на оригинал в хранилище, заполняется только при Kind == original.
+	URL PreflightURL
+	// HLSToken — HLS-токен для запроса мастер-плейлиста, заполняется только при Kind == hls.
+	HLSToken  string
+	ExpiresAt time.Time
+	Video     Video
+	// Profiles — имена HLS-профилей видео по возрастанию качества, заполняется только при
+	// Kind == hls.
+	Profiles []string
+}
+
 // VideoPatch описывает опциональные поля частичного обновления видео при условном переходе
 // статуса (см. Video.UpdateStatusIf репозитория). Незаполненные поля не изменяются.
 type VideoPatch struct {

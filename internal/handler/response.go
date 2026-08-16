@@ -14,6 +14,7 @@ import (
 func sendServiceError(c *gin.Context, err error) {
 	var conflictError service.ConflictError
 	var forbiddenError *service.ForbiddenError
+	var unauthorizedError *service.UnauthorizedError
 	var validationError *service.ValidationError
 
 	if errors.Is(err, repository.ErrNotFound) || errors.Is(err, service.ErrNotFound) {
@@ -28,6 +29,11 @@ func sendServiceError(c *gin.Context, err error) {
 
 	if errors.As(err, &forbiddenError) {
 		sendForbidden(c, err.Error())
+		return
+	}
+
+	if errors.As(err, &unauthorizedError) {
+		sendUnauthorized(c)
 		return
 	}
 

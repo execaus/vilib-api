@@ -4,6 +4,24 @@ var (
 	ErrForbidden = NewForbiddenError("user creation is forbidden")
 )
 
+// UnauthorizedError — ошибка отсутствующей или недействительной аутентификации (HTTP 401):
+// например, просроченный или подделанный HLS-токен (§4.2 дизайна эпика).
+type UnauthorizedError struct {
+	message string
+}
+
+func NewUnauthorizedError(message string) *UnauthorizedError {
+	return &UnauthorizedError{message: message}
+}
+
+func (e UnauthorizedError) Error() string {
+	return e.message
+}
+
+// ErrUnauthorized — sentinel-ошибка недействительного HLS-токена (просрочен, битая подпись,
+// неверный purpose).
+var ErrUnauthorized = NewUnauthorizedError("unauthorized")
+
 type ConflictError struct {
 	message string
 }
