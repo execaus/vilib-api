@@ -569,7 +569,7 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}": {
             "get": {
-                "description": "Возвращает преподписанный URL для доступа к видео",
+                "description": "Возвращает точку доступа к видео по статусу (§4.4 дизайна эпика): для готового\nвидео без is_prefer_original — URL мастер-плейлиста HLS с HLS-токеном в query,\nиначе — преподписанный URL на оригинал. Возвращает 409, если видео недоступно\n(ещё загружается или обработка завершилась ошибкой без сохранённого оригинала).",
                 "consumes": [
                     "application/json"
                 ],
@@ -579,7 +579,7 @@ const docTemplate = `{
                 "tags": [
                     "videos"
                 ],
-                "summary": "Получение видео",
+                "summary": "Получение точки доступа к видео",
                 "parameters": [
                     {
                         "type": "string",
@@ -605,7 +605,7 @@ const docTemplate = `{
                     {
                         "type": "boolean",
                         "description": "Предпочитать оригинальное видео",
-                        "name": "prefer_original",
+                        "name": "is_prefer_original",
                         "in": "query"
                     }
                 ],
@@ -618,6 +618,30 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorMessage"
                         }
@@ -706,6 +730,173 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.ErrorMessage"
                         }
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}/hls/master.m3u8": {
+            "get": {
+                "description": "Отдаёт мастер-плейлист HLS-выдачи видео, переписывая URI вариантов ссылками\nс тем же HLS-токеном. Доступ проверяется токеном в query, а не заголовком\nAuthorization — ручка не проходит RequireAuthMiddleware (§4.2 дизайна эпика).",
+                "produces": [
+                    "application/vnd.apple.mpegurl"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "Мастер-плейлист HLS",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы пользователей",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "HLS-токен, выданный GET-ручкой видео",
+                        "name": "token",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Мастер-плейлист HLS",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}/hls/{profile}/playlist.m3u8": {
+            "get": {
+                "description": "Отдаёт медиаплейлист HLS-профиля видео, переписывая имена сегментов\nпреподписанными URL хранилища. Доступ проверяется HLS-токеном в query — ручка\nне проходит RequireAuthMiddleware (§4.2 дизайна эпика).",
+                "produces": [
+                    "application/vnd.apple.mpegurl"
+                ],
+                "tags": [
+                    "videos"
+                ],
+                "summary": "Медиаплейлист HLS-профиля",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы пользователей",
+                        "name": "groupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Имя профиля качества (например, 720p)",
+                        "name": "profile",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "HLS-токен, выданный GET-ручкой видео",
+                        "name": "token",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Медиаплейлист HLS-профиля",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
                     }
                 }
             }
@@ -1636,7 +1827,25 @@ const docTemplate = `{
         "dto.GetVideoResponse": {
             "type": "object",
             "properties": {
-                "presigned_url": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "profiles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "status_name": {
+                    "type": "string"
+                },
+                "url": {
                     "type": "string"
                 }
             }

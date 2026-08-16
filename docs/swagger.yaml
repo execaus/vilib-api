@@ -144,7 +144,19 @@ definitions:
     type: object
   dto.GetVideoResponse:
     properties:
-      presigned_url:
+      expires_at:
+        type: string
+      kind:
+        type: string
+      profiles:
+        items:
+          type: string
+        type: array
+      status:
+        type: integer
+      status_name:
+        type: string
+      url:
         type: string
     type: object
   dto.GroupMember:
@@ -572,7 +584,11 @@ paths:
     get:
       consumes:
       - application/json
-      description: Возвращает преподписанный URL для доступа к видео
+      description: |-
+        Возвращает точку доступа к видео по статусу (§4.4 дизайна эпика): для готового
+        видео без is_prefer_original — URL мастер-плейлиста HLS с HLS-токеном в query,
+        иначе — преподписанный URL на оригинал. Возвращает 409, если видео недоступно
+        (ещё загружается или обработка завершилась ошибкой без сохранённого оригинала).
       parameters:
       - description: ID аккаунта
         in: path
@@ -591,7 +607,7 @@ paths:
         type: string
       - description: Предпочитать оригинальное видео
         in: query
-        name: prefer_original
+        name: is_prefer_original
         type: boolean
       produces:
       - application/json
@@ -604,11 +620,27 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
-      summary: Получение видео
+      summary: Получение точки доступа к видео
       tags:
       - videos
   /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}/complete:
@@ -665,6 +697,125 @@ paths:
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
       summary: Подтверждение загрузки видео
+      tags:
+      - videos
+  /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}/hls/{profile}/playlist.m3u8:
+    get:
+      description: |-
+        Отдаёт медиаплейлист HLS-профиля видео, переписывая имена сегментов
+        преподписанными URL хранилища. Доступ проверяется HLS-токеном в query — ручка
+        не проходит RequireAuthMiddleware (§4.2 дизайна эпика).
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы пользователей
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: ID видео
+        in: path
+        name: videoId
+        required: true
+        type: string
+      - description: Имя профиля качества (например, 720p)
+        in: path
+        name: profile
+        required: true
+        type: string
+      - description: HLS-токен, выданный GET-ручкой видео
+        in: query
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/vnd.apple.mpegurl
+      responses:
+        "200":
+          description: Медиаплейлист HLS-профиля
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      summary: Медиаплейлист HLS-профиля
+      tags:
+      - videos
+  /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}/hls/master.m3u8:
+    get:
+      description: |-
+        Отдаёт мастер-плейлист HLS-выдачи видео, переписывая URI вариантов ссылками
+        с тем же HLS-токеном. Доступ проверяется токеном в query, а не заголовком
+        Authorization — ручка не проходит RequireAuthMiddleware (§4.2 дизайна эпика).
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы пользователей
+        in: path
+        name: groupId
+        required: true
+        type: string
+      - description: ID видео
+        in: path
+        name: videoId
+        required: true
+        type: string
+      - description: HLS-токен, выданный GET-ручкой видео
+        in: query
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/vnd.apple.mpegurl
+      responses:
+        "200":
+          description: Мастер-плейлист HLS
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      summary: Мастер-плейлист HLS
       tags:
       - videos
   /api/v1/accounts/{accountId}/user-groups/{userGroupId}:
