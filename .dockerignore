@@ -1,0 +1,15 @@
+.git
+.gitignore
+.golangci.yml
+.idea
+.vscode
+.DS_Store
+README.md
+Makefile
+bobgen.yaml
+config/config.yaml
+.env
+allure-results
+allure-report
+test-output.json
+research

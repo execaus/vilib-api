@@ -229,3 +229,38 @@ plugins:
   joins:
     disabled: true
 ```
+
+---
+
+## Docker
+
+Multi-stage `Dockerfile` в корне репозитория собирает два образа:
+
+- **финальный** (без `target`) — сам API: `golang:1.25-alpine` → `alpine`, непривилегированный
+  пользователь, слушает `:8080`. Конфиг-файл в образ не копируется — всё через переменные
+  окружения (`config.LoadConfig` умеет работать без файла).
+- **`migrate`** (`--target migrate`) — бинарь `goose` (v3.27.0, собран отдельной командой
+  `go install`, не через `go.mod` этого модуля — иначе в зависимости попали бы драйверы всех
+  СУБД, которые `cmd/goose` умеет поддерживать) и папка `migrations/`; применяет миграции и
+  завершается с кодом 0. Точка входа — `docker/migrate-entrypoint.sh`: читает `GOOSE_DRIVER` и
+  `GOOSE_DBSTRING` из окружения (как штатно умеет goose) и, если в `GOOSE_DBSTRING` не задан
+  `search_path`, добавляет `search_path=public` — так служебная таблица `goose_db_version`
+  (создаётся самим goose без схемы) всегда попадает в `public`, а не в `app`, как и при
+  локальных интеграционных тестах (`testutil.WithDB`). Таблицы самого приложения в миграциях
+  уже квалифицированы схемой (`app.<table>`), от `search_path` не зависят.
+
+go.mod зависит от приватного `github.com/execaus/vilib-events` — сборка требует SSH-форвардинга
+BuildKit, поэтому образ собирается только с `--ssh default` (доступ к агенту с ключом,
+у которого есть права на `github.com/execaus/vilib-events`):
+
+```bash
+docker build --ssh default -t vilib-api:dev .
+docker build --ssh default --target migrate -t vilib-api-migrate:dev .
+
+# или через Makefile
+make docker-build
+make docker-build-migrate
+```
+
+Проверка работоспособности контейнера API — `GET /api/health` (без авторизации, `200
+{"status":"ok"}`), в compose используется как `wget -qO- http://localhost:8080/api/health`.

@@ -10,6 +10,15 @@ bob:
 swagger:
 	swag init -g internal/handler/handler.go
 
+# Docker-образы (contract: build.target: migrate — стадия миграций goose, финальная стадия — API).
+# Сборка требует SSH-форвардинга BuildKit для доступа к приватному github.com/execaus/vilib-events.
+
+docker-build:
+	docker build --ssh default -t vilib-api:dev .
+
+docker-build-migrate:
+	docker build --ssh default --target migrate -t vilib-api-migrate:dev .
+
 # Allure Go reporting
 # Установка: go install github.com/robotomize/go-allure/cmd/golurectl@latest
 # Для просмотра отчётов: brew install allure (macOS) или sudo apt-get install allure (ubuntu)
