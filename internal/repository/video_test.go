@@ -385,6 +385,95 @@ func TestRepository_VideoAssetDeleteByVideoAndKinds_NoMatchingAssets_NoError(t *
 	})
 }
 
+// TestRepository_VideoAssetSelectByVideoIDs_GroupsAssetsByVideoWithFileData проверяет, что
+// SelectByVideoIDs одним батч-запросом возвращает ассеты нескольких видео вместе с данными
+// связанных файлов (Bucket, ObjectKey, ContentType, SizeBytes), не затрагивая ассеты видео вне
+// запрошенного списка (Э1-Т20).
+func TestRepository_VideoAssetSelectByVideoIDs_GroupsAssetsByVideoWithFileData(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		videoA := newTestVideo(t, r, f, domain.VideoStatusReady)
+		videoB := newTestVideo(t, r, f, domain.VideoStatusReady)
+		videoC := newTestVideo(t, r, f, domain.VideoStatusReady)
+
+		originalA, err := r.VideoAsset.Insert(
+			t.Context(),
+			videoA.ID,
+			domain.VideoAssetKindOriginal,
+			domain.VideoProfile(""),
+			"bucket",
+			"videos/"+videoA.ID.String()+"/original",
+			"video/mp4",
+			1024,
+		)
+		require.NoError(t, err)
+
+		variantB, err := r.VideoAsset.Insert(
+			t.Context(),
+			videoB.ID,
+			domain.VideoAssetKindHLSVariant,
+			domain.VideoProfile("720p"),
+			"bucket",
+			"videos/"+videoB.ID.String()+"/hls/720p/playlist.m3u8",
+			"application/vnd.apple.mpegurl",
+			2048,
+		)
+		require.NoError(t, err)
+
+		// Ассет видео C не входит в запрошенный список — не должен попасть в результат.
+		_, err = r.VideoAsset.Insert(
+			t.Context(),
+			videoC.ID,
+			domain.VideoAssetKindOriginal,
+			domain.VideoProfile(""),
+			"bucket",
+			"videos/"+videoC.ID.String()+"/original",
+			"video/mp4",
+			4096,
+		)
+		require.NoError(t, err)
+
+		assets, err := r.VideoAsset.SelectByVideoIDs(t.Context(), []uuid.UUID{videoA.ID, videoB.ID})
+		require.NoError(t, err)
+		require.Len(t, assets, 2)
+
+		byVideo := make(map[uuid.UUID]domain.VideoAsset, len(assets))
+		for _, asset := range assets {
+			byVideo[asset.VideoID] = asset
+		}
+
+		gotA, ok := byVideo[videoA.ID]
+		require.True(t, ok)
+		require.Equal(t, originalA.FileID, gotA.FileID)
+		require.Equal(t, domain.VideoAssetKindOriginal, gotA.Kind)
+		require.Equal(t, "bucket", gotA.Bucket)
+		require.Equal(t, "videos/"+videoA.ID.String()+"/original", gotA.ObjectKey)
+		require.Equal(t, "video/mp4", gotA.ContentType)
+		require.Equal(t, int64(1024), gotA.SizeBytes)
+
+		gotB, ok := byVideo[videoB.ID]
+		require.True(t, ok)
+		require.Equal(t, variantB.FileID, gotB.FileID)
+		require.Equal(t, domain.VideoAssetKindHLSVariant, gotB.Kind)
+		require.Equal(t, domain.VideoProfile("720p"), gotB.Profile)
+		require.Equal(t, int64(2048), gotB.SizeBytes)
+	})
+}
+
+// TestRepository_VideoAssetSelectByVideoIDs_EmptyList_ReturnsEmptyWithoutQuery проверяет, что
+// пустой список идентификаторов возвращает пустой результат без обращения к БД.
+func TestRepository_VideoAssetSelectByVideoIDs_EmptyList_ReturnsEmptyWithoutQuery(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
+		assets, err := r.VideoAsset.SelectByVideoIDs(t.Context(), nil)
+
+		require.NoError(t, err)
+		require.Empty(t, assets)
+	})
+}
+
 // backdateVideoTimestamp напрямую переписывает created_at/status_changed_at видео в обход
 // репозитория — нужно для тестов watchdog'а, где строка должна выглядеть "зависшей" дольше
 // таймаута. Прямой доступ к *bob.DB получают только тесты, использующие testutil.WithDB

@@ -167,6 +167,21 @@ type Video struct {
 	Height            *int
 }
 
+// VideoListItem — элемент списка видео группы (Э1-Т20, §5 дизайна эпика): видео вместе со
+// сведениями, вычисляемыми из его ассетов (Profiles, HasProcessed), и причиной сбоя, видимой
+// только инициатору с правом ManageVideo (Э1-Т17).
+type VideoListItem struct {
+	Video
+
+	// Profiles — имена HLS-профилей видео по возрастанию качества.
+	Profiles []string
+	// HasProcessed — признак наличия обработанной версии (готового мастер-плейлиста HLS).
+	HasProcessed bool
+	// Failure — причина сбоя обработки, заполняется только для инициатора с правом ManageVideo
+	// (аккаунтным или групповым); для остальных остаётся nil, даже если видео в статусе failed.
+	Failure *VideoFailure
+}
+
 type VideoAsset struct {
 	FileID      uuid.UUID
 	VideoID     uuid.UUID

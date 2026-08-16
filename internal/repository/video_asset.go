@@ -49,6 +49,63 @@ func (r *VideoAssetRepository) Select(ctx context.Context, videoID uuid.UUID) ([
 	return assets, nil
 }
 
+// SelectByVideoIDs выбирает ассеты сразу нескольких видео вместе с данными связанных файлов
+// (Э1-Т20, список видео группы). Вместо N+1-запроса на файл (как в Select) выполняется два
+// запроса: все ассеты по списку video_id, затем один батч-запрос files по собранным file_id.
+// Пустой список идентификаторов не порождает запроса к БД.
+func (r *VideoAssetRepository) SelectByVideoIDs(
+	ctx context.Context,
+	videoIDs []uuid.UUID,
+) ([]domain.VideoAsset, error) {
+	if len(videoIDs) == 0 {
+		return nil, nil
+	}
+
+	exec := r.provider.GetExecutor(ctx)
+
+	videoIDArgs := make([]bob.Expression, len(videoIDs))
+	for i, id := range videoIDs {
+		videoIDArgs[i] = psql.Arg(id)
+	}
+
+	assetsDB, err := schema.VideoAssets.Query(
+		sm.Where(schema.VideoAssets.Columns.VideoID.In(videoIDArgs...)),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	if len(assetsDB) == 0 {
+		return nil, nil
+	}
+
+	fileIDArgs := make([]bob.Expression, len(assetsDB))
+	for i, asset := range assetsDB {
+		fileIDArgs[i] = psql.Arg(asset.FileID)
+	}
+
+	filesDB, err := schema.Files.Query(
+		sm.Where(schema.Files.Columns.FileID.In(fileIDArgs...)),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	filesByID := make(map[uuid.UUID]*schema.File, len(filesDB))
+	for _, file := range filesDB {
+		filesByID[file.FileID] = file
+	}
+
+	assets := make([]domain.VideoAsset, len(assetsDB))
+	for i, asset := range assetsDB {
+		assets[i].FromDBWithFile(asset, filesByID[asset.FileID])
+	}
+
+	return assets, nil
+}
+
 // Insert регистрирует ассет видео: создаёт запись файла и связывает её с видео одной
 // операцией. Уникальность (video_id, kind, profile) обеспечивается ограничением БД —
 // повторная регистрация того же ассета возвращает ошибку нарушения уникальности.

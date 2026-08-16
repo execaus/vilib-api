@@ -144,7 +144,11 @@ type Video interface {
 	// GetHLSPlaylist проверяет HLS-токен и отдаёт медиаплейлист профиля с сегментами,
 	// переписанными на преподписанные URL хранилища (§4.2, §4.3 дизайна эпика).
 	GetHLSPlaylist(ctx context.Context, videoID uuid.UUID, profile domain.VideoProfile, token string) ([]byte, error)
-	GetAll(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) ([]domain.Video, error)
+	// GetAll возвращает список видео группы с профилями и признаком обработки, вычисленными
+	// из ассетов (Э1-Т20). Причина сбоя (Failure) заполняется только для инициатора с правом
+	// ManageVideo (аккаунтным или групповым) — иначе остаётся nil даже у видео в статусе
+	// failed (Э1-Т17).
+	GetAll(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) ([]domain.VideoListItem, error)
 	Rename(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID, name string) (domain.Video, error)
 	// Delete проверяет права ManageVideo, удаляет видео в БД и регистрирует best-effort
 	// зачистку его объектов в хранилище после коммита транзакции (Э1-Т21, §7.3 дизайна эпика).
@@ -180,6 +184,9 @@ type VideoAsset interface {
 		sizeBytes int64,
 	) (domain.VideoAsset, error)
 	Get(ctx context.Context, videoID uuid.UUID) ([]domain.VideoAsset, error)
+	// SelectByVideoIDs выбирает ассеты сразу нескольких видео вместе с данными связанных файлов
+	// (Э1-Т20, список видео группы). Пустой список идентификаторов не порождает запроса к БД.
+	SelectByVideoIDs(ctx context.Context, videoIDs []uuid.UUID) ([]domain.VideoAsset, error)
 	// DeleteByVideoAndKinds удаляет ассеты видео указанных видов вместе со связанными файлами —
 	// идемпотентная перерегистрация результатов обработки (Э1-Т14).
 	DeleteByVideoAndKinds(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind) error

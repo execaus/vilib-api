@@ -25,6 +25,18 @@ func (s *VideoAssetService) Get(ctx context.Context, videoID uuid.UUID) ([]domai
 	return assets, nil
 }
 
+// SelectByVideoIDs выбирает ассеты сразу нескольких видео вместе с данными связанных файлов
+// (Э1-Т20, список видео группы). Пустой список идентификаторов не порождает запроса к БД.
+func (s *VideoAssetService) SelectByVideoIDs(ctx context.Context, videoIDs []uuid.UUID) ([]domain.VideoAsset, error) {
+	assets, err := s.repo.SelectByVideoIDs(ctx, videoIDs)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return assets, nil
+}
+
 func NewVideoAssetService(repo repository.VideoAsset, srv *Service) *VideoAssetService {
 	return &VideoAssetService{repo: repo, srv: srv}
 }

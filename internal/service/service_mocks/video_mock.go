@@ -85,7 +85,7 @@ type VideoMock struct {
 	beforeGetCounter uint64
 	GetMock          mVideoMockGet
 
-	funcGetAll          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (va1 []domain.Video, err error)
+	funcGetAll          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (va1 []domain.VideoListItem, err error)
 	funcGetAllOrigin    string
 	inspectFuncGetAll   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID)
 	afterGetAllCounter  uint64
@@ -3841,7 +3841,7 @@ type VideoMockGetAllParamPtrs struct {
 
 // VideoMockGetAllResults contains results of the Video.GetAll
 type VideoMockGetAllResults struct {
-	va1 []domain.Video
+	va1 []domain.VideoListItem
 	err error
 }
 
@@ -3993,7 +3993,7 @@ func (mmGetAll *mVideoMockGetAll) Inspect(f func(ctx context.Context, accountID 
 }
 
 // Return sets up results that will be returned by Video.GetAll
-func (mmGetAll *mVideoMockGetAll) Return(va1 []domain.Video, err error) *VideoMock {
+func (mmGetAll *mVideoMockGetAll) Return(va1 []domain.VideoListItem, err error) *VideoMock {
 	if mmGetAll.mock.funcGetAll != nil {
 		mmGetAll.mock.t.Fatalf("VideoMock.GetAll mock is already set by Set")
 	}
@@ -4007,7 +4007,7 @@ func (mmGetAll *mVideoMockGetAll) Return(va1 []domain.Video, err error) *VideoMo
 }
 
 // Set uses given function f to mock the Video.GetAll method
-func (mmGetAll *mVideoMockGetAll) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (va1 []domain.Video, err error)) *VideoMock {
+func (mmGetAll *mVideoMockGetAll) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (va1 []domain.VideoListItem, err error)) *VideoMock {
 	if mmGetAll.defaultExpectation != nil {
 		mmGetAll.mock.t.Fatalf("Default expectation is already set for the Video.GetAll method")
 	}
@@ -4038,7 +4038,7 @@ func (mmGetAll *mVideoMockGetAll) When(ctx context.Context, accountID uuid.UUID,
 }
 
 // Then sets up Video.GetAll return parameters for the expectation previously defined by the When method
-func (e *VideoMockGetAllExpectation) Then(va1 []domain.Video, err error) *VideoMock {
+func (e *VideoMockGetAllExpectation) Then(va1 []domain.VideoListItem, err error) *VideoMock {
 	e.results = &VideoMockGetAllResults{va1, err}
 	return e.mock
 }
@@ -4065,7 +4065,7 @@ func (mmGetAll *mVideoMockGetAll) invocationsDone() bool {
 }
 
 // GetAll implements mm_service.Video
-func (mmGetAll *VideoMock) GetAll(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (va1 []domain.Video, err error) {
+func (mmGetAll *VideoMock) GetAll(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (va1 []domain.VideoListItem, err error) {
 	mm_atomic.AddUint64(&mmGetAll.beforeGetAllCounter, 1)
 	defer mm_atomic.AddUint64(&mmGetAll.afterGetAllCounter, 1)
 

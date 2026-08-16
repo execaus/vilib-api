@@ -1258,6 +1258,206 @@ func TestService_Video_Get(t *testing.T) {
 	})
 }
 
+// videoGetAllMocks собирает моки, используемые GetAll.
+type videoGetAllMocks struct {
+	Access      *service_mocks.AccessMock
+	GroupMember *service_mocks.GroupMemberMock
+	GroupRole   *service_mocks.GroupRoleMock
+	Video       *repository_mocks.VideoMock
+	VideoAsset  *service_mocks.VideoAssetMock
+}
+
+func newVideoGetAllMocks(mc *minimock.Controller) videoGetAllMocks {
+	return videoGetAllMocks{
+		Access:      service_mocks.NewAccessMock(mc),
+		GroupMember: service_mocks.NewGroupMemberMock(mc),
+		GroupRole:   service_mocks.NewGroupRoleMock(mc),
+		Video:       repository_mocks.NewVideoMock(mc),
+		VideoAsset:  service_mocks.NewVideoAssetMock(mc),
+	}
+}
+
+func newVideoGetAllService(m videoGetAllMocks) *service.VideoService {
+	svc := &service.Service{
+		Access:      m.Access,
+		GroupMember: m.GroupMember,
+		GroupRole:   m.GroupRole,
+		VideoAsset:  m.VideoAsset,
+	}
+	return service.NewVideoService(nil, m.Video, svc, service.VideoServiceConfig{})
+}
+
+// TestService_Video_GetAll проверяет сборку списка видео группы (Э1-Т20, §5 дизайна эпика):
+// профили и признак обработки собираются из ассетов, причина сбоя (Failure) видна только
+// инициатору с правом ManageVideo (аккаунтным или групповым) — иначе остаётся nil даже у видео
+// в статусе failed (Э1-Т17).
+func TestService_Video_GetAll(t *testing.T) {
+	t.Parallel()
+
+	testAccountID := uuid.New()
+	testGroupID := uuid.New()
+	testInitiatorID := uuid.New()
+
+	failureClass := domain.VideoFailureClassPermanent
+	failureReason := "unsupported codec"
+
+	videoA := domain.Video{
+		ID: uuid.New(), GroupID: testGroupID, Name: "a",
+		Status: domain.VideoStatusFailed, FailureClass: &failureClass, FailureReason: &failureReason,
+	}
+	videoB := domain.Video{ID: uuid.New(), GroupID: testGroupID, Name: "b", Status: domain.VideoStatusReady}
+
+	assets := []domain.VideoAsset{
+		{VideoID: videoA.ID, Kind: domain.VideoAssetKindOriginal},
+		{VideoID: videoB.ID, Kind: domain.VideoAssetKindHLSMaster},
+		{VideoID: videoB.ID, Kind: domain.VideoAssetKindHLSVariant, Profile: "720p"},
+		{VideoID: videoB.ID, Kind: domain.VideoAssetKindHLSVariant, Profile: "360p"},
+	}
+
+	grantWatch := func(m videoGetAllMocks) {
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionVideoWatch).
+			Then(nil)
+	}
+
+	t.Run("forbidden without video watch right", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoGetAllMocks(mc)
+
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionVideoWatch).
+			Then(service.ErrForbidden)
+		m.GroupMember.GetByUserIDAndGroupIDMock.
+			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
+			Return(domain.GroupMember{}, service.ErrForbidden)
+
+		videoSvc := newVideoGetAllService(m)
+
+		_, err := videoSvc.GetAll(t.Context(), testAccountID, testGroupID, testInitiatorID)
+
+		require.ErrorIs(t, err, service.ErrForbidden)
+	})
+
+	t.Run("hides failure and returns sorted profiles without manage video right", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoGetAllMocks(mc)
+
+		grantWatch(m)
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Then(service.ErrForbidden)
+		m.GroupMember.GetByUserIDAndGroupIDMock.
+			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
+			Return(domain.GroupMember{}, service.ErrForbidden)
+
+		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA, videoB}, nil)
+		m.VideoAsset.SelectByVideoIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{videoA.ID, videoB.ID}).
+			Return(assets, nil)
+
+		videoSvc := newVideoGetAllService(m)
+
+		got, err := videoSvc.GetAll(t.Context(), testAccountID, testGroupID, testInitiatorID)
+
+		require.NoError(t, err)
+		require.Len(t, got, 2)
+		require.Nil(t, got[0].Failure)
+		require.False(t, got[0].HasProcessed)
+		require.Empty(t, got[0].Profiles)
+		require.True(t, got[1].HasProcessed)
+		require.Equal(t, []string{"360p", "720p"}, got[1].Profiles)
+	})
+
+	t.Run("fills failure for initiator with account manage video right", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoGetAllMocks(mc)
+
+		grantWatch(m)
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Then(nil)
+
+		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA, videoB}, nil)
+		m.VideoAsset.SelectByVideoIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{videoA.ID, videoB.ID}).
+			Return(assets, nil)
+
+		videoSvc := newVideoGetAllService(m)
+
+		got, err := videoSvc.GetAll(t.Context(), testAccountID, testGroupID, testInitiatorID)
+
+		require.NoError(t, err)
+		require.Len(t, got, 2)
+		require.NotNil(t, got[0].Failure)
+		require.Equal(t, domain.VideoFailureClassPermanent, got[0].Failure.Class)
+		require.Equal(t, "unsupported codec", got[0].Failure.Reason)
+		require.Nil(t, got[1].Failure)
+	})
+
+	t.Run("fills failure for initiator with group manage video right", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoGetAllMocks(mc)
+
+		grantWatch(m)
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Then(service.ErrForbidden)
+
+		roleID := uuid.New()
+		m.GroupMember.GetByUserIDAndGroupIDMock.
+			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
+			Return(domain.GroupMember{RoleID: roleID}, nil)
+		m.GroupRole.GetByIDMock.
+			Expect(minimock.AnyContext, roleID).
+			Return([]domain.GroupRole{{PermissionMask: domain.PermissionMask(1 << domain.GroupPermissionManageVideo)}}, nil)
+
+		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA}, nil)
+		m.VideoAsset.SelectByVideoIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{videoA.ID}).
+			Return(nil, nil)
+
+		videoSvc := newVideoGetAllService(m)
+
+		got, err := videoSvc.GetAll(t.Context(), testAccountID, testGroupID, testInitiatorID)
+
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		require.NotNil(t, got[0].Failure)
+	})
+
+	t.Run("video asset select error propagates", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoGetAllMocks(mc)
+
+		grantWatch(m)
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Then(nil)
+
+		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA}, nil)
+		wantErr := errors.New("assets unavailable")
+		m.VideoAsset.SelectByVideoIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{videoA.ID}).
+			Return(nil, wantErr)
+
+		videoSvc := newVideoGetAllService(m)
+
+		_, err := videoSvc.GetAll(t.Context(), testAccountID, testGroupID, testInitiatorID)
+
+		require.ErrorIs(t, err, wantErr)
+	})
+}
+
 // videoHLSMocks собирает моки, используемые GetHLSMaster/GetHLSPlaylist.
 type videoHLSMocks struct {
 	Auth       *service_mocks.AuthMock

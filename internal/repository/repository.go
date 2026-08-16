@@ -118,6 +118,9 @@ type Video interface {
 
 type VideoAsset interface {
 	Select(ctx context.Context, videoID uuid.UUID) ([]domain.VideoAsset, error)
+	// SelectByVideoIDs выбирает ассеты сразу нескольких видео вместе с данными связанных файлов
+	// (Э1-Т20, список видео группы). Пустой список идентификаторов не порождает запроса к БД.
+	SelectByVideoIDs(ctx context.Context, videoIDs []uuid.UUID) ([]domain.VideoAsset, error)
 	Insert(
 		ctx context.Context,
 		videoID uuid.UUID,

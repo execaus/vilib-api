@@ -818,10 +818,14 @@ func (s *VideoService) requeueAfterTemporaryFailure(ctx context.Context, videoID
 	})
 }
 
+// GetAll возвращает список видео группы (Э1-Т20, §5 дизайна эпика): профили и признак
+// обработки вычисляются из ассетов видео, причина сбоя (Failure) заполняется только для
+// инициатора с правом ManageVideo (аккаунтным или групповым) — иначе остаётся nil даже у
+// видео в статусе failed (Э1-Т17).
 func (s *VideoService) GetAll(
 	ctx context.Context,
 	accountID, groupID, initiatorID uuid.UUID,
-) ([]domain.Video, error) {
+) ([]domain.VideoListItem, error) {
 	// OR-логика: аккаунтное право ИЛИ групповое право
 	if err := s.srv.Access.IsCheckAccountAction(
 		ctx,
@@ -834,6 +838,8 @@ func (s *VideoService) GetAll(
 		}
 	}
 
+	canManage := s.canManageVideo(ctx, accountID, groupID, initiatorID)
+
 	// Получение списка видео группы
 	videos, err := s.repo.SelectByGroupID(ctx, groupID)
 	if err != nil {
@@ -841,7 +847,65 @@ func (s *VideoService) GetAll(
 		return nil, err
 	}
 
-	return videos, nil
+	videoIDs := make([]uuid.UUID, len(videos))
+	for i, video := range videos {
+		videoIDs[i] = video.ID
+	}
+
+	assets, err := s.srv.VideoAsset.SelectByVideoIDs(ctx, videoIDs)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	assetsByVideo := make(map[uuid.UUID][]domain.VideoAsset, len(videos))
+	for _, asset := range assets {
+		assetsByVideo[asset.VideoID] = append(assetsByVideo[asset.VideoID], asset)
+	}
+
+	items := make([]domain.VideoListItem, len(videos))
+	for i, video := range videos {
+		items[i] = newVideoListItem(video, assetsByVideo[video.ID], canManage)
+	}
+
+	return items, nil
+}
+
+// newVideoListItem собирает элемент списка видео (Э1-Т20): профили и признак обработки — из
+// ассетов видео, причина сбоя — только если canManage и у видео есть класс ошибки (Э1-Т17).
+func newVideoListItem(video domain.Video, assets []domain.VideoAsset, canManage bool) domain.VideoListItem {
+	item := domain.VideoListItem{
+		Video:        video,
+		Profiles:     variantProfiles(assets),
+		HasProcessed: findAssetByKind(assets, domain.VideoAssetKindHLSMaster) != nil,
+	}
+
+	if canManage && video.FailureClass != nil {
+		reason := ""
+		if video.FailureReason != nil {
+			reason = *video.FailureReason
+		}
+		item.Failure = &domain.VideoFailure{Class: *video.FailureClass, Reason: reason}
+	}
+
+	return item
+}
+
+// canManageVideo определяет, доступно ли инициатору право ManageVideo — аккаунтное или
+// групповое (OR-логика) — без возврата ошибки. Используется там, где отсутствие права не
+// запрещает действие целиком, а лишь скрывает часть ответа (Э1-Т17: причина сбоя видна только
+// с ManageVideo).
+func (s *VideoService) canManageVideo(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) bool {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageVideo,
+	); err == nil {
+		return true
+	}
+
+	return s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo) == nil
 }
 
 func (s *VideoService) Rename(
