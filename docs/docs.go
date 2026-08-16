@@ -15,6 +15,26 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/health": {
+            "get": {
+                "description": "Возвращает 200, если процесс API запущен и обрабатывает запросы; используется healthcheck'ом контейнера",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Проверка работоспособности сервиса",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/accounts/{accountId}/roles": {
             "get": {
                 "description": "Возвращает список всех ролей аккаунта",
@@ -1863,6 +1883,15 @@ const docTemplate = `{
                 },
                 "permission_mask": {
                     "$ref": "#/definitions/domain.PermissionMask"
+                }
+            }
+        },
+        "dto.HealthResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "description": "Status — состояние сервиса, при успешной проверке всегда \"ok\".",
+                    "type": "string"
                 }
             }
         },

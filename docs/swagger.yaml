@@ -181,6 +181,12 @@ definitions:
       permission_mask:
         $ref: '#/definitions/domain.PermissionMask'
     type: object
+  dto.HealthResponse:
+    properties:
+      status:
+        description: Status — состояние сервиса, при успешной проверке всегда "ok".
+        type: string
+    type: object
   dto.LoginRequest:
     properties:
       email:
@@ -353,6 +359,20 @@ info:
   title: Vilib API
   version: "1.0"
 paths:
+  /api/health:
+    get:
+      description: Возвращает 200, если процесс API запущен и обрабатывает запросы;
+        используется healthcheck'ом контейнера
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.HealthResponse'
+      summary: Проверка работоспособности сервиса
+      tags:
+      - health
   /api/v1/accounts/{accountId}/roles:
     get:
       description: Возвращает список всех ролей аккаунта

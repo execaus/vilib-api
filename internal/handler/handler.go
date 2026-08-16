@@ -76,6 +76,9 @@ func (h *Handler) GetRouter() *gin.Engine {
 
 	api := engine.Group("api")
 
+	// Ручка без авторизации для healthcheck'а контейнера (§10.1 дизайна эпика).
+	api.GET("/health", h.Health)
+
 	api.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	v1 := api.Group(APIVersion1)
