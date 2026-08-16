@@ -8,6 +8,7 @@ import (
 	"context"
 	"sync"
 	mm_atomic "sync/atomic"
+	"time"
 	mm_time "time"
 	"vilib-api/internal/domain"
 
@@ -62,6 +63,20 @@ type VideoMock struct {
 	afterDeleteCounter  uint64
 	beforeDeleteCounter uint64
 	DeleteMock          mVideoMockDelete
+
+	funcDeleteObjectsAfterCommit          func(ctx context.Context, videoIDs ...uuid.UUID)
+	funcDeleteObjectsAfterCommitOrigin    string
+	inspectFuncDeleteObjectsAfterCommit   func(ctx context.Context, videoIDs ...uuid.UUID)
+	afterDeleteObjectsAfterCommitCounter  uint64
+	beforeDeleteObjectsAfterCommitCounter uint64
+	DeleteObjectsAfterCommitMock          mVideoMockDeleteObjectsAfterCommit
+
+	funcFailTimedOut          func(ctx context.Context, now time.Time) (t1 domain.TimedOutReport, err error)
+	funcFailTimedOutOrigin    string
+	inspectFuncFailTimedOut   func(ctx context.Context, now time.Time)
+	afterFailTimedOutCounter  uint64
+	beforeFailTimedOutCounter uint64
+	FailTimedOutMock          mVideoMockFailTimedOut
 
 	funcGet          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, isPreferOriginal bool) (v1 domain.VideoAccess, err error)
 	funcGetOrigin    string
@@ -124,6 +139,12 @@ func NewVideoMock(t minimock.Tester) *VideoMock {
 
 	m.DeleteMock = mVideoMockDelete{mock: m}
 	m.DeleteMock.callArgs = []*VideoMockDeleteParams{}
+
+	m.DeleteObjectsAfterCommitMock = mVideoMockDeleteObjectsAfterCommit{mock: m}
+	m.DeleteObjectsAfterCommitMock.callArgs = []*VideoMockDeleteObjectsAfterCommitParams{}
+
+	m.FailTimedOutMock = mVideoMockFailTimedOut{mock: m}
+	m.FailTimedOutMock.callArgs = []*VideoMockFailTimedOutParams{}
 
 	m.GetMock = mVideoMockGet{mock: m}
 	m.GetMock.callArgs = []*VideoMockGetParams{}
@@ -2633,6 +2654,684 @@ func (m *VideoMock) MinimockDeleteInspect() {
 	}
 }
 
+type mVideoMockDeleteObjectsAfterCommit struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockDeleteObjectsAfterCommitExpectation
+	expectations       []*VideoMockDeleteObjectsAfterCommitExpectation
+
+	callArgs []*VideoMockDeleteObjectsAfterCommitParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockDeleteObjectsAfterCommitExpectation specifies expectation struct of the Video.DeleteObjectsAfterCommit
+type VideoMockDeleteObjectsAfterCommitExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockDeleteObjectsAfterCommitParams
+	paramPtrs          *VideoMockDeleteObjectsAfterCommitParamPtrs
+	expectationOrigins VideoMockDeleteObjectsAfterCommitExpectationOrigins
+
+	returnOrigin string
+	Counter      uint64
+}
+
+// VideoMockDeleteObjectsAfterCommitParams contains parameters of the Video.DeleteObjectsAfterCommit
+type VideoMockDeleteObjectsAfterCommitParams struct {
+	ctx      context.Context
+	videoIDs []uuid.UUID
+}
+
+// VideoMockDeleteObjectsAfterCommitParamPtrs contains pointers to parameters of the Video.DeleteObjectsAfterCommit
+type VideoMockDeleteObjectsAfterCommitParamPtrs struct {
+	ctx      *context.Context
+	videoIDs *[]uuid.UUID
+}
+
+// VideoMockDeleteObjectsAfterCommitOrigins contains origins of expectations of the Video.DeleteObjectsAfterCommit
+type VideoMockDeleteObjectsAfterCommitExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originVideoIDs string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) Optional() *mVideoMockDeleteObjectsAfterCommit {
+	mmDeleteObjectsAfterCommit.optional = true
+	return mmDeleteObjectsAfterCommit
+}
+
+// Expect sets up expected params for Video.DeleteObjectsAfterCommit
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) Expect(ctx context.Context, videoIDs ...uuid.UUID) *mVideoMockDeleteObjectsAfterCommit {
+	if mmDeleteObjectsAfterCommit.mock.funcDeleteObjectsAfterCommit != nil {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("VideoMock.DeleteObjectsAfterCommit mock is already set by Set")
+	}
+
+	if mmDeleteObjectsAfterCommit.defaultExpectation == nil {
+		mmDeleteObjectsAfterCommit.defaultExpectation = &VideoMockDeleteObjectsAfterCommitExpectation{}
+	}
+
+	if mmDeleteObjectsAfterCommit.defaultExpectation.paramPtrs != nil {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("VideoMock.DeleteObjectsAfterCommit mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteObjectsAfterCommit.defaultExpectation.params = &VideoMockDeleteObjectsAfterCommitParams{ctx, videoIDs}
+	mmDeleteObjectsAfterCommit.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteObjectsAfterCommit.expectations {
+		if minimock.Equal(e.params, mmDeleteObjectsAfterCommit.defaultExpectation.params) {
+			mmDeleteObjectsAfterCommit.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteObjectsAfterCommit.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteObjectsAfterCommit
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.DeleteObjectsAfterCommit
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) ExpectCtxParam1(ctx context.Context) *mVideoMockDeleteObjectsAfterCommit {
+	if mmDeleteObjectsAfterCommit.mock.funcDeleteObjectsAfterCommit != nil {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("VideoMock.DeleteObjectsAfterCommit mock is already set by Set")
+	}
+
+	if mmDeleteObjectsAfterCommit.defaultExpectation == nil {
+		mmDeleteObjectsAfterCommit.defaultExpectation = &VideoMockDeleteObjectsAfterCommitExpectation{}
+	}
+
+	if mmDeleteObjectsAfterCommit.defaultExpectation.params != nil {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("VideoMock.DeleteObjectsAfterCommit mock is already set by Expect")
+	}
+
+	if mmDeleteObjectsAfterCommit.defaultExpectation.paramPtrs == nil {
+		mmDeleteObjectsAfterCommit.defaultExpectation.paramPtrs = &VideoMockDeleteObjectsAfterCommitParamPtrs{}
+	}
+	mmDeleteObjectsAfterCommit.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteObjectsAfterCommit.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDeleteObjectsAfterCommit
+}
+
+// ExpectVideoIDsParam2 sets up expected param videoIDs for Video.DeleteObjectsAfterCommit
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) ExpectVideoIDsParam2(videoIDs ...uuid.UUID) *mVideoMockDeleteObjectsAfterCommit {
+	if mmDeleteObjectsAfterCommit.mock.funcDeleteObjectsAfterCommit != nil {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("VideoMock.DeleteObjectsAfterCommit mock is already set by Set")
+	}
+
+	if mmDeleteObjectsAfterCommit.defaultExpectation == nil {
+		mmDeleteObjectsAfterCommit.defaultExpectation = &VideoMockDeleteObjectsAfterCommitExpectation{}
+	}
+
+	if mmDeleteObjectsAfterCommit.defaultExpectation.params != nil {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("VideoMock.DeleteObjectsAfterCommit mock is already set by Expect")
+	}
+
+	if mmDeleteObjectsAfterCommit.defaultExpectation.paramPtrs == nil {
+		mmDeleteObjectsAfterCommit.defaultExpectation.paramPtrs = &VideoMockDeleteObjectsAfterCommitParamPtrs{}
+	}
+	mmDeleteObjectsAfterCommit.defaultExpectation.paramPtrs.videoIDs = &videoIDs
+	mmDeleteObjectsAfterCommit.defaultExpectation.expectationOrigins.originVideoIDs = minimock.CallerInfo(1)
+
+	return mmDeleteObjectsAfterCommit
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.DeleteObjectsAfterCommit
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) Inspect(f func(ctx context.Context, videoIDs ...uuid.UUID)) *mVideoMockDeleteObjectsAfterCommit {
+	if mmDeleteObjectsAfterCommit.mock.inspectFuncDeleteObjectsAfterCommit != nil {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("Inspect function is already set for VideoMock.DeleteObjectsAfterCommit")
+	}
+
+	mmDeleteObjectsAfterCommit.mock.inspectFuncDeleteObjectsAfterCommit = f
+
+	return mmDeleteObjectsAfterCommit
+}
+
+// Return sets up results that will be returned by Video.DeleteObjectsAfterCommit
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) Return() *VideoMock {
+	if mmDeleteObjectsAfterCommit.mock.funcDeleteObjectsAfterCommit != nil {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("VideoMock.DeleteObjectsAfterCommit mock is already set by Set")
+	}
+
+	if mmDeleteObjectsAfterCommit.defaultExpectation == nil {
+		mmDeleteObjectsAfterCommit.defaultExpectation = &VideoMockDeleteObjectsAfterCommitExpectation{mock: mmDeleteObjectsAfterCommit.mock}
+	}
+
+	mmDeleteObjectsAfterCommit.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteObjectsAfterCommit.mock
+}
+
+// Set uses given function f to mock the Video.DeleteObjectsAfterCommit method
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) Set(f func(ctx context.Context, videoIDs ...uuid.UUID)) *VideoMock {
+	if mmDeleteObjectsAfterCommit.defaultExpectation != nil {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("Default expectation is already set for the Video.DeleteObjectsAfterCommit method")
+	}
+
+	if len(mmDeleteObjectsAfterCommit.expectations) > 0 {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("Some expectations are already set for the Video.DeleteObjectsAfterCommit method")
+	}
+
+	mmDeleteObjectsAfterCommit.mock.funcDeleteObjectsAfterCommit = f
+	mmDeleteObjectsAfterCommit.mock.funcDeleteObjectsAfterCommitOrigin = minimock.CallerInfo(1)
+	return mmDeleteObjectsAfterCommit.mock
+}
+
+// When sets expectation for the Video.DeleteObjectsAfterCommit which will trigger the result defined by the following
+// Then helper
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) When(ctx context.Context, videoIDs ...uuid.UUID) *VideoMockDeleteObjectsAfterCommitExpectation {
+	if mmDeleteObjectsAfterCommit.mock.funcDeleteObjectsAfterCommit != nil {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("VideoMock.DeleteObjectsAfterCommit mock is already set by Set")
+	}
+
+	expectation := &VideoMockDeleteObjectsAfterCommitExpectation{
+		mock:               mmDeleteObjectsAfterCommit.mock,
+		params:             &VideoMockDeleteObjectsAfterCommitParams{ctx, videoIDs},
+		expectationOrigins: VideoMockDeleteObjectsAfterCommitExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDeleteObjectsAfterCommit.expectations = append(mmDeleteObjectsAfterCommit.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.DeleteObjectsAfterCommit return parameters for the expectation previously defined by the When method
+
+func (e *VideoMockDeleteObjectsAfterCommitExpectation) Then() *VideoMock {
+	return e.mock
+}
+
+// Times sets number of times Video.DeleteObjectsAfterCommit should be invoked
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) Times(n uint64) *mVideoMockDeleteObjectsAfterCommit {
+	if n == 0 {
+		mmDeleteObjectsAfterCommit.mock.t.Fatalf("Times of VideoMock.DeleteObjectsAfterCommit mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteObjectsAfterCommit.expectedInvocations, n)
+	mmDeleteObjectsAfterCommit.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteObjectsAfterCommit
+}
+
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) invocationsDone() bool {
+	if len(mmDeleteObjectsAfterCommit.expectations) == 0 && mmDeleteObjectsAfterCommit.defaultExpectation == nil && mmDeleteObjectsAfterCommit.mock.funcDeleteObjectsAfterCommit == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteObjectsAfterCommit.mock.afterDeleteObjectsAfterCommitCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteObjectsAfterCommit.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteObjectsAfterCommit implements mm_service.Video
+func (mmDeleteObjectsAfterCommit *VideoMock) DeleteObjectsAfterCommit(ctx context.Context, videoIDs ...uuid.UUID) {
+	mm_atomic.AddUint64(&mmDeleteObjectsAfterCommit.beforeDeleteObjectsAfterCommitCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteObjectsAfterCommit.afterDeleteObjectsAfterCommitCounter, 1)
+
+	mmDeleteObjectsAfterCommit.t.Helper()
+
+	if mmDeleteObjectsAfterCommit.inspectFuncDeleteObjectsAfterCommit != nil {
+		mmDeleteObjectsAfterCommit.inspectFuncDeleteObjectsAfterCommit(ctx, videoIDs...)
+	}
+
+	mm_params := VideoMockDeleteObjectsAfterCommitParams{ctx, videoIDs}
+
+	// Record call args
+	mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.mutex.Lock()
+	mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.callArgs = append(mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.callArgs, &mm_params)
+	mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.mutex.Unlock()
+
+	for _, e := range mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return
+		}
+	}
+
+	if mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockDeleteObjectsAfterCommitParams{ctx, videoIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteObjectsAfterCommit.t.Errorf("VideoMock.DeleteObjectsAfterCommit got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.videoIDs != nil && !minimock.Equal(*mm_want_ptrs.videoIDs, mm_got.videoIDs) {
+				mmDeleteObjectsAfterCommit.t.Errorf("VideoMock.DeleteObjectsAfterCommit got unexpected parameter videoIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.defaultExpectation.expectationOrigins.originVideoIDs, *mm_want_ptrs.videoIDs, mm_got.videoIDs, minimock.Diff(*mm_want_ptrs.videoIDs, mm_got.videoIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteObjectsAfterCommit.t.Errorf("VideoMock.DeleteObjectsAfterCommit got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteObjectsAfterCommit.DeleteObjectsAfterCommitMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		return
+
+	}
+	if mmDeleteObjectsAfterCommit.funcDeleteObjectsAfterCommit != nil {
+		mmDeleteObjectsAfterCommit.funcDeleteObjectsAfterCommit(ctx, videoIDs...)
+		return
+	}
+	mmDeleteObjectsAfterCommit.t.Fatalf("Unexpected call to VideoMock.DeleteObjectsAfterCommit. %v %v", ctx, videoIDs)
+
+}
+
+// DeleteObjectsAfterCommitAfterCounter returns a count of finished VideoMock.DeleteObjectsAfterCommit invocations
+func (mmDeleteObjectsAfterCommit *VideoMock) DeleteObjectsAfterCommitAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteObjectsAfterCommit.afterDeleteObjectsAfterCommitCounter)
+}
+
+// DeleteObjectsAfterCommitBeforeCounter returns a count of VideoMock.DeleteObjectsAfterCommit invocations
+func (mmDeleteObjectsAfterCommit *VideoMock) DeleteObjectsAfterCommitBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteObjectsAfterCommit.beforeDeleteObjectsAfterCommitCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.DeleteObjectsAfterCommit.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteObjectsAfterCommit *mVideoMockDeleteObjectsAfterCommit) Calls() []*VideoMockDeleteObjectsAfterCommitParams {
+	mmDeleteObjectsAfterCommit.mutex.RLock()
+
+	argCopy := make([]*VideoMockDeleteObjectsAfterCommitParams, len(mmDeleteObjectsAfterCommit.callArgs))
+	copy(argCopy, mmDeleteObjectsAfterCommit.callArgs)
+
+	mmDeleteObjectsAfterCommit.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteObjectsAfterCommitDone returns true if the count of the DeleteObjectsAfterCommit invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockDeleteObjectsAfterCommitDone() bool {
+	if m.DeleteObjectsAfterCommitMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteObjectsAfterCommitMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteObjectsAfterCommitMock.invocationsDone()
+}
+
+// MinimockDeleteObjectsAfterCommitInspect logs each unmet expectation
+func (m *VideoMock) MinimockDeleteObjectsAfterCommitInspect() {
+	for _, e := range m.DeleteObjectsAfterCommitMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.DeleteObjectsAfterCommit at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteObjectsAfterCommitCounter := mm_atomic.LoadUint64(&m.afterDeleteObjectsAfterCommitCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteObjectsAfterCommitMock.defaultExpectation != nil && afterDeleteObjectsAfterCommitCounter < 1 {
+		if m.DeleteObjectsAfterCommitMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.DeleteObjectsAfterCommit at\n%s", m.DeleteObjectsAfterCommitMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.DeleteObjectsAfterCommit at\n%s with params: %#v", m.DeleteObjectsAfterCommitMock.defaultExpectation.expectationOrigins.origin, *m.DeleteObjectsAfterCommitMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteObjectsAfterCommit != nil && afterDeleteObjectsAfterCommitCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.DeleteObjectsAfterCommit at\n%s", m.funcDeleteObjectsAfterCommitOrigin)
+	}
+
+	if !m.DeleteObjectsAfterCommitMock.invocationsDone() && afterDeleteObjectsAfterCommitCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.DeleteObjectsAfterCommit at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteObjectsAfterCommitMock.expectedInvocations), m.DeleteObjectsAfterCommitMock.expectedInvocationsOrigin, afterDeleteObjectsAfterCommitCounter)
+	}
+}
+
+type mVideoMockFailTimedOut struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockFailTimedOutExpectation
+	expectations       []*VideoMockFailTimedOutExpectation
+
+	callArgs []*VideoMockFailTimedOutParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockFailTimedOutExpectation specifies expectation struct of the Video.FailTimedOut
+type VideoMockFailTimedOutExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockFailTimedOutParams
+	paramPtrs          *VideoMockFailTimedOutParamPtrs
+	expectationOrigins VideoMockFailTimedOutExpectationOrigins
+	results            *VideoMockFailTimedOutResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockFailTimedOutParams contains parameters of the Video.FailTimedOut
+type VideoMockFailTimedOutParams struct {
+	ctx context.Context
+	now time.Time
+}
+
+// VideoMockFailTimedOutParamPtrs contains pointers to parameters of the Video.FailTimedOut
+type VideoMockFailTimedOutParamPtrs struct {
+	ctx *context.Context
+	now *time.Time
+}
+
+// VideoMockFailTimedOutResults contains results of the Video.FailTimedOut
+type VideoMockFailTimedOutResults struct {
+	t1  domain.TimedOutReport
+	err error
+}
+
+// VideoMockFailTimedOutOrigins contains origins of expectations of the Video.FailTimedOut
+type VideoMockFailTimedOutExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originNow string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmFailTimedOut *mVideoMockFailTimedOut) Optional() *mVideoMockFailTimedOut {
+	mmFailTimedOut.optional = true
+	return mmFailTimedOut
+}
+
+// Expect sets up expected params for Video.FailTimedOut
+func (mmFailTimedOut *mVideoMockFailTimedOut) Expect(ctx context.Context, now time.Time) *mVideoMockFailTimedOut {
+	if mmFailTimedOut.mock.funcFailTimedOut != nil {
+		mmFailTimedOut.mock.t.Fatalf("VideoMock.FailTimedOut mock is already set by Set")
+	}
+
+	if mmFailTimedOut.defaultExpectation == nil {
+		mmFailTimedOut.defaultExpectation = &VideoMockFailTimedOutExpectation{}
+	}
+
+	if mmFailTimedOut.defaultExpectation.paramPtrs != nil {
+		mmFailTimedOut.mock.t.Fatalf("VideoMock.FailTimedOut mock is already set by ExpectParams functions")
+	}
+
+	mmFailTimedOut.defaultExpectation.params = &VideoMockFailTimedOutParams{ctx, now}
+	mmFailTimedOut.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmFailTimedOut.expectations {
+		if minimock.Equal(e.params, mmFailTimedOut.defaultExpectation.params) {
+			mmFailTimedOut.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmFailTimedOut.defaultExpectation.params)
+		}
+	}
+
+	return mmFailTimedOut
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.FailTimedOut
+func (mmFailTimedOut *mVideoMockFailTimedOut) ExpectCtxParam1(ctx context.Context) *mVideoMockFailTimedOut {
+	if mmFailTimedOut.mock.funcFailTimedOut != nil {
+		mmFailTimedOut.mock.t.Fatalf("VideoMock.FailTimedOut mock is already set by Set")
+	}
+
+	if mmFailTimedOut.defaultExpectation == nil {
+		mmFailTimedOut.defaultExpectation = &VideoMockFailTimedOutExpectation{}
+	}
+
+	if mmFailTimedOut.defaultExpectation.params != nil {
+		mmFailTimedOut.mock.t.Fatalf("VideoMock.FailTimedOut mock is already set by Expect")
+	}
+
+	if mmFailTimedOut.defaultExpectation.paramPtrs == nil {
+		mmFailTimedOut.defaultExpectation.paramPtrs = &VideoMockFailTimedOutParamPtrs{}
+	}
+	mmFailTimedOut.defaultExpectation.paramPtrs.ctx = &ctx
+	mmFailTimedOut.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmFailTimedOut
+}
+
+// ExpectNowParam2 sets up expected param now for Video.FailTimedOut
+func (mmFailTimedOut *mVideoMockFailTimedOut) ExpectNowParam2(now time.Time) *mVideoMockFailTimedOut {
+	if mmFailTimedOut.mock.funcFailTimedOut != nil {
+		mmFailTimedOut.mock.t.Fatalf("VideoMock.FailTimedOut mock is already set by Set")
+	}
+
+	if mmFailTimedOut.defaultExpectation == nil {
+		mmFailTimedOut.defaultExpectation = &VideoMockFailTimedOutExpectation{}
+	}
+
+	if mmFailTimedOut.defaultExpectation.params != nil {
+		mmFailTimedOut.mock.t.Fatalf("VideoMock.FailTimedOut mock is already set by Expect")
+	}
+
+	if mmFailTimedOut.defaultExpectation.paramPtrs == nil {
+		mmFailTimedOut.defaultExpectation.paramPtrs = &VideoMockFailTimedOutParamPtrs{}
+	}
+	mmFailTimedOut.defaultExpectation.paramPtrs.now = &now
+	mmFailTimedOut.defaultExpectation.expectationOrigins.originNow = minimock.CallerInfo(1)
+
+	return mmFailTimedOut
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.FailTimedOut
+func (mmFailTimedOut *mVideoMockFailTimedOut) Inspect(f func(ctx context.Context, now time.Time)) *mVideoMockFailTimedOut {
+	if mmFailTimedOut.mock.inspectFuncFailTimedOut != nil {
+		mmFailTimedOut.mock.t.Fatalf("Inspect function is already set for VideoMock.FailTimedOut")
+	}
+
+	mmFailTimedOut.mock.inspectFuncFailTimedOut = f
+
+	return mmFailTimedOut
+}
+
+// Return sets up results that will be returned by Video.FailTimedOut
+func (mmFailTimedOut *mVideoMockFailTimedOut) Return(t1 domain.TimedOutReport, err error) *VideoMock {
+	if mmFailTimedOut.mock.funcFailTimedOut != nil {
+		mmFailTimedOut.mock.t.Fatalf("VideoMock.FailTimedOut mock is already set by Set")
+	}
+
+	if mmFailTimedOut.defaultExpectation == nil {
+		mmFailTimedOut.defaultExpectation = &VideoMockFailTimedOutExpectation{mock: mmFailTimedOut.mock}
+	}
+	mmFailTimedOut.defaultExpectation.results = &VideoMockFailTimedOutResults{t1, err}
+	mmFailTimedOut.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmFailTimedOut.mock
+}
+
+// Set uses given function f to mock the Video.FailTimedOut method
+func (mmFailTimedOut *mVideoMockFailTimedOut) Set(f func(ctx context.Context, now time.Time) (t1 domain.TimedOutReport, err error)) *VideoMock {
+	if mmFailTimedOut.defaultExpectation != nil {
+		mmFailTimedOut.mock.t.Fatalf("Default expectation is already set for the Video.FailTimedOut method")
+	}
+
+	if len(mmFailTimedOut.expectations) > 0 {
+		mmFailTimedOut.mock.t.Fatalf("Some expectations are already set for the Video.FailTimedOut method")
+	}
+
+	mmFailTimedOut.mock.funcFailTimedOut = f
+	mmFailTimedOut.mock.funcFailTimedOutOrigin = minimock.CallerInfo(1)
+	return mmFailTimedOut.mock
+}
+
+// When sets expectation for the Video.FailTimedOut which will trigger the result defined by the following
+// Then helper
+func (mmFailTimedOut *mVideoMockFailTimedOut) When(ctx context.Context, now time.Time) *VideoMockFailTimedOutExpectation {
+	if mmFailTimedOut.mock.funcFailTimedOut != nil {
+		mmFailTimedOut.mock.t.Fatalf("VideoMock.FailTimedOut mock is already set by Set")
+	}
+
+	expectation := &VideoMockFailTimedOutExpectation{
+		mock:               mmFailTimedOut.mock,
+		params:             &VideoMockFailTimedOutParams{ctx, now},
+		expectationOrigins: VideoMockFailTimedOutExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmFailTimedOut.expectations = append(mmFailTimedOut.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.FailTimedOut return parameters for the expectation previously defined by the When method
+func (e *VideoMockFailTimedOutExpectation) Then(t1 domain.TimedOutReport, err error) *VideoMock {
+	e.results = &VideoMockFailTimedOutResults{t1, err}
+	return e.mock
+}
+
+// Times sets number of times Video.FailTimedOut should be invoked
+func (mmFailTimedOut *mVideoMockFailTimedOut) Times(n uint64) *mVideoMockFailTimedOut {
+	if n == 0 {
+		mmFailTimedOut.mock.t.Fatalf("Times of VideoMock.FailTimedOut mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmFailTimedOut.expectedInvocations, n)
+	mmFailTimedOut.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmFailTimedOut
+}
+
+func (mmFailTimedOut *mVideoMockFailTimedOut) invocationsDone() bool {
+	if len(mmFailTimedOut.expectations) == 0 && mmFailTimedOut.defaultExpectation == nil && mmFailTimedOut.mock.funcFailTimedOut == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmFailTimedOut.mock.afterFailTimedOutCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmFailTimedOut.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// FailTimedOut implements mm_service.Video
+func (mmFailTimedOut *VideoMock) FailTimedOut(ctx context.Context, now time.Time) (t1 domain.TimedOutReport, err error) {
+	mm_atomic.AddUint64(&mmFailTimedOut.beforeFailTimedOutCounter, 1)
+	defer mm_atomic.AddUint64(&mmFailTimedOut.afterFailTimedOutCounter, 1)
+
+	mmFailTimedOut.t.Helper()
+
+	if mmFailTimedOut.inspectFuncFailTimedOut != nil {
+		mmFailTimedOut.inspectFuncFailTimedOut(ctx, now)
+	}
+
+	mm_params := VideoMockFailTimedOutParams{ctx, now}
+
+	// Record call args
+	mmFailTimedOut.FailTimedOutMock.mutex.Lock()
+	mmFailTimedOut.FailTimedOutMock.callArgs = append(mmFailTimedOut.FailTimedOutMock.callArgs, &mm_params)
+	mmFailTimedOut.FailTimedOutMock.mutex.Unlock()
+
+	for _, e := range mmFailTimedOut.FailTimedOutMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.t1, e.results.err
+		}
+	}
+
+	if mmFailTimedOut.FailTimedOutMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmFailTimedOut.FailTimedOutMock.defaultExpectation.Counter, 1)
+		mm_want := mmFailTimedOut.FailTimedOutMock.defaultExpectation.params
+		mm_want_ptrs := mmFailTimedOut.FailTimedOutMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockFailTimedOutParams{ctx, now}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmFailTimedOut.t.Errorf("VideoMock.FailTimedOut got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmFailTimedOut.FailTimedOutMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.now != nil && !minimock.Equal(*mm_want_ptrs.now, mm_got.now) {
+				mmFailTimedOut.t.Errorf("VideoMock.FailTimedOut got unexpected parameter now, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmFailTimedOut.FailTimedOutMock.defaultExpectation.expectationOrigins.originNow, *mm_want_ptrs.now, mm_got.now, minimock.Diff(*mm_want_ptrs.now, mm_got.now))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmFailTimedOut.t.Errorf("VideoMock.FailTimedOut got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmFailTimedOut.FailTimedOutMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmFailTimedOut.FailTimedOutMock.defaultExpectation.results
+		if mm_results == nil {
+			mmFailTimedOut.t.Fatal("No results are set for the VideoMock.FailTimedOut")
+		}
+		return (*mm_results).t1, (*mm_results).err
+	}
+	if mmFailTimedOut.funcFailTimedOut != nil {
+		return mmFailTimedOut.funcFailTimedOut(ctx, now)
+	}
+	mmFailTimedOut.t.Fatalf("Unexpected call to VideoMock.FailTimedOut. %v %v", ctx, now)
+	return
+}
+
+// FailTimedOutAfterCounter returns a count of finished VideoMock.FailTimedOut invocations
+func (mmFailTimedOut *VideoMock) FailTimedOutAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmFailTimedOut.afterFailTimedOutCounter)
+}
+
+// FailTimedOutBeforeCounter returns a count of VideoMock.FailTimedOut invocations
+func (mmFailTimedOut *VideoMock) FailTimedOutBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmFailTimedOut.beforeFailTimedOutCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.FailTimedOut.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmFailTimedOut *mVideoMockFailTimedOut) Calls() []*VideoMockFailTimedOutParams {
+	mmFailTimedOut.mutex.RLock()
+
+	argCopy := make([]*VideoMockFailTimedOutParams, len(mmFailTimedOut.callArgs))
+	copy(argCopy, mmFailTimedOut.callArgs)
+
+	mmFailTimedOut.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockFailTimedOutDone returns true if the count of the FailTimedOut invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockFailTimedOutDone() bool {
+	if m.FailTimedOutMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.FailTimedOutMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.FailTimedOutMock.invocationsDone()
+}
+
+// MinimockFailTimedOutInspect logs each unmet expectation
+func (m *VideoMock) MinimockFailTimedOutInspect() {
+	for _, e := range m.FailTimedOutMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.FailTimedOut at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterFailTimedOutCounter := mm_atomic.LoadUint64(&m.afterFailTimedOutCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.FailTimedOutMock.defaultExpectation != nil && afterFailTimedOutCounter < 1 {
+		if m.FailTimedOutMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.FailTimedOut at\n%s", m.FailTimedOutMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.FailTimedOut at\n%s with params: %#v", m.FailTimedOutMock.defaultExpectation.expectationOrigins.origin, *m.FailTimedOutMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcFailTimedOut != nil && afterFailTimedOutCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.FailTimedOut at\n%s", m.funcFailTimedOutOrigin)
+	}
+
+	if !m.FailTimedOutMock.invocationsDone() && afterFailTimedOutCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.FailTimedOut at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.FailTimedOutMock.expectedInvocations), m.FailTimedOutMock.expectedInvocationsOrigin, afterFailTimedOutCounter)
+	}
+}
+
 type mVideoMockGet struct {
 	optional           bool
 	mock               *VideoMock
@@ -4767,6 +5466,10 @@ func (m *VideoMock) MinimockFinish() {
 
 			m.MinimockDeleteInspect()
 
+			m.MinimockDeleteObjectsAfterCommitInspect()
+
+			m.MinimockFailTimedOutInspect()
+
 			m.MinimockGetInspect()
 
 			m.MinimockGetAllInspect()
@@ -4805,6 +5508,8 @@ func (m *VideoMock) minimockDone() bool {
 		m.MinimockCompleteUploadDone() &&
 		m.MinimockCreateUploadDone() &&
 		m.MinimockDeleteDone() &&
+		m.MinimockDeleteObjectsAfterCommitDone() &&
+		m.MinimockFailTimedOutDone() &&
 		m.MinimockGetDone() &&
 		m.MinimockGetAllDone() &&
 		m.MinimockGetHLSMasterDone() &&

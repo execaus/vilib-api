@@ -72,7 +72,11 @@ type User interface {
 	GetByID(ctx context.Context, userID ...uuid.UUID) ([]domain.User, error)
 	Deactivate(ctx context.Context, initiatorID, accountID, targetID uuid.UUID) error
 	Reactivate(ctx context.Context, initiatorID, accountID, targetID uuid.UUID) error
-	ListByAccount(ctx context.Context, initiatorID, accountID uuid.UUID, status repository.UserStatus) ([]domain.User, error)
+	ListByAccount(
+		ctx context.Context,
+		initiatorID, accountID uuid.UUID,
+		status repository.UserStatus,
+	) ([]domain.User, error)
 }
 
 type Email interface {
@@ -142,7 +146,16 @@ type Video interface {
 	GetHLSPlaylist(ctx context.Context, videoID uuid.UUID, profile domain.VideoProfile, token string) ([]byte, error)
 	GetAll(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) ([]domain.Video, error)
 	Rename(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID, name string) (domain.Video, error)
+	// Delete проверяет права ManageVideo, удаляет видео в БД и регистрирует best-effort
+	// зачистку его объектов в хранилище после коммита транзакции (Э1-Т21, §7.3 дизайна эпика).
 	Delete(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID) error
+	// DeleteObjectsAfterCommit регистрирует best-effort зачистку объектов перечисленных видео
+	// в хранилище после коммита текущей транзакции саги (§7.3 дизайна эпика). Системный метод
+	// без проверки прав — используется UserGroup.Delete для видео уже удалённой группы.
+	DeleteObjectsAfterCommit(ctx context.Context, videoIDs ...uuid.UUID)
+	// FailTimedOut переводит в failed(timeout) видео, зависшие в uploading/queued/compressing
+	// дольше сконфигурированных таймаутов (§8 дизайна эпика, Э1-Т16). Вызывается watchdog'ом.
+	FailTimedOut(ctx context.Context, now time.Time) (domain.TimedOutReport, error)
 	// ApplyProcessingStarted переводит видео из очереди в обработку по событию ProcessingStarted
 	// воркера. Системный вызов без проверки прав (аналог Update с initiatorID == nil); переход,
 	// недопустимый для текущего статуса/номера попытки, игнорируется с логом (§7.2 эпика).

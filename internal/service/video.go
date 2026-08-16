@@ -29,6 +29,14 @@ const videoContentTypePrefix = "video/"
 // становится в очередь при подтверждении загрузки.
 const videoInitialProcessingAttempt = 1
 
+// videoDeleteRetryAttempts — число попыток best-effort удаления объектов хранилища при
+// удалении видео/группы (§7.3 дизайна эпика).
+const videoDeleteRetryAttempts = 3
+
+// videoDeleteRetryBaseDelay — базовая пауза экспоненциального backoff между повторами
+// best-effort удаления объектов хранилища (200ms → 400ms → …).
+const videoDeleteRetryBaseDelay = 200 * time.Millisecond
+
 // VideoServiceConfig — часть конфигурации приложения, используемая сервисом видео.
 type VideoServiceConfig struct {
 	// Bucket — бакет S3, в котором хранятся объекты видео.
@@ -44,10 +52,37 @@ type VideoService struct {
 	repo repository.Video
 	srv  *Service
 	cfg  VideoServiceConfig
+	// sleep — функция паузы между повторами best-effort удаления объектов хранилища.
+	// В проде — time.Sleep, в тестах подменяется опцией WithDeleteRetrySleep, чтобы не ждать
+	// реальные интервалы backoff'а.
+	sleep func(time.Duration)
 }
 
-func NewVideoService(s3 s3.S3, repo repository.Video, srv *Service, cfg VideoServiceConfig) *VideoService {
-	return &VideoService{s3: s3, repo: repo, srv: srv, cfg: cfg}
+// VideoServiceOption настраивает VideoService сверх обязательных зависимостей конструктора.
+type VideoServiceOption func(*VideoService)
+
+// WithDeleteRetrySleep подменяет функцию паузы между повторами best-effort удаления объектов
+// хранилища (§7.3 дизайна эпика). Предназначена для тестов.
+func WithDeleteRetrySleep(sleep func(time.Duration)) VideoServiceOption {
+	return func(s *VideoService) {
+		s.sleep = sleep
+	}
+}
+
+func NewVideoService(
+	s3 s3.S3,
+	repo repository.Video,
+	srv *Service,
+	cfg VideoServiceConfig,
+	opts ...VideoServiceOption,
+) *VideoService {
+	svc := &VideoService{s3: s3, repo: repo, srv: srv, cfg: cfg, sleep: time.Sleep}
+
+	for _, opt := range opts {
+		opt(svc)
+	}
+
+	return svc
 }
 
 // findAssetByKind ищет первый ассет указанного вида. Возвращает nil, если такого нет.
@@ -852,13 +887,135 @@ func (s *VideoService) Delete(
 		}
 	}
 
-	// Удаление видео
+	// Удаление видео: сначала БД-транзакция, объекты хранилища — после коммита (Э1-Т21).
 	if err := s.repo.Delete(ctx, videoID); err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
 
+	s.DeleteObjectsAfterCommit(ctx, videoID)
+
 	return nil
+}
+
+// DeleteObjectsAfterCommit регистрирует best-effort зачистку всех объектов перечисленных видео
+// в хранилище (videos/{id}/ — единый префикс оригинала и всех результатов обработки, §3.3
+// дизайна эпика) после успешного коммита транзакции саги (§7.3, Э1-Т21). Вызывается как из
+// Video.Delete, так и из UserGroup.Delete (id видео группы известны до каскадного удаления
+// строк БД). Порядок регистрации хука относительно момента, когда видео удалены из БД, не
+// важен — хук выполняется только после коммита всей транзакции.
+func (s *VideoService) DeleteObjectsAfterCommit(ctx context.Context, videoIDs ...uuid.UUID) {
+	for _, videoID := range videoIDs {
+		prefix := domain.VideoPrefix(videoID)
+
+		saga.AfterCommit(ctx, func(hookCtx context.Context) {
+			s.deleteObjectsWithRetry(hookCtx, prefix)
+		})
+	}
+}
+
+// deleteObjectsWithRetry выполняет best-effort удаление всех объектов под префиксом с
+// повторами и экспоненциальным backoff'ом (§7.3 дизайна эпика). К моменту вызова БД-строки
+// уже удалены и закоммичены — неудача всех попыток означает лишь сироту в S3, что допустимо
+// и логируется (Э1-Т21), саму (уже завершённую) транзакцию она не откатывает.
+func (s *VideoService) deleteObjectsWithRetry(ctx context.Context, prefix string) {
+	delay := videoDeleteRetryBaseDelay
+	var lastErr error
+
+	for attempt := 1; attempt <= videoDeleteRetryAttempts; attempt++ {
+		if _, err := s.s3.DeleteByPrefix(ctx, s.cfg.Bucket, prefix); err != nil {
+			lastErr = err
+			if attempt < videoDeleteRetryAttempts {
+				s.sleep(delay)
+				delay *= 2
+			}
+			continue
+		}
+		return
+	}
+
+	zap.L().Error("orphan objects in storage: delete retries exhausted",
+		zap.String("prefix", prefix),
+		zap.Error(lastErr),
+	)
+}
+
+// FailTimedOut переводит в failed(timeout) видео, зависшие в uploading/queued/compressing
+// дольше сконфигурированных таймаутов (§8 дизайна эпика, Э1-Т16). Вызывается watchdog'ом на
+// каждом тике. Каждый переход — один атомарный условный UPDATE (repository.Video.UpdateTimedOut),
+// поэтому метод безопасен при нескольких одновременно работающих инстансах API: строку,
+// которую уже перевёл другой инстанс, повторный UPDATE не затронет (WHERE status = <исходный
+// статус> перестаёт совпадать) — гонки не возникает.
+func (s *VideoService) FailTimedOut(ctx context.Context, now time.Time) (domain.TimedOutReport, error) {
+	uploading, err := s.repo.UpdateTimedOut(
+		ctx,
+		domain.VideoStatusUploading,
+		now.Add(-s.cfg.Video.UploadTimeout),
+		domain.VideoFailure{
+			Class:  domain.VideoFailureClassTimeout,
+			Reason: fmt.Sprintf("загрузка не завершена за %s", s.cfg.Video.UploadTimeout),
+		},
+	)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.TimedOutReport{}, err
+	}
+
+	// Оригинал мог появиться в хранилище частично или уже после того, как видео признано
+	// зависшим, — очищаем его best-effort после коммита (§8 дизайна эпика).
+	for _, videoID := range uploading {
+		key := domain.VideoOriginalObjectKey(videoID)
+
+		saga.AfterCommit(ctx, func(hookCtx context.Context) {
+			if deleteErr := s.s3.DeleteObject(hookCtx, s.cfg.Bucket, key); deleteErr != nil &&
+				!errors.Is(deleteErr, s3.ErrObjectNotFound) {
+				zap.L().Error("failed to cleanup timed out upload object",
+					zap.String("video_id", videoID.String()),
+					zap.String("key", key),
+					zap.Error(deleteErr),
+				)
+			}
+		})
+	}
+
+	queued, err := s.repo.UpdateTimedOut(
+		ctx,
+		domain.VideoStatusQueued,
+		now.Add(-s.cfg.Video.QueuedTimeout),
+		domain.VideoFailure{
+			Class:  domain.VideoFailureClassTimeout,
+			Reason: fmt.Sprintf("не взято в обработку за %s", s.cfg.Video.QueuedTimeout),
+		},
+	)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.TimedOutReport{}, err
+	}
+
+	// compressing: поздний ProcessingCompleted для перешедшего в failed видео игнорируется и
+	// его результаты зачищаются логикой ApplyProcessingCompleted (§7.2 эпика) — здесь очищать
+	// хранилище не нужно.
+	compressing, err := s.repo.UpdateTimedOut(
+		ctx,
+		domain.VideoStatusCompressing,
+		now.Add(-s.cfg.Video.ProcessingTimeout),
+		domain.VideoFailure{
+			Class:  domain.VideoFailureClassTimeout,
+			Reason: fmt.Sprintf("обработка не завершена за %s", s.cfg.Video.ProcessingTimeout),
+		},
+	)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.TimedOutReport{}, err
+	}
+
+	zap.L().Info("watchdog tick completed",
+		zap.Int("uploading_timed_out", len(uploading)),
+		zap.Int("queued_timed_out", len(queued)),
+		zap.Int("compressing_timed_out", len(compressing)),
+	)
+
+	return domain.TimedOutReport{Uploading: uploading, Queued: queued, Compressing: compressing}, nil
 }
 
 func (s *VideoService) isCheckGroupMember(

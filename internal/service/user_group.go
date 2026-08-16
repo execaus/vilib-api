@@ -103,11 +103,15 @@ func (s *UserGroupService) Delete(
 		return err
 	}
 
-	// Удаление группы каскадно
-	if err := s.repo.DeleteCascade(ctx, groupID); err != nil {
+	// Удаление группы каскадно: БД-транзакция, объекты хранилища каждого видео группы —
+	// после коммита (Э1-Т21, §7.3 дизайна эпика).
+	videoIDs, err := s.repo.DeleteCascade(ctx, groupID)
+	if err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
+
+	s.srv.Video.DeleteObjectsAfterCommit(ctx, videoIDs...)
 
 	return nil
 }

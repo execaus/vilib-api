@@ -1509,3 +1509,284 @@ func TestService_Video_GetHLSPlaylist(t *testing.T) {
 		require.Equal(t, service.NewConflictError("video is not available"), err)
 	})
 }
+
+// videoDeleteMocks собирает моки, используемые Delete.
+type videoDeleteMocks struct {
+	Access      *service_mocks.AccessMock
+	GroupMember *service_mocks.GroupMemberMock
+	S3          *service_mocks.S3Mock
+	Video       *repository_mocks.VideoMock
+}
+
+func newVideoDeleteMocks(mc *minimock.Controller) videoDeleteMocks {
+	return videoDeleteMocks{
+		Access:      service_mocks.NewAccessMock(mc),
+		GroupMember: service_mocks.NewGroupMemberMock(mc),
+		S3:          service_mocks.NewS3Mock(mc),
+		Video:       repository_mocks.NewVideoMock(mc),
+	}
+}
+
+func newVideoDeleteService(
+	m videoDeleteMocks,
+	cfg service.VideoServiceConfig,
+	opts ...service.VideoServiceOption,
+) *service.VideoService {
+	svc := &service.Service{Access: m.Access, GroupMember: m.GroupMember}
+	return service.NewVideoService(m.S3, m.Video, svc, cfg, opts...)
+}
+
+// TestService_Video_Delete проверяет удаление видео (Э1-Т21, §7.3 дизайна эпика): проверку
+// прав, удаление в БД и best-effort очистку объектов хранилища после коммита транзакции.
+func TestService_Video_Delete(t *testing.T) {
+	t.Parallel()
+
+	testAccountID := uuid.New()
+	testGroupID := uuid.New()
+	testInitiatorID := uuid.New()
+	testVideoID := uuid.New()
+	testBucket := "vilib"
+
+	t.Run("forbidden - no account or group permission", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoDeleteMocks(mc)
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Return(service.ErrForbidden)
+		m.GroupMember.GetByUserIDAndGroupIDMock.
+			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
+			Return(domain.GroupMember{}, errors.New("not a member"))
+
+		videoSvc := newVideoDeleteService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		err := videoSvc.Delete(t.Context(), testAccountID, testGroupID, testInitiatorID, testVideoID)
+
+		require.ErrorIs(t, err, service.ErrForbidden)
+	})
+
+	t.Run("repository error propagates, no cleanup scheduled", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoDeleteMocks(mc)
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Return(nil)
+		repoErr := errors.New("db unavailable")
+		m.Video.DeleteMock.Expect(minimock.AnyContext, testVideoID).Return(repoErr)
+
+		videoSvc := newVideoDeleteService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		err := videoSvc.Delete(t.Context(), testAccountID, testGroupID, testInitiatorID, testVideoID)
+
+		require.ErrorIs(t, err, repoErr)
+	})
+
+	t.Run("success - deletes video and cleans up storage objects after commit", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoDeleteMocks(mc)
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Return(nil)
+		m.Video.DeleteMock.Expect(minimock.AnyContext, testVideoID).Return(nil)
+
+		var cleanedBucket, cleanedPrefix string
+		m.S3.DeleteByPrefixMock.Set(func(_ context.Context, bucket, prefix string) (int, error) {
+			cleanedBucket = bucket
+			cleanedPrefix = prefix
+			return 3, nil
+		})
+
+		videoSvc := newVideoDeleteService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		tx := saga_mocks.NewBobTransactionMock(mc)
+		tx.CommitMock.Return(nil)
+		tx.RollbackMock.Return(nil)
+		tx.RollbackMock.Optional()
+
+		repo := saga_mocks.NewTransactableMock(mc)
+		repo.WithTxMock.Return(tx, nil)
+
+		runner := saga.NewSagaRunner(videoSvc, repo)
+
+		err := runner.Run(t.Context(), func(ctx context.Context, svc *service.VideoService) error {
+			return svc.Delete(ctx, testAccountID, testGroupID, testInitiatorID, testVideoID)
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, testBucket, cleanedBucket)
+		require.Equal(t, "videos/"+testVideoID.String()+"/", cleanedPrefix)
+	})
+
+	t.Run("delete retries exhausted after commit - error logged, Delete already succeeded", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoDeleteMocks(mc)
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Return(nil)
+		m.Video.DeleteMock.Expect(minimock.AnyContext, testVideoID).Return(nil)
+
+		var attempts int
+		m.S3.DeleteByPrefixMock.Set(func(context.Context, string, string) (int, error) {
+			attempts++
+			return 0, errors.New("s3 unavailable")
+		})
+
+		var sleeps []time.Duration
+		videoSvc := newVideoDeleteService(
+			m,
+			service.VideoServiceConfig{Bucket: testBucket},
+			service.WithDeleteRetrySleep(func(d time.Duration) { sleeps = append(sleeps, d) }),
+		)
+
+		tx := saga_mocks.NewBobTransactionMock(mc)
+		tx.CommitMock.Return(nil)
+		tx.RollbackMock.Return(nil)
+		tx.RollbackMock.Optional()
+
+		repo := saga_mocks.NewTransactableMock(mc)
+		repo.WithTxMock.Return(tx, nil)
+
+		runner := saga.NewSagaRunner(videoSvc, repo)
+
+		// Хук выполняется после коммита — ошибка best-effort очистки не должна вернуться
+		// вызывающей стороне: удаление видео из БД к этому моменту уже успешно завершено.
+		err := runner.Run(t.Context(), func(ctx context.Context, svc *service.VideoService) error {
+			return svc.Delete(ctx, testAccountID, testGroupID, testInitiatorID, testVideoID)
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, 3, attempts)
+		require.Equal(t, []time.Duration{200 * time.Millisecond, 400 * time.Millisecond}, sleeps)
+	})
+}
+
+// TestService_Video_FailTimedOut проверяет watchdog-логику (§8 дизайна эпика, Э1-Т16): три
+// вызова UpdateTimedOut с правильными статусами и порогами и best-effort очистку объекта
+// оригинала для видео, зависших в uploading, после коммита.
+func TestService_Video_FailTimedOut(t *testing.T) {
+	t.Parallel()
+
+	testBucket := "vilib"
+	now := time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
+	cfg := service.VideoServiceConfig{
+		Bucket: testBucket,
+		Video: config.VideoConfig{
+			UploadTimeout:     2 * time.Hour,
+			QueuedTimeout:     time.Hour,
+			ProcessingTimeout: 3 * time.Hour,
+		},
+	}
+
+	t.Run("calls UpdateTimedOut with correct thresholds and cleans up uploading originals", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		videoRepo := repository_mocks.NewVideoMock(mc)
+
+		uploadingID := uuid.New()
+		queuedID := uuid.New()
+		compressingID := uuid.New()
+
+		videoRepo.UpdateTimedOutMock.Set(func(
+			_ context.Context, status domain.VideoStatus, before time.Time, failure domain.VideoFailure,
+		) ([]uuid.UUID, error) {
+			require.Equal(t, domain.VideoFailureClassTimeout, failure.Class)
+
+			switch status {
+			case domain.VideoStatusUploading:
+				require.Equal(t, now.Add(-cfg.Video.UploadTimeout), before)
+				require.Equal(t, "загрузка не завершена за 2h0m0s", failure.Reason)
+				return []uuid.UUID{uploadingID}, nil
+			case domain.VideoStatusQueued:
+				require.Equal(t, now.Add(-cfg.Video.QueuedTimeout), before)
+				require.Equal(t, "не взято в обработку за 1h0m0s", failure.Reason)
+				return []uuid.UUID{queuedID}, nil
+			case domain.VideoStatusCompressing:
+				require.Equal(t, now.Add(-cfg.Video.ProcessingTimeout), before)
+				require.Equal(t, "обработка не завершена за 3h0m0s", failure.Reason)
+				return []uuid.UUID{compressingID}, nil
+			case domain.VideoStatusReady, domain.VideoStatusFailed:
+				t.Fatalf("unexpected status %v", status)
+				return nil, nil
+			}
+
+			t.Fatalf("unexpected status %v", status)
+			return nil, nil
+		})
+
+		s3Mock := service_mocks.NewS3Mock(mc)
+		s3Mock.DeleteObjectMock.
+			Expect(minimock.AnyContext, testBucket, domain.VideoOriginalObjectKey(uploadingID)).
+			Return(nil)
+
+		videoSvc := service.NewVideoService(s3Mock, videoRepo, &service.Service{}, cfg)
+
+		tx := saga_mocks.NewBobTransactionMock(mc)
+		tx.CommitMock.Return(nil)
+		tx.RollbackMock.Return(nil)
+		tx.RollbackMock.Optional()
+
+		repo := saga_mocks.NewTransactableMock(mc)
+		repo.WithTxMock.Return(tx, nil)
+
+		runner := saga.NewSagaRunner(videoSvc, repo)
+
+		var report domain.TimedOutReport
+		err := runner.Run(t.Context(), func(ctx context.Context, svc *service.VideoService) error {
+			var runErr error
+			report, runErr = svc.FailTimedOut(ctx, now)
+			return runErr
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{uploadingID}, report.Uploading)
+		require.Equal(t, []uuid.UUID{queuedID}, report.Queued)
+		require.Equal(t, []uuid.UUID{compressingID}, report.Compressing)
+	})
+
+	t.Run("uploading timeout error propagates, no further statuses checked", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		videoRepo := repository_mocks.NewVideoMock(mc)
+		repoErr := errors.New("db unavailable")
+		videoRepo.UpdateTimedOutMock.
+			Expect(
+				minimock.AnyContext,
+				domain.VideoStatusUploading,
+				now.Add(-cfg.Video.UploadTimeout),
+				domain.VideoFailure{Class: domain.VideoFailureClassTimeout, Reason: "загрузка не завершена за 2h0m0s"},
+			).
+			Return(nil, repoErr)
+
+		videoSvc := service.NewVideoService(service_mocks.NewS3Mock(mc), videoRepo, &service.Service{}, cfg)
+
+		_, err := videoSvc.FailTimedOut(t.Context(), now)
+
+		require.ErrorIs(t, err, repoErr)
+	})
+
+	t.Run("no timed out videos - no S3 calls, empty report", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		videoRepo := repository_mocks.NewVideoMock(mc)
+		videoRepo.UpdateTimedOutMock.Return(nil, nil)
+
+		videoSvc := service.NewVideoService(service_mocks.NewS3Mock(mc), videoRepo, &service.Service{}, cfg)
+
+		report, err := videoSvc.FailTimedOut(t.Context(), now)
+
+		require.NoError(t, err)
+		require.Empty(t, report.Uploading)
+		require.Empty(t, report.Queued)
+		require.Empty(t, report.Compressing)
+	})
+}
