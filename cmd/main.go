@@ -18,6 +18,7 @@ import (
 	"vilib-api/internal/s3"
 	"vilib-api/internal/saga"
 	"vilib-api/internal/service"
+	"vilib-api/internal/watchdog"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -82,6 +83,10 @@ func run() error {
 	relayCtx, stopRelay := context.WithCancel(context.Background())
 	relayDone := runRelay(relayCtx, relay)
 
+	wd := watchdog.New(sagaRunner, cfg.Video, logger)
+	watchdogCtx, stopWatchdog := context.WithCancel(context.Background())
+	watchdogDone := runWatchdog(watchdogCtx, wd)
+
 	consumer := kafka.NewConsumer(cfg.Kafka.Brokers, cfg.Kafka.ConsumerGroup, cfg.Kafka.TopicProcessingEvents)
 	eh := eventhandler.NewEventHandler(sagaRunner)
 	consumerCtx, stopConsumer := context.WithCancel(context.Background())
@@ -102,7 +107,13 @@ func run() error {
 
 	waitForShutdownSignal()
 
-	return shutdown(srv, stopConsumer, consumerDone, consumer, stopRelay, relayDone, producer)
+	return shutdown(
+		srv,
+		stopWatchdog, watchdogDone,
+		stopConsumer, consumerDone, consumer,
+		stopRelay, relayDone,
+		producer,
+	)
 }
 
 // runRelay запускает релей outbox-очереди в фоновой горутине и возвращает канал, закрываемый
@@ -115,6 +126,23 @@ func runRelay(ctx context.Context, relay *outbox.Relay) <-chan struct{} {
 
 		if err := relay.Run(ctx); err != nil {
 			zap.L().Error("outbox relay stopped with error", zap.Error(err))
+		}
+	}()
+
+	return done
+}
+
+// runWatchdog запускает фоновый watchdog таймаутов (§8 дизайна эпика, Э1-Т16) в отдельной
+// горутине и возвращает канал, закрываемый после завершения watchdog.Run — по нему дожидаются
+// остановки при graceful shutdown.
+func runWatchdog(ctx context.Context, wd *watchdog.Watchdog) <-chan struct{} {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		if err := wd.Run(ctx); err != nil {
+			zap.L().Error("watchdog stopped with error", zap.Error(err))
 		}
 	}()
 
@@ -145,12 +173,15 @@ func waitForShutdownSignal() {
 	<-quit
 }
 
-// shutdown останавливает компоненты приложения в порядке: HTTP-сервер → консьюмер событий
-// обработки видео (дожидается завершения текущего обработчика и коммита offset'а, Э1-Т26) →
-// релей outbox → продюсер Kafka → читатель консьюмера (§7.1, §7.2 эпика — сначала перестаём
-// принимать новую работу и публиковать, затем закрываем транспорт).
+// shutdown останавливает компоненты приложения в порядке: HTTP-сервер → watchdog таймаутов
+// (не связан с Kafka, поэтому останавливается сразу после HTTP) → консьюмер событий обработки
+// видео (дожидается завершения текущего обработчика и коммита offset'а, Э1-Т26) → релей outbox
+// → продюсер Kafka → читатель консьюмера (§7.1, §7.2, §8 эпика — сначала перестаём принимать
+// новую работу и публиковать, затем закрываем транспорт).
 func shutdown(
 	srv *http.Server,
+	stopWatchdog context.CancelFunc,
+	watchdogDone <-chan struct{},
 	stopConsumer context.CancelFunc,
 	consumerDone <-chan struct{},
 	consumer *kafka.ReaderConsumer,
@@ -166,6 +197,9 @@ func shutdown(
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server forced to shutdown: %w", err)
 	}
+
+	stopWatchdog()
+	<-watchdogDone
 
 	stopConsumer()
 	<-consumerDone
