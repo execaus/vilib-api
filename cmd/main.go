@@ -12,6 +12,7 @@ import (
 	"vilib-api/config"
 	"vilib-api/internal/handler"
 	"vilib-api/internal/repository"
+	"vilib-api/internal/s3"
 	"vilib-api/internal/saga"
 	"vilib-api/internal/service"
 
@@ -31,6 +32,10 @@ func run() error {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	if validateErr := cfg.Validate(); validateErr != nil {
+		return fmt.Errorf("invalid config: %w", validateErr)
 	}
 
 	gin.SetMode(string(cfg.Server.Mode))
@@ -54,8 +59,13 @@ func run() error {
 	executorProvider := repository.NewExecutorProvider(db)
 	repo := repository.NewRepository(executorProvider)
 
+	s3Client, err := s3.NewClient(cfg.S3)
+	if err != nil {
+		return fmt.Errorf("failed to create s3 client: %w", err)
+	}
+
 	localMailBox := make(chan string, 1)
-	svc := service.NewService(cfg, localMailBox, nil, repo)
+	svc := service.NewService(cfg, localMailBox, s3Client, repo)
 
 	sagaRunner := saga.NewSagaRunner(svc, executorProvider)
 	h := handler.NewHandler(sagaRunner)

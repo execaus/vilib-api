@@ -147,7 +147,7 @@ func TestService_Video_GetPreflightUploadURL(t *testing.T) {
 				GroupRole:   gr,
 			}
 
-			videoSvc := service.NewVideoService(s3, repo, &svc)
+			videoSvc := service.NewVideoService(s3, repo, &svc, service.VideoServiceConfig{Bucket: "vilib"})
 
 			got, err := videoSvc.GetPreflightUploadURL(
 				minimock.AnyContext,
@@ -251,7 +251,7 @@ func TestService_Video_Update(t *testing.T) {
 
 			svc := service.Service{}
 
-			videoSvc := service.NewVideoService(nil, repo, &svc)
+			videoSvc := service.NewVideoService(nil, repo, &svc, service.VideoServiceConfig{})
 
 			got, err := videoSvc.Update(
 				minimock.AnyContext,

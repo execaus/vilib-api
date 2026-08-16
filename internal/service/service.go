@@ -157,7 +157,7 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 	s.UserGroup = NewUserGroupService(r.UserGroup, s)
 	s.GroupMember = NewGroupMemberService(r.GroupMember, s)
 	s.GroupRole = NewGroupRoleService(r.GroupRole, s)
-	s.Video = NewVideoService(s3, r.Video, s)
+	s.Video = NewVideoService(s3, r.Video, s, VideoServiceConfig{Bucket: cfg.S3.Bucket, Video: cfg.Video})
 	s.VideoAsset = NewVideoAssetService(r.VideoAsset, s)
 	s.Access = NewAccessService(s)
 

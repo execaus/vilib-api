@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"vilib-api/config"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
 	"vilib-api/internal/s3"
@@ -11,21 +12,27 @@ import (
 	"go.uber.org/zap"
 )
 
-// tempUploadBucket и tempUploadContentType — временные заглушки бакета и content-type
-// загрузки до реализации полного потока загрузки с параметрами файла (см. брифы В-3…В-4).
-const (
-	tempUploadBucket      = "vilib"
-	tempUploadContentType = "application/octet-stream"
-)
+// tempUploadContentType — временная заглушка content-type загрузки до реализации полного
+// потока загрузки с параметрами файла (см. брифы В-4…В-5).
+const tempUploadContentType = "application/octet-stream"
+
+// VideoServiceConfig — часть конфигурации приложения, используемая сервисом видео.
+type VideoServiceConfig struct {
+	// Bucket — бакет S3, в котором хранятся объекты видео.
+	Bucket string
+	// Video — параметры обработки видео (лимиты, профили, таймауты).
+	Video config.VideoConfig
+}
 
 type VideoService struct {
 	s3   s3.S3
 	repo repository.Video
 	srv  *Service
+	cfg  VideoServiceConfig
 }
 
-func NewVideoService(s3 s3.S3, repo repository.Video, srv *Service) *VideoService {
-	return &VideoService{s3: s3, repo: repo, srv: srv}
+func NewVideoService(s3 s3.S3, repo repository.Video, srv *Service, cfg VideoServiceConfig) *VideoService {
+	return &VideoService{s3: s3, repo: repo, srv: srv, cfg: cfg}
 }
 
 // videoObjectKey — временная схема ключа объекта оригинала видео (§3.3 эпика).
@@ -125,7 +132,7 @@ func (s *VideoService) GetPreflightUploadURL(
 	// Получение URL для загрузки видео
 	url, err := s.s3.PresignPutObject(
 		ctx,
-		tempUploadBucket,
+		s.cfg.Bucket,
 		videoObjectKey(video.ID),
 		tempUploadContentType,
 		0,
