@@ -111,6 +111,9 @@ type VideoAsset interface {
 		bucket, key, contentType string,
 		sizeBytes int64,
 	) (domain.VideoAsset, error)
+	// DeleteByVideoAndKinds удаляет ассеты видео указанных видов вместе со связанными файлами.
+	// Используется для идемпотентной перерегистрации результатов обработки (Э1-Т14).
+	DeleteByVideoAndKinds(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind) error
 }
 
 // Outbox — репозиторий очереди исходящих событий Kafka (transactional outbox, §7.1 эпика).

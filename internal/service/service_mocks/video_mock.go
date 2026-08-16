@@ -11,6 +11,7 @@ import (
 	mm_time "time"
 	"vilib-api/internal/domain"
 
+	events "github.com/execaus/vilib-events"
 	"github.com/gojuno/minimock/v3"
 	"github.com/google/uuid"
 )
@@ -19,6 +20,27 @@ import (
 type VideoMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
+
+	funcApplyProcessingCompleted          func(ctx context.Context, evt events.Envelope, p events.ProcessingCompleted) (err error)
+	funcApplyProcessingCompletedOrigin    string
+	inspectFuncApplyProcessingCompleted   func(ctx context.Context, evt events.Envelope, p events.ProcessingCompleted)
+	afterApplyProcessingCompletedCounter  uint64
+	beforeApplyProcessingCompletedCounter uint64
+	ApplyProcessingCompletedMock          mVideoMockApplyProcessingCompleted
+
+	funcApplyProcessingFailed          func(ctx context.Context, evt events.Envelope, p events.ProcessingFailed) (err error)
+	funcApplyProcessingFailedOrigin    string
+	inspectFuncApplyProcessingFailed   func(ctx context.Context, evt events.Envelope, p events.ProcessingFailed)
+	afterApplyProcessingFailedCounter  uint64
+	beforeApplyProcessingFailedCounter uint64
+	ApplyProcessingFailedMock          mVideoMockApplyProcessingFailed
+
+	funcApplyProcessingStarted          func(ctx context.Context, evt events.Envelope, p events.ProcessingStarted) (err error)
+	funcApplyProcessingStartedOrigin    string
+	inspectFuncApplyProcessingStarted   func(ctx context.Context, evt events.Envelope, p events.ProcessingStarted)
+	afterApplyProcessingStartedCounter  uint64
+	beforeApplyProcessingStartedCounter uint64
+	ApplyProcessingStartedMock          mVideoMockApplyProcessingStarted
 
 	funcCompleteUpload          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, videoID uuid.UUID) (v1 domain.Video, err error)
 	funcCompleteUploadOrigin    string
@@ -71,6 +93,15 @@ func NewVideoMock(t minimock.Tester) *VideoMock {
 		controller.RegisterMocker(m)
 	}
 
+	m.ApplyProcessingCompletedMock = mVideoMockApplyProcessingCompleted{mock: m}
+	m.ApplyProcessingCompletedMock.callArgs = []*VideoMockApplyProcessingCompletedParams{}
+
+	m.ApplyProcessingFailedMock = mVideoMockApplyProcessingFailed{mock: m}
+	m.ApplyProcessingFailedMock.callArgs = []*VideoMockApplyProcessingFailedParams{}
+
+	m.ApplyProcessingStartedMock = mVideoMockApplyProcessingStarted{mock: m}
+	m.ApplyProcessingStartedMock.callArgs = []*VideoMockApplyProcessingStartedParams{}
+
 	m.CompleteUploadMock = mVideoMockCompleteUpload{mock: m}
 	m.CompleteUploadMock.callArgs = []*VideoMockCompleteUploadParams{}
 
@@ -92,6 +123,1125 @@ func NewVideoMock(t minimock.Tester) *VideoMock {
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mVideoMockApplyProcessingCompleted struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockApplyProcessingCompletedExpectation
+	expectations       []*VideoMockApplyProcessingCompletedExpectation
+
+	callArgs []*VideoMockApplyProcessingCompletedParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockApplyProcessingCompletedExpectation specifies expectation struct of the Video.ApplyProcessingCompleted
+type VideoMockApplyProcessingCompletedExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockApplyProcessingCompletedParams
+	paramPtrs          *VideoMockApplyProcessingCompletedParamPtrs
+	expectationOrigins VideoMockApplyProcessingCompletedExpectationOrigins
+	results            *VideoMockApplyProcessingCompletedResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockApplyProcessingCompletedParams contains parameters of the Video.ApplyProcessingCompleted
+type VideoMockApplyProcessingCompletedParams struct {
+	ctx context.Context
+	evt events.Envelope
+	p   events.ProcessingCompleted
+}
+
+// VideoMockApplyProcessingCompletedParamPtrs contains pointers to parameters of the Video.ApplyProcessingCompleted
+type VideoMockApplyProcessingCompletedParamPtrs struct {
+	ctx *context.Context
+	evt *events.Envelope
+	p   *events.ProcessingCompleted
+}
+
+// VideoMockApplyProcessingCompletedResults contains results of the Video.ApplyProcessingCompleted
+type VideoMockApplyProcessingCompletedResults struct {
+	err error
+}
+
+// VideoMockApplyProcessingCompletedOrigins contains origins of expectations of the Video.ApplyProcessingCompleted
+type VideoMockApplyProcessingCompletedExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originEvt string
+	originP   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) Optional() *mVideoMockApplyProcessingCompleted {
+	mmApplyProcessingCompleted.optional = true
+	return mmApplyProcessingCompleted
+}
+
+// Expect sets up expected params for Video.ApplyProcessingCompleted
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) Expect(ctx context.Context, evt events.Envelope, p events.ProcessingCompleted) *mVideoMockApplyProcessingCompleted {
+	if mmApplyProcessingCompleted.mock.funcApplyProcessingCompleted != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("VideoMock.ApplyProcessingCompleted mock is already set by Set")
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation == nil {
+		mmApplyProcessingCompleted.defaultExpectation = &VideoMockApplyProcessingCompletedExpectation{}
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation.paramPtrs != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("VideoMock.ApplyProcessingCompleted mock is already set by ExpectParams functions")
+	}
+
+	mmApplyProcessingCompleted.defaultExpectation.params = &VideoMockApplyProcessingCompletedParams{ctx, evt, p}
+	mmApplyProcessingCompleted.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmApplyProcessingCompleted.expectations {
+		if minimock.Equal(e.params, mmApplyProcessingCompleted.defaultExpectation.params) {
+			mmApplyProcessingCompleted.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmApplyProcessingCompleted.defaultExpectation.params)
+		}
+	}
+
+	return mmApplyProcessingCompleted
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.ApplyProcessingCompleted
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) ExpectCtxParam1(ctx context.Context) *mVideoMockApplyProcessingCompleted {
+	if mmApplyProcessingCompleted.mock.funcApplyProcessingCompleted != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("VideoMock.ApplyProcessingCompleted mock is already set by Set")
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation == nil {
+		mmApplyProcessingCompleted.defaultExpectation = &VideoMockApplyProcessingCompletedExpectation{}
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation.params != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("VideoMock.ApplyProcessingCompleted mock is already set by Expect")
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation.paramPtrs == nil {
+		mmApplyProcessingCompleted.defaultExpectation.paramPtrs = &VideoMockApplyProcessingCompletedParamPtrs{}
+	}
+	mmApplyProcessingCompleted.defaultExpectation.paramPtrs.ctx = &ctx
+	mmApplyProcessingCompleted.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmApplyProcessingCompleted
+}
+
+// ExpectEvtParam2 sets up expected param evt for Video.ApplyProcessingCompleted
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) ExpectEvtParam2(evt events.Envelope) *mVideoMockApplyProcessingCompleted {
+	if mmApplyProcessingCompleted.mock.funcApplyProcessingCompleted != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("VideoMock.ApplyProcessingCompleted mock is already set by Set")
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation == nil {
+		mmApplyProcessingCompleted.defaultExpectation = &VideoMockApplyProcessingCompletedExpectation{}
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation.params != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("VideoMock.ApplyProcessingCompleted mock is already set by Expect")
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation.paramPtrs == nil {
+		mmApplyProcessingCompleted.defaultExpectation.paramPtrs = &VideoMockApplyProcessingCompletedParamPtrs{}
+	}
+	mmApplyProcessingCompleted.defaultExpectation.paramPtrs.evt = &evt
+	mmApplyProcessingCompleted.defaultExpectation.expectationOrigins.originEvt = minimock.CallerInfo(1)
+
+	return mmApplyProcessingCompleted
+}
+
+// ExpectPParam3 sets up expected param p for Video.ApplyProcessingCompleted
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) ExpectPParam3(p events.ProcessingCompleted) *mVideoMockApplyProcessingCompleted {
+	if mmApplyProcessingCompleted.mock.funcApplyProcessingCompleted != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("VideoMock.ApplyProcessingCompleted mock is already set by Set")
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation == nil {
+		mmApplyProcessingCompleted.defaultExpectation = &VideoMockApplyProcessingCompletedExpectation{}
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation.params != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("VideoMock.ApplyProcessingCompleted mock is already set by Expect")
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation.paramPtrs == nil {
+		mmApplyProcessingCompleted.defaultExpectation.paramPtrs = &VideoMockApplyProcessingCompletedParamPtrs{}
+	}
+	mmApplyProcessingCompleted.defaultExpectation.paramPtrs.p = &p
+	mmApplyProcessingCompleted.defaultExpectation.expectationOrigins.originP = minimock.CallerInfo(1)
+
+	return mmApplyProcessingCompleted
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.ApplyProcessingCompleted
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) Inspect(f func(ctx context.Context, evt events.Envelope, p events.ProcessingCompleted)) *mVideoMockApplyProcessingCompleted {
+	if mmApplyProcessingCompleted.mock.inspectFuncApplyProcessingCompleted != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("Inspect function is already set for VideoMock.ApplyProcessingCompleted")
+	}
+
+	mmApplyProcessingCompleted.mock.inspectFuncApplyProcessingCompleted = f
+
+	return mmApplyProcessingCompleted
+}
+
+// Return sets up results that will be returned by Video.ApplyProcessingCompleted
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) Return(err error) *VideoMock {
+	if mmApplyProcessingCompleted.mock.funcApplyProcessingCompleted != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("VideoMock.ApplyProcessingCompleted mock is already set by Set")
+	}
+
+	if mmApplyProcessingCompleted.defaultExpectation == nil {
+		mmApplyProcessingCompleted.defaultExpectation = &VideoMockApplyProcessingCompletedExpectation{mock: mmApplyProcessingCompleted.mock}
+	}
+	mmApplyProcessingCompleted.defaultExpectation.results = &VideoMockApplyProcessingCompletedResults{err}
+	mmApplyProcessingCompleted.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmApplyProcessingCompleted.mock
+}
+
+// Set uses given function f to mock the Video.ApplyProcessingCompleted method
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) Set(f func(ctx context.Context, evt events.Envelope, p events.ProcessingCompleted) (err error)) *VideoMock {
+	if mmApplyProcessingCompleted.defaultExpectation != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("Default expectation is already set for the Video.ApplyProcessingCompleted method")
+	}
+
+	if len(mmApplyProcessingCompleted.expectations) > 0 {
+		mmApplyProcessingCompleted.mock.t.Fatalf("Some expectations are already set for the Video.ApplyProcessingCompleted method")
+	}
+
+	mmApplyProcessingCompleted.mock.funcApplyProcessingCompleted = f
+	mmApplyProcessingCompleted.mock.funcApplyProcessingCompletedOrigin = minimock.CallerInfo(1)
+	return mmApplyProcessingCompleted.mock
+}
+
+// When sets expectation for the Video.ApplyProcessingCompleted which will trigger the result defined by the following
+// Then helper
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) When(ctx context.Context, evt events.Envelope, p events.ProcessingCompleted) *VideoMockApplyProcessingCompletedExpectation {
+	if mmApplyProcessingCompleted.mock.funcApplyProcessingCompleted != nil {
+		mmApplyProcessingCompleted.mock.t.Fatalf("VideoMock.ApplyProcessingCompleted mock is already set by Set")
+	}
+
+	expectation := &VideoMockApplyProcessingCompletedExpectation{
+		mock:               mmApplyProcessingCompleted.mock,
+		params:             &VideoMockApplyProcessingCompletedParams{ctx, evt, p},
+		expectationOrigins: VideoMockApplyProcessingCompletedExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmApplyProcessingCompleted.expectations = append(mmApplyProcessingCompleted.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.ApplyProcessingCompleted return parameters for the expectation previously defined by the When method
+func (e *VideoMockApplyProcessingCompletedExpectation) Then(err error) *VideoMock {
+	e.results = &VideoMockApplyProcessingCompletedResults{err}
+	return e.mock
+}
+
+// Times sets number of times Video.ApplyProcessingCompleted should be invoked
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) Times(n uint64) *mVideoMockApplyProcessingCompleted {
+	if n == 0 {
+		mmApplyProcessingCompleted.mock.t.Fatalf("Times of VideoMock.ApplyProcessingCompleted mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmApplyProcessingCompleted.expectedInvocations, n)
+	mmApplyProcessingCompleted.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmApplyProcessingCompleted
+}
+
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) invocationsDone() bool {
+	if len(mmApplyProcessingCompleted.expectations) == 0 && mmApplyProcessingCompleted.defaultExpectation == nil && mmApplyProcessingCompleted.mock.funcApplyProcessingCompleted == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmApplyProcessingCompleted.mock.afterApplyProcessingCompletedCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmApplyProcessingCompleted.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ApplyProcessingCompleted implements mm_service.Video
+func (mmApplyProcessingCompleted *VideoMock) ApplyProcessingCompleted(ctx context.Context, evt events.Envelope, p events.ProcessingCompleted) (err error) {
+	mm_atomic.AddUint64(&mmApplyProcessingCompleted.beforeApplyProcessingCompletedCounter, 1)
+	defer mm_atomic.AddUint64(&mmApplyProcessingCompleted.afterApplyProcessingCompletedCounter, 1)
+
+	mmApplyProcessingCompleted.t.Helper()
+
+	if mmApplyProcessingCompleted.inspectFuncApplyProcessingCompleted != nil {
+		mmApplyProcessingCompleted.inspectFuncApplyProcessingCompleted(ctx, evt, p)
+	}
+
+	mm_params := VideoMockApplyProcessingCompletedParams{ctx, evt, p}
+
+	// Record call args
+	mmApplyProcessingCompleted.ApplyProcessingCompletedMock.mutex.Lock()
+	mmApplyProcessingCompleted.ApplyProcessingCompletedMock.callArgs = append(mmApplyProcessingCompleted.ApplyProcessingCompletedMock.callArgs, &mm_params)
+	mmApplyProcessingCompleted.ApplyProcessingCompletedMock.mutex.Unlock()
+
+	for _, e := range mmApplyProcessingCompleted.ApplyProcessingCompletedMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmApplyProcessingCompleted.ApplyProcessingCompletedMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmApplyProcessingCompleted.ApplyProcessingCompletedMock.defaultExpectation.Counter, 1)
+		mm_want := mmApplyProcessingCompleted.ApplyProcessingCompletedMock.defaultExpectation.params
+		mm_want_ptrs := mmApplyProcessingCompleted.ApplyProcessingCompletedMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockApplyProcessingCompletedParams{ctx, evt, p}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmApplyProcessingCompleted.t.Errorf("VideoMock.ApplyProcessingCompleted got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmApplyProcessingCompleted.ApplyProcessingCompletedMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.evt != nil && !minimock.Equal(*mm_want_ptrs.evt, mm_got.evt) {
+				mmApplyProcessingCompleted.t.Errorf("VideoMock.ApplyProcessingCompleted got unexpected parameter evt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmApplyProcessingCompleted.ApplyProcessingCompletedMock.defaultExpectation.expectationOrigins.originEvt, *mm_want_ptrs.evt, mm_got.evt, minimock.Diff(*mm_want_ptrs.evt, mm_got.evt))
+			}
+
+			if mm_want_ptrs.p != nil && !minimock.Equal(*mm_want_ptrs.p, mm_got.p) {
+				mmApplyProcessingCompleted.t.Errorf("VideoMock.ApplyProcessingCompleted got unexpected parameter p, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmApplyProcessingCompleted.ApplyProcessingCompletedMock.defaultExpectation.expectationOrigins.originP, *mm_want_ptrs.p, mm_got.p, minimock.Diff(*mm_want_ptrs.p, mm_got.p))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmApplyProcessingCompleted.t.Errorf("VideoMock.ApplyProcessingCompleted got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmApplyProcessingCompleted.ApplyProcessingCompletedMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmApplyProcessingCompleted.ApplyProcessingCompletedMock.defaultExpectation.results
+		if mm_results == nil {
+			mmApplyProcessingCompleted.t.Fatal("No results are set for the VideoMock.ApplyProcessingCompleted")
+		}
+		return (*mm_results).err
+	}
+	if mmApplyProcessingCompleted.funcApplyProcessingCompleted != nil {
+		return mmApplyProcessingCompleted.funcApplyProcessingCompleted(ctx, evt, p)
+	}
+	mmApplyProcessingCompleted.t.Fatalf("Unexpected call to VideoMock.ApplyProcessingCompleted. %v %v %v", ctx, evt, p)
+	return
+}
+
+// ApplyProcessingCompletedAfterCounter returns a count of finished VideoMock.ApplyProcessingCompleted invocations
+func (mmApplyProcessingCompleted *VideoMock) ApplyProcessingCompletedAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmApplyProcessingCompleted.afterApplyProcessingCompletedCounter)
+}
+
+// ApplyProcessingCompletedBeforeCounter returns a count of VideoMock.ApplyProcessingCompleted invocations
+func (mmApplyProcessingCompleted *VideoMock) ApplyProcessingCompletedBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmApplyProcessingCompleted.beforeApplyProcessingCompletedCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.ApplyProcessingCompleted.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmApplyProcessingCompleted *mVideoMockApplyProcessingCompleted) Calls() []*VideoMockApplyProcessingCompletedParams {
+	mmApplyProcessingCompleted.mutex.RLock()
+
+	argCopy := make([]*VideoMockApplyProcessingCompletedParams, len(mmApplyProcessingCompleted.callArgs))
+	copy(argCopy, mmApplyProcessingCompleted.callArgs)
+
+	mmApplyProcessingCompleted.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockApplyProcessingCompletedDone returns true if the count of the ApplyProcessingCompleted invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockApplyProcessingCompletedDone() bool {
+	if m.ApplyProcessingCompletedMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ApplyProcessingCompletedMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ApplyProcessingCompletedMock.invocationsDone()
+}
+
+// MinimockApplyProcessingCompletedInspect logs each unmet expectation
+func (m *VideoMock) MinimockApplyProcessingCompletedInspect() {
+	for _, e := range m.ApplyProcessingCompletedMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.ApplyProcessingCompleted at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterApplyProcessingCompletedCounter := mm_atomic.LoadUint64(&m.afterApplyProcessingCompletedCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ApplyProcessingCompletedMock.defaultExpectation != nil && afterApplyProcessingCompletedCounter < 1 {
+		if m.ApplyProcessingCompletedMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.ApplyProcessingCompleted at\n%s", m.ApplyProcessingCompletedMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.ApplyProcessingCompleted at\n%s with params: %#v", m.ApplyProcessingCompletedMock.defaultExpectation.expectationOrigins.origin, *m.ApplyProcessingCompletedMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcApplyProcessingCompleted != nil && afterApplyProcessingCompletedCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.ApplyProcessingCompleted at\n%s", m.funcApplyProcessingCompletedOrigin)
+	}
+
+	if !m.ApplyProcessingCompletedMock.invocationsDone() && afterApplyProcessingCompletedCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.ApplyProcessingCompleted at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ApplyProcessingCompletedMock.expectedInvocations), m.ApplyProcessingCompletedMock.expectedInvocationsOrigin, afterApplyProcessingCompletedCounter)
+	}
+}
+
+type mVideoMockApplyProcessingFailed struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockApplyProcessingFailedExpectation
+	expectations       []*VideoMockApplyProcessingFailedExpectation
+
+	callArgs []*VideoMockApplyProcessingFailedParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockApplyProcessingFailedExpectation specifies expectation struct of the Video.ApplyProcessingFailed
+type VideoMockApplyProcessingFailedExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockApplyProcessingFailedParams
+	paramPtrs          *VideoMockApplyProcessingFailedParamPtrs
+	expectationOrigins VideoMockApplyProcessingFailedExpectationOrigins
+	results            *VideoMockApplyProcessingFailedResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockApplyProcessingFailedParams contains parameters of the Video.ApplyProcessingFailed
+type VideoMockApplyProcessingFailedParams struct {
+	ctx context.Context
+	evt events.Envelope
+	p   events.ProcessingFailed
+}
+
+// VideoMockApplyProcessingFailedParamPtrs contains pointers to parameters of the Video.ApplyProcessingFailed
+type VideoMockApplyProcessingFailedParamPtrs struct {
+	ctx *context.Context
+	evt *events.Envelope
+	p   *events.ProcessingFailed
+}
+
+// VideoMockApplyProcessingFailedResults contains results of the Video.ApplyProcessingFailed
+type VideoMockApplyProcessingFailedResults struct {
+	err error
+}
+
+// VideoMockApplyProcessingFailedOrigins contains origins of expectations of the Video.ApplyProcessingFailed
+type VideoMockApplyProcessingFailedExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originEvt string
+	originP   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) Optional() *mVideoMockApplyProcessingFailed {
+	mmApplyProcessingFailed.optional = true
+	return mmApplyProcessingFailed
+}
+
+// Expect sets up expected params for Video.ApplyProcessingFailed
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) Expect(ctx context.Context, evt events.Envelope, p events.ProcessingFailed) *mVideoMockApplyProcessingFailed {
+	if mmApplyProcessingFailed.mock.funcApplyProcessingFailed != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("VideoMock.ApplyProcessingFailed mock is already set by Set")
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation == nil {
+		mmApplyProcessingFailed.defaultExpectation = &VideoMockApplyProcessingFailedExpectation{}
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation.paramPtrs != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("VideoMock.ApplyProcessingFailed mock is already set by ExpectParams functions")
+	}
+
+	mmApplyProcessingFailed.defaultExpectation.params = &VideoMockApplyProcessingFailedParams{ctx, evt, p}
+	mmApplyProcessingFailed.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmApplyProcessingFailed.expectations {
+		if minimock.Equal(e.params, mmApplyProcessingFailed.defaultExpectation.params) {
+			mmApplyProcessingFailed.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmApplyProcessingFailed.defaultExpectation.params)
+		}
+	}
+
+	return mmApplyProcessingFailed
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.ApplyProcessingFailed
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) ExpectCtxParam1(ctx context.Context) *mVideoMockApplyProcessingFailed {
+	if mmApplyProcessingFailed.mock.funcApplyProcessingFailed != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("VideoMock.ApplyProcessingFailed mock is already set by Set")
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation == nil {
+		mmApplyProcessingFailed.defaultExpectation = &VideoMockApplyProcessingFailedExpectation{}
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation.params != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("VideoMock.ApplyProcessingFailed mock is already set by Expect")
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation.paramPtrs == nil {
+		mmApplyProcessingFailed.defaultExpectation.paramPtrs = &VideoMockApplyProcessingFailedParamPtrs{}
+	}
+	mmApplyProcessingFailed.defaultExpectation.paramPtrs.ctx = &ctx
+	mmApplyProcessingFailed.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmApplyProcessingFailed
+}
+
+// ExpectEvtParam2 sets up expected param evt for Video.ApplyProcessingFailed
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) ExpectEvtParam2(evt events.Envelope) *mVideoMockApplyProcessingFailed {
+	if mmApplyProcessingFailed.mock.funcApplyProcessingFailed != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("VideoMock.ApplyProcessingFailed mock is already set by Set")
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation == nil {
+		mmApplyProcessingFailed.defaultExpectation = &VideoMockApplyProcessingFailedExpectation{}
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation.params != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("VideoMock.ApplyProcessingFailed mock is already set by Expect")
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation.paramPtrs == nil {
+		mmApplyProcessingFailed.defaultExpectation.paramPtrs = &VideoMockApplyProcessingFailedParamPtrs{}
+	}
+	mmApplyProcessingFailed.defaultExpectation.paramPtrs.evt = &evt
+	mmApplyProcessingFailed.defaultExpectation.expectationOrigins.originEvt = minimock.CallerInfo(1)
+
+	return mmApplyProcessingFailed
+}
+
+// ExpectPParam3 sets up expected param p for Video.ApplyProcessingFailed
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) ExpectPParam3(p events.ProcessingFailed) *mVideoMockApplyProcessingFailed {
+	if mmApplyProcessingFailed.mock.funcApplyProcessingFailed != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("VideoMock.ApplyProcessingFailed mock is already set by Set")
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation == nil {
+		mmApplyProcessingFailed.defaultExpectation = &VideoMockApplyProcessingFailedExpectation{}
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation.params != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("VideoMock.ApplyProcessingFailed mock is already set by Expect")
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation.paramPtrs == nil {
+		mmApplyProcessingFailed.defaultExpectation.paramPtrs = &VideoMockApplyProcessingFailedParamPtrs{}
+	}
+	mmApplyProcessingFailed.defaultExpectation.paramPtrs.p = &p
+	mmApplyProcessingFailed.defaultExpectation.expectationOrigins.originP = minimock.CallerInfo(1)
+
+	return mmApplyProcessingFailed
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.ApplyProcessingFailed
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) Inspect(f func(ctx context.Context, evt events.Envelope, p events.ProcessingFailed)) *mVideoMockApplyProcessingFailed {
+	if mmApplyProcessingFailed.mock.inspectFuncApplyProcessingFailed != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("Inspect function is already set for VideoMock.ApplyProcessingFailed")
+	}
+
+	mmApplyProcessingFailed.mock.inspectFuncApplyProcessingFailed = f
+
+	return mmApplyProcessingFailed
+}
+
+// Return sets up results that will be returned by Video.ApplyProcessingFailed
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) Return(err error) *VideoMock {
+	if mmApplyProcessingFailed.mock.funcApplyProcessingFailed != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("VideoMock.ApplyProcessingFailed mock is already set by Set")
+	}
+
+	if mmApplyProcessingFailed.defaultExpectation == nil {
+		mmApplyProcessingFailed.defaultExpectation = &VideoMockApplyProcessingFailedExpectation{mock: mmApplyProcessingFailed.mock}
+	}
+	mmApplyProcessingFailed.defaultExpectation.results = &VideoMockApplyProcessingFailedResults{err}
+	mmApplyProcessingFailed.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmApplyProcessingFailed.mock
+}
+
+// Set uses given function f to mock the Video.ApplyProcessingFailed method
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) Set(f func(ctx context.Context, evt events.Envelope, p events.ProcessingFailed) (err error)) *VideoMock {
+	if mmApplyProcessingFailed.defaultExpectation != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("Default expectation is already set for the Video.ApplyProcessingFailed method")
+	}
+
+	if len(mmApplyProcessingFailed.expectations) > 0 {
+		mmApplyProcessingFailed.mock.t.Fatalf("Some expectations are already set for the Video.ApplyProcessingFailed method")
+	}
+
+	mmApplyProcessingFailed.mock.funcApplyProcessingFailed = f
+	mmApplyProcessingFailed.mock.funcApplyProcessingFailedOrigin = minimock.CallerInfo(1)
+	return mmApplyProcessingFailed.mock
+}
+
+// When sets expectation for the Video.ApplyProcessingFailed which will trigger the result defined by the following
+// Then helper
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) When(ctx context.Context, evt events.Envelope, p events.ProcessingFailed) *VideoMockApplyProcessingFailedExpectation {
+	if mmApplyProcessingFailed.mock.funcApplyProcessingFailed != nil {
+		mmApplyProcessingFailed.mock.t.Fatalf("VideoMock.ApplyProcessingFailed mock is already set by Set")
+	}
+
+	expectation := &VideoMockApplyProcessingFailedExpectation{
+		mock:               mmApplyProcessingFailed.mock,
+		params:             &VideoMockApplyProcessingFailedParams{ctx, evt, p},
+		expectationOrigins: VideoMockApplyProcessingFailedExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmApplyProcessingFailed.expectations = append(mmApplyProcessingFailed.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.ApplyProcessingFailed return parameters for the expectation previously defined by the When method
+func (e *VideoMockApplyProcessingFailedExpectation) Then(err error) *VideoMock {
+	e.results = &VideoMockApplyProcessingFailedResults{err}
+	return e.mock
+}
+
+// Times sets number of times Video.ApplyProcessingFailed should be invoked
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) Times(n uint64) *mVideoMockApplyProcessingFailed {
+	if n == 0 {
+		mmApplyProcessingFailed.mock.t.Fatalf("Times of VideoMock.ApplyProcessingFailed mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmApplyProcessingFailed.expectedInvocations, n)
+	mmApplyProcessingFailed.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmApplyProcessingFailed
+}
+
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) invocationsDone() bool {
+	if len(mmApplyProcessingFailed.expectations) == 0 && mmApplyProcessingFailed.defaultExpectation == nil && mmApplyProcessingFailed.mock.funcApplyProcessingFailed == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmApplyProcessingFailed.mock.afterApplyProcessingFailedCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmApplyProcessingFailed.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ApplyProcessingFailed implements mm_service.Video
+func (mmApplyProcessingFailed *VideoMock) ApplyProcessingFailed(ctx context.Context, evt events.Envelope, p events.ProcessingFailed) (err error) {
+	mm_atomic.AddUint64(&mmApplyProcessingFailed.beforeApplyProcessingFailedCounter, 1)
+	defer mm_atomic.AddUint64(&mmApplyProcessingFailed.afterApplyProcessingFailedCounter, 1)
+
+	mmApplyProcessingFailed.t.Helper()
+
+	if mmApplyProcessingFailed.inspectFuncApplyProcessingFailed != nil {
+		mmApplyProcessingFailed.inspectFuncApplyProcessingFailed(ctx, evt, p)
+	}
+
+	mm_params := VideoMockApplyProcessingFailedParams{ctx, evt, p}
+
+	// Record call args
+	mmApplyProcessingFailed.ApplyProcessingFailedMock.mutex.Lock()
+	mmApplyProcessingFailed.ApplyProcessingFailedMock.callArgs = append(mmApplyProcessingFailed.ApplyProcessingFailedMock.callArgs, &mm_params)
+	mmApplyProcessingFailed.ApplyProcessingFailedMock.mutex.Unlock()
+
+	for _, e := range mmApplyProcessingFailed.ApplyProcessingFailedMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmApplyProcessingFailed.ApplyProcessingFailedMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmApplyProcessingFailed.ApplyProcessingFailedMock.defaultExpectation.Counter, 1)
+		mm_want := mmApplyProcessingFailed.ApplyProcessingFailedMock.defaultExpectation.params
+		mm_want_ptrs := mmApplyProcessingFailed.ApplyProcessingFailedMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockApplyProcessingFailedParams{ctx, evt, p}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmApplyProcessingFailed.t.Errorf("VideoMock.ApplyProcessingFailed got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmApplyProcessingFailed.ApplyProcessingFailedMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.evt != nil && !minimock.Equal(*mm_want_ptrs.evt, mm_got.evt) {
+				mmApplyProcessingFailed.t.Errorf("VideoMock.ApplyProcessingFailed got unexpected parameter evt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmApplyProcessingFailed.ApplyProcessingFailedMock.defaultExpectation.expectationOrigins.originEvt, *mm_want_ptrs.evt, mm_got.evt, minimock.Diff(*mm_want_ptrs.evt, mm_got.evt))
+			}
+
+			if mm_want_ptrs.p != nil && !minimock.Equal(*mm_want_ptrs.p, mm_got.p) {
+				mmApplyProcessingFailed.t.Errorf("VideoMock.ApplyProcessingFailed got unexpected parameter p, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmApplyProcessingFailed.ApplyProcessingFailedMock.defaultExpectation.expectationOrigins.originP, *mm_want_ptrs.p, mm_got.p, minimock.Diff(*mm_want_ptrs.p, mm_got.p))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmApplyProcessingFailed.t.Errorf("VideoMock.ApplyProcessingFailed got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmApplyProcessingFailed.ApplyProcessingFailedMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmApplyProcessingFailed.ApplyProcessingFailedMock.defaultExpectation.results
+		if mm_results == nil {
+			mmApplyProcessingFailed.t.Fatal("No results are set for the VideoMock.ApplyProcessingFailed")
+		}
+		return (*mm_results).err
+	}
+	if mmApplyProcessingFailed.funcApplyProcessingFailed != nil {
+		return mmApplyProcessingFailed.funcApplyProcessingFailed(ctx, evt, p)
+	}
+	mmApplyProcessingFailed.t.Fatalf("Unexpected call to VideoMock.ApplyProcessingFailed. %v %v %v", ctx, evt, p)
+	return
+}
+
+// ApplyProcessingFailedAfterCounter returns a count of finished VideoMock.ApplyProcessingFailed invocations
+func (mmApplyProcessingFailed *VideoMock) ApplyProcessingFailedAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmApplyProcessingFailed.afterApplyProcessingFailedCounter)
+}
+
+// ApplyProcessingFailedBeforeCounter returns a count of VideoMock.ApplyProcessingFailed invocations
+func (mmApplyProcessingFailed *VideoMock) ApplyProcessingFailedBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmApplyProcessingFailed.beforeApplyProcessingFailedCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.ApplyProcessingFailed.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmApplyProcessingFailed *mVideoMockApplyProcessingFailed) Calls() []*VideoMockApplyProcessingFailedParams {
+	mmApplyProcessingFailed.mutex.RLock()
+
+	argCopy := make([]*VideoMockApplyProcessingFailedParams, len(mmApplyProcessingFailed.callArgs))
+	copy(argCopy, mmApplyProcessingFailed.callArgs)
+
+	mmApplyProcessingFailed.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockApplyProcessingFailedDone returns true if the count of the ApplyProcessingFailed invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockApplyProcessingFailedDone() bool {
+	if m.ApplyProcessingFailedMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ApplyProcessingFailedMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ApplyProcessingFailedMock.invocationsDone()
+}
+
+// MinimockApplyProcessingFailedInspect logs each unmet expectation
+func (m *VideoMock) MinimockApplyProcessingFailedInspect() {
+	for _, e := range m.ApplyProcessingFailedMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.ApplyProcessingFailed at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterApplyProcessingFailedCounter := mm_atomic.LoadUint64(&m.afterApplyProcessingFailedCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ApplyProcessingFailedMock.defaultExpectation != nil && afterApplyProcessingFailedCounter < 1 {
+		if m.ApplyProcessingFailedMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.ApplyProcessingFailed at\n%s", m.ApplyProcessingFailedMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.ApplyProcessingFailed at\n%s with params: %#v", m.ApplyProcessingFailedMock.defaultExpectation.expectationOrigins.origin, *m.ApplyProcessingFailedMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcApplyProcessingFailed != nil && afterApplyProcessingFailedCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.ApplyProcessingFailed at\n%s", m.funcApplyProcessingFailedOrigin)
+	}
+
+	if !m.ApplyProcessingFailedMock.invocationsDone() && afterApplyProcessingFailedCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.ApplyProcessingFailed at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ApplyProcessingFailedMock.expectedInvocations), m.ApplyProcessingFailedMock.expectedInvocationsOrigin, afterApplyProcessingFailedCounter)
+	}
+}
+
+type mVideoMockApplyProcessingStarted struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockApplyProcessingStartedExpectation
+	expectations       []*VideoMockApplyProcessingStartedExpectation
+
+	callArgs []*VideoMockApplyProcessingStartedParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockApplyProcessingStartedExpectation specifies expectation struct of the Video.ApplyProcessingStarted
+type VideoMockApplyProcessingStartedExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockApplyProcessingStartedParams
+	paramPtrs          *VideoMockApplyProcessingStartedParamPtrs
+	expectationOrigins VideoMockApplyProcessingStartedExpectationOrigins
+	results            *VideoMockApplyProcessingStartedResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockApplyProcessingStartedParams contains parameters of the Video.ApplyProcessingStarted
+type VideoMockApplyProcessingStartedParams struct {
+	ctx context.Context
+	evt events.Envelope
+	p   events.ProcessingStarted
+}
+
+// VideoMockApplyProcessingStartedParamPtrs contains pointers to parameters of the Video.ApplyProcessingStarted
+type VideoMockApplyProcessingStartedParamPtrs struct {
+	ctx *context.Context
+	evt *events.Envelope
+	p   *events.ProcessingStarted
+}
+
+// VideoMockApplyProcessingStartedResults contains results of the Video.ApplyProcessingStarted
+type VideoMockApplyProcessingStartedResults struct {
+	err error
+}
+
+// VideoMockApplyProcessingStartedOrigins contains origins of expectations of the Video.ApplyProcessingStarted
+type VideoMockApplyProcessingStartedExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originEvt string
+	originP   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) Optional() *mVideoMockApplyProcessingStarted {
+	mmApplyProcessingStarted.optional = true
+	return mmApplyProcessingStarted
+}
+
+// Expect sets up expected params for Video.ApplyProcessingStarted
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) Expect(ctx context.Context, evt events.Envelope, p events.ProcessingStarted) *mVideoMockApplyProcessingStarted {
+	if mmApplyProcessingStarted.mock.funcApplyProcessingStarted != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("VideoMock.ApplyProcessingStarted mock is already set by Set")
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation == nil {
+		mmApplyProcessingStarted.defaultExpectation = &VideoMockApplyProcessingStartedExpectation{}
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation.paramPtrs != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("VideoMock.ApplyProcessingStarted mock is already set by ExpectParams functions")
+	}
+
+	mmApplyProcessingStarted.defaultExpectation.params = &VideoMockApplyProcessingStartedParams{ctx, evt, p}
+	mmApplyProcessingStarted.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmApplyProcessingStarted.expectations {
+		if minimock.Equal(e.params, mmApplyProcessingStarted.defaultExpectation.params) {
+			mmApplyProcessingStarted.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmApplyProcessingStarted.defaultExpectation.params)
+		}
+	}
+
+	return mmApplyProcessingStarted
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.ApplyProcessingStarted
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) ExpectCtxParam1(ctx context.Context) *mVideoMockApplyProcessingStarted {
+	if mmApplyProcessingStarted.mock.funcApplyProcessingStarted != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("VideoMock.ApplyProcessingStarted mock is already set by Set")
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation == nil {
+		mmApplyProcessingStarted.defaultExpectation = &VideoMockApplyProcessingStartedExpectation{}
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation.params != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("VideoMock.ApplyProcessingStarted mock is already set by Expect")
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation.paramPtrs == nil {
+		mmApplyProcessingStarted.defaultExpectation.paramPtrs = &VideoMockApplyProcessingStartedParamPtrs{}
+	}
+	mmApplyProcessingStarted.defaultExpectation.paramPtrs.ctx = &ctx
+	mmApplyProcessingStarted.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmApplyProcessingStarted
+}
+
+// ExpectEvtParam2 sets up expected param evt for Video.ApplyProcessingStarted
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) ExpectEvtParam2(evt events.Envelope) *mVideoMockApplyProcessingStarted {
+	if mmApplyProcessingStarted.mock.funcApplyProcessingStarted != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("VideoMock.ApplyProcessingStarted mock is already set by Set")
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation == nil {
+		mmApplyProcessingStarted.defaultExpectation = &VideoMockApplyProcessingStartedExpectation{}
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation.params != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("VideoMock.ApplyProcessingStarted mock is already set by Expect")
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation.paramPtrs == nil {
+		mmApplyProcessingStarted.defaultExpectation.paramPtrs = &VideoMockApplyProcessingStartedParamPtrs{}
+	}
+	mmApplyProcessingStarted.defaultExpectation.paramPtrs.evt = &evt
+	mmApplyProcessingStarted.defaultExpectation.expectationOrigins.originEvt = minimock.CallerInfo(1)
+
+	return mmApplyProcessingStarted
+}
+
+// ExpectPParam3 sets up expected param p for Video.ApplyProcessingStarted
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) ExpectPParam3(p events.ProcessingStarted) *mVideoMockApplyProcessingStarted {
+	if mmApplyProcessingStarted.mock.funcApplyProcessingStarted != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("VideoMock.ApplyProcessingStarted mock is already set by Set")
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation == nil {
+		mmApplyProcessingStarted.defaultExpectation = &VideoMockApplyProcessingStartedExpectation{}
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation.params != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("VideoMock.ApplyProcessingStarted mock is already set by Expect")
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation.paramPtrs == nil {
+		mmApplyProcessingStarted.defaultExpectation.paramPtrs = &VideoMockApplyProcessingStartedParamPtrs{}
+	}
+	mmApplyProcessingStarted.defaultExpectation.paramPtrs.p = &p
+	mmApplyProcessingStarted.defaultExpectation.expectationOrigins.originP = minimock.CallerInfo(1)
+
+	return mmApplyProcessingStarted
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.ApplyProcessingStarted
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) Inspect(f func(ctx context.Context, evt events.Envelope, p events.ProcessingStarted)) *mVideoMockApplyProcessingStarted {
+	if mmApplyProcessingStarted.mock.inspectFuncApplyProcessingStarted != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("Inspect function is already set for VideoMock.ApplyProcessingStarted")
+	}
+
+	mmApplyProcessingStarted.mock.inspectFuncApplyProcessingStarted = f
+
+	return mmApplyProcessingStarted
+}
+
+// Return sets up results that will be returned by Video.ApplyProcessingStarted
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) Return(err error) *VideoMock {
+	if mmApplyProcessingStarted.mock.funcApplyProcessingStarted != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("VideoMock.ApplyProcessingStarted mock is already set by Set")
+	}
+
+	if mmApplyProcessingStarted.defaultExpectation == nil {
+		mmApplyProcessingStarted.defaultExpectation = &VideoMockApplyProcessingStartedExpectation{mock: mmApplyProcessingStarted.mock}
+	}
+	mmApplyProcessingStarted.defaultExpectation.results = &VideoMockApplyProcessingStartedResults{err}
+	mmApplyProcessingStarted.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmApplyProcessingStarted.mock
+}
+
+// Set uses given function f to mock the Video.ApplyProcessingStarted method
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) Set(f func(ctx context.Context, evt events.Envelope, p events.ProcessingStarted) (err error)) *VideoMock {
+	if mmApplyProcessingStarted.defaultExpectation != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("Default expectation is already set for the Video.ApplyProcessingStarted method")
+	}
+
+	if len(mmApplyProcessingStarted.expectations) > 0 {
+		mmApplyProcessingStarted.mock.t.Fatalf("Some expectations are already set for the Video.ApplyProcessingStarted method")
+	}
+
+	mmApplyProcessingStarted.mock.funcApplyProcessingStarted = f
+	mmApplyProcessingStarted.mock.funcApplyProcessingStartedOrigin = minimock.CallerInfo(1)
+	return mmApplyProcessingStarted.mock
+}
+
+// When sets expectation for the Video.ApplyProcessingStarted which will trigger the result defined by the following
+// Then helper
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) When(ctx context.Context, evt events.Envelope, p events.ProcessingStarted) *VideoMockApplyProcessingStartedExpectation {
+	if mmApplyProcessingStarted.mock.funcApplyProcessingStarted != nil {
+		mmApplyProcessingStarted.mock.t.Fatalf("VideoMock.ApplyProcessingStarted mock is already set by Set")
+	}
+
+	expectation := &VideoMockApplyProcessingStartedExpectation{
+		mock:               mmApplyProcessingStarted.mock,
+		params:             &VideoMockApplyProcessingStartedParams{ctx, evt, p},
+		expectationOrigins: VideoMockApplyProcessingStartedExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmApplyProcessingStarted.expectations = append(mmApplyProcessingStarted.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.ApplyProcessingStarted return parameters for the expectation previously defined by the When method
+func (e *VideoMockApplyProcessingStartedExpectation) Then(err error) *VideoMock {
+	e.results = &VideoMockApplyProcessingStartedResults{err}
+	return e.mock
+}
+
+// Times sets number of times Video.ApplyProcessingStarted should be invoked
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) Times(n uint64) *mVideoMockApplyProcessingStarted {
+	if n == 0 {
+		mmApplyProcessingStarted.mock.t.Fatalf("Times of VideoMock.ApplyProcessingStarted mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmApplyProcessingStarted.expectedInvocations, n)
+	mmApplyProcessingStarted.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmApplyProcessingStarted
+}
+
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) invocationsDone() bool {
+	if len(mmApplyProcessingStarted.expectations) == 0 && mmApplyProcessingStarted.defaultExpectation == nil && mmApplyProcessingStarted.mock.funcApplyProcessingStarted == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmApplyProcessingStarted.mock.afterApplyProcessingStartedCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmApplyProcessingStarted.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ApplyProcessingStarted implements mm_service.Video
+func (mmApplyProcessingStarted *VideoMock) ApplyProcessingStarted(ctx context.Context, evt events.Envelope, p events.ProcessingStarted) (err error) {
+	mm_atomic.AddUint64(&mmApplyProcessingStarted.beforeApplyProcessingStartedCounter, 1)
+	defer mm_atomic.AddUint64(&mmApplyProcessingStarted.afterApplyProcessingStartedCounter, 1)
+
+	mmApplyProcessingStarted.t.Helper()
+
+	if mmApplyProcessingStarted.inspectFuncApplyProcessingStarted != nil {
+		mmApplyProcessingStarted.inspectFuncApplyProcessingStarted(ctx, evt, p)
+	}
+
+	mm_params := VideoMockApplyProcessingStartedParams{ctx, evt, p}
+
+	// Record call args
+	mmApplyProcessingStarted.ApplyProcessingStartedMock.mutex.Lock()
+	mmApplyProcessingStarted.ApplyProcessingStartedMock.callArgs = append(mmApplyProcessingStarted.ApplyProcessingStartedMock.callArgs, &mm_params)
+	mmApplyProcessingStarted.ApplyProcessingStartedMock.mutex.Unlock()
+
+	for _, e := range mmApplyProcessingStarted.ApplyProcessingStartedMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmApplyProcessingStarted.ApplyProcessingStartedMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmApplyProcessingStarted.ApplyProcessingStartedMock.defaultExpectation.Counter, 1)
+		mm_want := mmApplyProcessingStarted.ApplyProcessingStartedMock.defaultExpectation.params
+		mm_want_ptrs := mmApplyProcessingStarted.ApplyProcessingStartedMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockApplyProcessingStartedParams{ctx, evt, p}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmApplyProcessingStarted.t.Errorf("VideoMock.ApplyProcessingStarted got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmApplyProcessingStarted.ApplyProcessingStartedMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.evt != nil && !minimock.Equal(*mm_want_ptrs.evt, mm_got.evt) {
+				mmApplyProcessingStarted.t.Errorf("VideoMock.ApplyProcessingStarted got unexpected parameter evt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmApplyProcessingStarted.ApplyProcessingStartedMock.defaultExpectation.expectationOrigins.originEvt, *mm_want_ptrs.evt, mm_got.evt, minimock.Diff(*mm_want_ptrs.evt, mm_got.evt))
+			}
+
+			if mm_want_ptrs.p != nil && !minimock.Equal(*mm_want_ptrs.p, mm_got.p) {
+				mmApplyProcessingStarted.t.Errorf("VideoMock.ApplyProcessingStarted got unexpected parameter p, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmApplyProcessingStarted.ApplyProcessingStartedMock.defaultExpectation.expectationOrigins.originP, *mm_want_ptrs.p, mm_got.p, minimock.Diff(*mm_want_ptrs.p, mm_got.p))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmApplyProcessingStarted.t.Errorf("VideoMock.ApplyProcessingStarted got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmApplyProcessingStarted.ApplyProcessingStartedMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmApplyProcessingStarted.ApplyProcessingStartedMock.defaultExpectation.results
+		if mm_results == nil {
+			mmApplyProcessingStarted.t.Fatal("No results are set for the VideoMock.ApplyProcessingStarted")
+		}
+		return (*mm_results).err
+	}
+	if mmApplyProcessingStarted.funcApplyProcessingStarted != nil {
+		return mmApplyProcessingStarted.funcApplyProcessingStarted(ctx, evt, p)
+	}
+	mmApplyProcessingStarted.t.Fatalf("Unexpected call to VideoMock.ApplyProcessingStarted. %v %v %v", ctx, evt, p)
+	return
+}
+
+// ApplyProcessingStartedAfterCounter returns a count of finished VideoMock.ApplyProcessingStarted invocations
+func (mmApplyProcessingStarted *VideoMock) ApplyProcessingStartedAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmApplyProcessingStarted.afterApplyProcessingStartedCounter)
+}
+
+// ApplyProcessingStartedBeforeCounter returns a count of VideoMock.ApplyProcessingStarted invocations
+func (mmApplyProcessingStarted *VideoMock) ApplyProcessingStartedBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmApplyProcessingStarted.beforeApplyProcessingStartedCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.ApplyProcessingStarted.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmApplyProcessingStarted *mVideoMockApplyProcessingStarted) Calls() []*VideoMockApplyProcessingStartedParams {
+	mmApplyProcessingStarted.mutex.RLock()
+
+	argCopy := make([]*VideoMockApplyProcessingStartedParams, len(mmApplyProcessingStarted.callArgs))
+	copy(argCopy, mmApplyProcessingStarted.callArgs)
+
+	mmApplyProcessingStarted.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockApplyProcessingStartedDone returns true if the count of the ApplyProcessingStarted invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockApplyProcessingStartedDone() bool {
+	if m.ApplyProcessingStartedMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ApplyProcessingStartedMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ApplyProcessingStartedMock.invocationsDone()
+}
+
+// MinimockApplyProcessingStartedInspect logs each unmet expectation
+func (m *VideoMock) MinimockApplyProcessingStartedInspect() {
+	for _, e := range m.ApplyProcessingStartedMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.ApplyProcessingStarted at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterApplyProcessingStartedCounter := mm_atomic.LoadUint64(&m.afterApplyProcessingStartedCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ApplyProcessingStartedMock.defaultExpectation != nil && afterApplyProcessingStartedCounter < 1 {
+		if m.ApplyProcessingStartedMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.ApplyProcessingStarted at\n%s", m.ApplyProcessingStartedMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.ApplyProcessingStarted at\n%s with params: %#v", m.ApplyProcessingStartedMock.defaultExpectation.expectationOrigins.origin, *m.ApplyProcessingStartedMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcApplyProcessingStarted != nil && afterApplyProcessingStartedCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.ApplyProcessingStarted at\n%s", m.funcApplyProcessingStartedOrigin)
+	}
+
+	if !m.ApplyProcessingStartedMock.invocationsDone() && afterApplyProcessingStartedCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.ApplyProcessingStarted at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ApplyProcessingStartedMock.expectedInvocations), m.ApplyProcessingStartedMock.expectedInvocationsOrigin, afterApplyProcessingStartedCounter)
+	}
 }
 
 type mVideoMockCompleteUpload struct {
@@ -2806,6 +3956,12 @@ func (m *VideoMock) MinimockRenameInspect() {
 func (m *VideoMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockApplyProcessingCompletedInspect()
+
+			m.MinimockApplyProcessingFailedInspect()
+
+			m.MinimockApplyProcessingStartedInspect()
+
 			m.MinimockCompleteUploadInspect()
 
 			m.MinimockCreateUploadInspect()
@@ -2840,6 +3996,9 @@ func (m *VideoMock) MinimockWait(timeout mm_time.Duration) {
 func (m *VideoMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockApplyProcessingCompletedDone() &&
+		m.MinimockApplyProcessingFailedDone() &&
+		m.MinimockApplyProcessingStartedDone() &&
 		m.MinimockCompleteUploadDone() &&
 		m.MinimockCreateUploadDone() &&
 		m.MinimockDeleteDone() &&

@@ -20,6 +20,13 @@ type VideoAssetMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
+	funcDeleteByVideoAndKinds          func(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind) (err error)
+	funcDeleteByVideoAndKindsOrigin    string
+	inspectFuncDeleteByVideoAndKinds   func(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind)
+	afterDeleteByVideoAndKindsCounter  uint64
+	beforeDeleteByVideoAndKindsCounter uint64
+	DeleteByVideoAndKindsMock          mVideoAssetMockDeleteByVideoAndKinds
+
 	funcInsert          func(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucket string, key string, contentType string, sizeBytes int64) (v1 domain.VideoAsset, err error)
 	funcInsertOrigin    string
 	inspectFuncInsert   func(ctx context.Context, videoID uuid.UUID, kind domain.VideoAssetKind, profile domain.VideoProfile, bucket string, key string, contentType string, sizeBytes int64)
@@ -43,6 +50,9 @@ func NewVideoAssetMock(t minimock.Tester) *VideoAssetMock {
 		controller.RegisterMocker(m)
 	}
 
+	m.DeleteByVideoAndKindsMock = mVideoAssetMockDeleteByVideoAndKinds{mock: m}
+	m.DeleteByVideoAndKindsMock.callArgs = []*VideoAssetMockDeleteByVideoAndKindsParams{}
+
 	m.InsertMock = mVideoAssetMockInsert{mock: m}
 	m.InsertMock.callArgs = []*VideoAssetMockInsertParams{}
 
@@ -52,6 +62,379 @@ func NewVideoAssetMock(t minimock.Tester) *VideoAssetMock {
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mVideoAssetMockDeleteByVideoAndKinds struct {
+	optional           bool
+	mock               *VideoAssetMock
+	defaultExpectation *VideoAssetMockDeleteByVideoAndKindsExpectation
+	expectations       []*VideoAssetMockDeleteByVideoAndKindsExpectation
+
+	callArgs []*VideoAssetMockDeleteByVideoAndKindsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoAssetMockDeleteByVideoAndKindsExpectation specifies expectation struct of the VideoAsset.DeleteByVideoAndKinds
+type VideoAssetMockDeleteByVideoAndKindsExpectation struct {
+	mock               *VideoAssetMock
+	params             *VideoAssetMockDeleteByVideoAndKindsParams
+	paramPtrs          *VideoAssetMockDeleteByVideoAndKindsParamPtrs
+	expectationOrigins VideoAssetMockDeleteByVideoAndKindsExpectationOrigins
+	results            *VideoAssetMockDeleteByVideoAndKindsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoAssetMockDeleteByVideoAndKindsParams contains parameters of the VideoAsset.DeleteByVideoAndKinds
+type VideoAssetMockDeleteByVideoAndKindsParams struct {
+	ctx     context.Context
+	videoID uuid.UUID
+	kinds   []domain.VideoAssetKind
+}
+
+// VideoAssetMockDeleteByVideoAndKindsParamPtrs contains pointers to parameters of the VideoAsset.DeleteByVideoAndKinds
+type VideoAssetMockDeleteByVideoAndKindsParamPtrs struct {
+	ctx     *context.Context
+	videoID *uuid.UUID
+	kinds   *[]domain.VideoAssetKind
+}
+
+// VideoAssetMockDeleteByVideoAndKindsResults contains results of the VideoAsset.DeleteByVideoAndKinds
+type VideoAssetMockDeleteByVideoAndKindsResults struct {
+	err error
+}
+
+// VideoAssetMockDeleteByVideoAndKindsOrigins contains origins of expectations of the VideoAsset.DeleteByVideoAndKinds
+type VideoAssetMockDeleteByVideoAndKindsExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originVideoID string
+	originKinds   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) Optional() *mVideoAssetMockDeleteByVideoAndKinds {
+	mmDeleteByVideoAndKinds.optional = true
+	return mmDeleteByVideoAndKinds
+}
+
+// Expect sets up expected params for VideoAsset.DeleteByVideoAndKinds
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) Expect(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind) *mVideoAssetMockDeleteByVideoAndKinds {
+	if mmDeleteByVideoAndKinds.mock.funcDeleteByVideoAndKinds != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("VideoAssetMock.DeleteByVideoAndKinds mock is already set by Set")
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation == nil {
+		mmDeleteByVideoAndKinds.defaultExpectation = &VideoAssetMockDeleteByVideoAndKindsExpectation{}
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation.paramPtrs != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("VideoAssetMock.DeleteByVideoAndKinds mock is already set by ExpectParams functions")
+	}
+
+	mmDeleteByVideoAndKinds.defaultExpectation.params = &VideoAssetMockDeleteByVideoAndKindsParams{ctx, videoID, kinds}
+	mmDeleteByVideoAndKinds.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmDeleteByVideoAndKinds.expectations {
+		if minimock.Equal(e.params, mmDeleteByVideoAndKinds.defaultExpectation.params) {
+			mmDeleteByVideoAndKinds.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmDeleteByVideoAndKinds.defaultExpectation.params)
+		}
+	}
+
+	return mmDeleteByVideoAndKinds
+}
+
+// ExpectCtxParam1 sets up expected param ctx for VideoAsset.DeleteByVideoAndKinds
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) ExpectCtxParam1(ctx context.Context) *mVideoAssetMockDeleteByVideoAndKinds {
+	if mmDeleteByVideoAndKinds.mock.funcDeleteByVideoAndKinds != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("VideoAssetMock.DeleteByVideoAndKinds mock is already set by Set")
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation == nil {
+		mmDeleteByVideoAndKinds.defaultExpectation = &VideoAssetMockDeleteByVideoAndKindsExpectation{}
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation.params != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("VideoAssetMock.DeleteByVideoAndKinds mock is already set by Expect")
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation.paramPtrs == nil {
+		mmDeleteByVideoAndKinds.defaultExpectation.paramPtrs = &VideoAssetMockDeleteByVideoAndKindsParamPtrs{}
+	}
+	mmDeleteByVideoAndKinds.defaultExpectation.paramPtrs.ctx = &ctx
+	mmDeleteByVideoAndKinds.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmDeleteByVideoAndKinds
+}
+
+// ExpectVideoIDParam2 sets up expected param videoID for VideoAsset.DeleteByVideoAndKinds
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) ExpectVideoIDParam2(videoID uuid.UUID) *mVideoAssetMockDeleteByVideoAndKinds {
+	if mmDeleteByVideoAndKinds.mock.funcDeleteByVideoAndKinds != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("VideoAssetMock.DeleteByVideoAndKinds mock is already set by Set")
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation == nil {
+		mmDeleteByVideoAndKinds.defaultExpectation = &VideoAssetMockDeleteByVideoAndKindsExpectation{}
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation.params != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("VideoAssetMock.DeleteByVideoAndKinds mock is already set by Expect")
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation.paramPtrs == nil {
+		mmDeleteByVideoAndKinds.defaultExpectation.paramPtrs = &VideoAssetMockDeleteByVideoAndKindsParamPtrs{}
+	}
+	mmDeleteByVideoAndKinds.defaultExpectation.paramPtrs.videoID = &videoID
+	mmDeleteByVideoAndKinds.defaultExpectation.expectationOrigins.originVideoID = minimock.CallerInfo(1)
+
+	return mmDeleteByVideoAndKinds
+}
+
+// ExpectKindsParam3 sets up expected param kinds for VideoAsset.DeleteByVideoAndKinds
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) ExpectKindsParam3(kinds []domain.VideoAssetKind) *mVideoAssetMockDeleteByVideoAndKinds {
+	if mmDeleteByVideoAndKinds.mock.funcDeleteByVideoAndKinds != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("VideoAssetMock.DeleteByVideoAndKinds mock is already set by Set")
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation == nil {
+		mmDeleteByVideoAndKinds.defaultExpectation = &VideoAssetMockDeleteByVideoAndKindsExpectation{}
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation.params != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("VideoAssetMock.DeleteByVideoAndKinds mock is already set by Expect")
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation.paramPtrs == nil {
+		mmDeleteByVideoAndKinds.defaultExpectation.paramPtrs = &VideoAssetMockDeleteByVideoAndKindsParamPtrs{}
+	}
+	mmDeleteByVideoAndKinds.defaultExpectation.paramPtrs.kinds = &kinds
+	mmDeleteByVideoAndKinds.defaultExpectation.expectationOrigins.originKinds = minimock.CallerInfo(1)
+
+	return mmDeleteByVideoAndKinds
+}
+
+// Inspect accepts an inspector function that has same arguments as the VideoAsset.DeleteByVideoAndKinds
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) Inspect(f func(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind)) *mVideoAssetMockDeleteByVideoAndKinds {
+	if mmDeleteByVideoAndKinds.mock.inspectFuncDeleteByVideoAndKinds != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("Inspect function is already set for VideoAssetMock.DeleteByVideoAndKinds")
+	}
+
+	mmDeleteByVideoAndKinds.mock.inspectFuncDeleteByVideoAndKinds = f
+
+	return mmDeleteByVideoAndKinds
+}
+
+// Return sets up results that will be returned by VideoAsset.DeleteByVideoAndKinds
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) Return(err error) *VideoAssetMock {
+	if mmDeleteByVideoAndKinds.mock.funcDeleteByVideoAndKinds != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("VideoAssetMock.DeleteByVideoAndKinds mock is already set by Set")
+	}
+
+	if mmDeleteByVideoAndKinds.defaultExpectation == nil {
+		mmDeleteByVideoAndKinds.defaultExpectation = &VideoAssetMockDeleteByVideoAndKindsExpectation{mock: mmDeleteByVideoAndKinds.mock}
+	}
+	mmDeleteByVideoAndKinds.defaultExpectation.results = &VideoAssetMockDeleteByVideoAndKindsResults{err}
+	mmDeleteByVideoAndKinds.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmDeleteByVideoAndKinds.mock
+}
+
+// Set uses given function f to mock the VideoAsset.DeleteByVideoAndKinds method
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) Set(f func(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind) (err error)) *VideoAssetMock {
+	if mmDeleteByVideoAndKinds.defaultExpectation != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("Default expectation is already set for the VideoAsset.DeleteByVideoAndKinds method")
+	}
+
+	if len(mmDeleteByVideoAndKinds.expectations) > 0 {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("Some expectations are already set for the VideoAsset.DeleteByVideoAndKinds method")
+	}
+
+	mmDeleteByVideoAndKinds.mock.funcDeleteByVideoAndKinds = f
+	mmDeleteByVideoAndKinds.mock.funcDeleteByVideoAndKindsOrigin = minimock.CallerInfo(1)
+	return mmDeleteByVideoAndKinds.mock
+}
+
+// When sets expectation for the VideoAsset.DeleteByVideoAndKinds which will trigger the result defined by the following
+// Then helper
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) When(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind) *VideoAssetMockDeleteByVideoAndKindsExpectation {
+	if mmDeleteByVideoAndKinds.mock.funcDeleteByVideoAndKinds != nil {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("VideoAssetMock.DeleteByVideoAndKinds mock is already set by Set")
+	}
+
+	expectation := &VideoAssetMockDeleteByVideoAndKindsExpectation{
+		mock:               mmDeleteByVideoAndKinds.mock,
+		params:             &VideoAssetMockDeleteByVideoAndKindsParams{ctx, videoID, kinds},
+		expectationOrigins: VideoAssetMockDeleteByVideoAndKindsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmDeleteByVideoAndKinds.expectations = append(mmDeleteByVideoAndKinds.expectations, expectation)
+	return expectation
+}
+
+// Then sets up VideoAsset.DeleteByVideoAndKinds return parameters for the expectation previously defined by the When method
+func (e *VideoAssetMockDeleteByVideoAndKindsExpectation) Then(err error) *VideoAssetMock {
+	e.results = &VideoAssetMockDeleteByVideoAndKindsResults{err}
+	return e.mock
+}
+
+// Times sets number of times VideoAsset.DeleteByVideoAndKinds should be invoked
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) Times(n uint64) *mVideoAssetMockDeleteByVideoAndKinds {
+	if n == 0 {
+		mmDeleteByVideoAndKinds.mock.t.Fatalf("Times of VideoAssetMock.DeleteByVideoAndKinds mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmDeleteByVideoAndKinds.expectedInvocations, n)
+	mmDeleteByVideoAndKinds.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmDeleteByVideoAndKinds
+}
+
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) invocationsDone() bool {
+	if len(mmDeleteByVideoAndKinds.expectations) == 0 && mmDeleteByVideoAndKinds.defaultExpectation == nil && mmDeleteByVideoAndKinds.mock.funcDeleteByVideoAndKinds == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmDeleteByVideoAndKinds.mock.afterDeleteByVideoAndKindsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmDeleteByVideoAndKinds.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// DeleteByVideoAndKinds implements mm_repository.VideoAsset
+func (mmDeleteByVideoAndKinds *VideoAssetMock) DeleteByVideoAndKinds(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind) (err error) {
+	mm_atomic.AddUint64(&mmDeleteByVideoAndKinds.beforeDeleteByVideoAndKindsCounter, 1)
+	defer mm_atomic.AddUint64(&mmDeleteByVideoAndKinds.afterDeleteByVideoAndKindsCounter, 1)
+
+	mmDeleteByVideoAndKinds.t.Helper()
+
+	if mmDeleteByVideoAndKinds.inspectFuncDeleteByVideoAndKinds != nil {
+		mmDeleteByVideoAndKinds.inspectFuncDeleteByVideoAndKinds(ctx, videoID, kinds)
+	}
+
+	mm_params := VideoAssetMockDeleteByVideoAndKindsParams{ctx, videoID, kinds}
+
+	// Record call args
+	mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.mutex.Lock()
+	mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.callArgs = append(mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.callArgs, &mm_params)
+	mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.mutex.Unlock()
+
+	for _, e := range mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.defaultExpectation.Counter, 1)
+		mm_want := mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.defaultExpectation.params
+		mm_want_ptrs := mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoAssetMockDeleteByVideoAndKindsParams{ctx, videoID, kinds}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmDeleteByVideoAndKinds.t.Errorf("VideoAssetMock.DeleteByVideoAndKinds got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.videoID != nil && !minimock.Equal(*mm_want_ptrs.videoID, mm_got.videoID) {
+				mmDeleteByVideoAndKinds.t.Errorf("VideoAssetMock.DeleteByVideoAndKinds got unexpected parameter videoID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.defaultExpectation.expectationOrigins.originVideoID, *mm_want_ptrs.videoID, mm_got.videoID, minimock.Diff(*mm_want_ptrs.videoID, mm_got.videoID))
+			}
+
+			if mm_want_ptrs.kinds != nil && !minimock.Equal(*mm_want_ptrs.kinds, mm_got.kinds) {
+				mmDeleteByVideoAndKinds.t.Errorf("VideoAssetMock.DeleteByVideoAndKinds got unexpected parameter kinds, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.defaultExpectation.expectationOrigins.originKinds, *mm_want_ptrs.kinds, mm_got.kinds, minimock.Diff(*mm_want_ptrs.kinds, mm_got.kinds))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmDeleteByVideoAndKinds.t.Errorf("VideoAssetMock.DeleteByVideoAndKinds got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmDeleteByVideoAndKinds.DeleteByVideoAndKindsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmDeleteByVideoAndKinds.t.Fatal("No results are set for the VideoAssetMock.DeleteByVideoAndKinds")
+		}
+		return (*mm_results).err
+	}
+	if mmDeleteByVideoAndKinds.funcDeleteByVideoAndKinds != nil {
+		return mmDeleteByVideoAndKinds.funcDeleteByVideoAndKinds(ctx, videoID, kinds)
+	}
+	mmDeleteByVideoAndKinds.t.Fatalf("Unexpected call to VideoAssetMock.DeleteByVideoAndKinds. %v %v %v", ctx, videoID, kinds)
+	return
+}
+
+// DeleteByVideoAndKindsAfterCounter returns a count of finished VideoAssetMock.DeleteByVideoAndKinds invocations
+func (mmDeleteByVideoAndKinds *VideoAssetMock) DeleteByVideoAndKindsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteByVideoAndKinds.afterDeleteByVideoAndKindsCounter)
+}
+
+// DeleteByVideoAndKindsBeforeCounter returns a count of VideoAssetMock.DeleteByVideoAndKinds invocations
+func (mmDeleteByVideoAndKinds *VideoAssetMock) DeleteByVideoAndKindsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmDeleteByVideoAndKinds.beforeDeleteByVideoAndKindsCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoAssetMock.DeleteByVideoAndKinds.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmDeleteByVideoAndKinds *mVideoAssetMockDeleteByVideoAndKinds) Calls() []*VideoAssetMockDeleteByVideoAndKindsParams {
+	mmDeleteByVideoAndKinds.mutex.RLock()
+
+	argCopy := make([]*VideoAssetMockDeleteByVideoAndKindsParams, len(mmDeleteByVideoAndKinds.callArgs))
+	copy(argCopy, mmDeleteByVideoAndKinds.callArgs)
+
+	mmDeleteByVideoAndKinds.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockDeleteByVideoAndKindsDone returns true if the count of the DeleteByVideoAndKinds invocations corresponds
+// the number of defined expectations
+func (m *VideoAssetMock) MinimockDeleteByVideoAndKindsDone() bool {
+	if m.DeleteByVideoAndKindsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.DeleteByVideoAndKindsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.DeleteByVideoAndKindsMock.invocationsDone()
+}
+
+// MinimockDeleteByVideoAndKindsInspect logs each unmet expectation
+func (m *VideoAssetMock) MinimockDeleteByVideoAndKindsInspect() {
+	for _, e := range m.DeleteByVideoAndKindsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoAssetMock.DeleteByVideoAndKinds at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterDeleteByVideoAndKindsCounter := mm_atomic.LoadUint64(&m.afterDeleteByVideoAndKindsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.DeleteByVideoAndKindsMock.defaultExpectation != nil && afterDeleteByVideoAndKindsCounter < 1 {
+		if m.DeleteByVideoAndKindsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoAssetMock.DeleteByVideoAndKinds at\n%s", m.DeleteByVideoAndKindsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoAssetMock.DeleteByVideoAndKinds at\n%s with params: %#v", m.DeleteByVideoAndKindsMock.defaultExpectation.expectationOrigins.origin, *m.DeleteByVideoAndKindsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcDeleteByVideoAndKinds != nil && afterDeleteByVideoAndKindsCounter < 1 {
+		m.t.Errorf("Expected call to VideoAssetMock.DeleteByVideoAndKinds at\n%s", m.funcDeleteByVideoAndKindsOrigin)
+	}
+
+	if !m.DeleteByVideoAndKindsMock.invocationsDone() && afterDeleteByVideoAndKindsCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoAssetMock.DeleteByVideoAndKinds at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.DeleteByVideoAndKindsMock.expectedInvocations), m.DeleteByVideoAndKindsMock.expectedInvocationsOrigin, afterDeleteByVideoAndKindsCounter)
+	}
 }
 
 type mVideoAssetMockInsert struct {
@@ -930,6 +1313,8 @@ func (m *VideoAssetMock) MinimockSelectInspect() {
 func (m *VideoAssetMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockDeleteByVideoAndKindsInspect()
+
 			m.MinimockInsertInspect()
 
 			m.MinimockSelectInspect()
@@ -956,6 +1341,7 @@ func (m *VideoAssetMock) MinimockWait(timeout mm_time.Duration) {
 func (m *VideoAssetMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockDeleteByVideoAndKindsDone() &&
 		m.MinimockInsertDone() &&
 		m.MinimockSelectDone()
 }

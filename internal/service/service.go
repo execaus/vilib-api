@@ -8,6 +8,8 @@ import (
 	"vilib-api/internal/s3"
 
 	"github.com/google/uuid"
+
+	events "github.com/execaus/vilib-events"
 )
 
 //go:generate minimock -i Auth -o ./service_mocks/auth_mock.go
@@ -123,6 +125,18 @@ type Video interface {
 	GetAll(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) ([]domain.Video, error)
 	Rename(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID, name string) (domain.Video, error)
 	Delete(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID) error
+	// ApplyProcessingStarted переводит видео из очереди в обработку по событию ProcessingStarted
+	// воркера. Системный вызов без проверки прав (аналог Update с initiatorID == nil); переход,
+	// недопустимый для текущего статуса/номера попытки, игнорируется с логом (§7.2 эпика).
+	ApplyProcessingStarted(ctx context.Context, evt events.Envelope, p events.ProcessingStarted) error
+	// ApplyProcessingCompleted идемпотентно перерегистрирует ассеты результатов обработки и
+	// переводит видео в готовность. Устаревшее событие или видео вне ожидаемого статуса —
+	// best-effort зачистка результатов-сирот в хранилище после коммита транзакции (§7.2, §7.3).
+	ApplyProcessingCompleted(ctx context.Context, evt events.Envelope, p events.ProcessingCompleted) error
+	// ApplyProcessingFailed переводит видео в failed при постоянной ошибке или исчерпанных
+	// попытках; при временной ошибке с запасом попыток возвращает видео в очередь и публикует
+	// повторное событие OriginalUploaded с очередным номером попытки (§7.2 эпика).
+	ApplyProcessingFailed(ctx context.Context, evt events.Envelope, p events.ProcessingFailed) error
 }
 
 type VideoAsset interface {
@@ -135,6 +149,9 @@ type VideoAsset interface {
 		sizeBytes int64,
 	) (domain.VideoAsset, error)
 	Get(ctx context.Context, videoID uuid.UUID) ([]domain.VideoAsset, error)
+	// DeleteByVideoAndKinds удаляет ассеты видео указанных видов вместе со связанными файлами —
+	// идемпотентная перерегистрация результатов обработки (Э1-Т14).
+	DeleteByVideoAndKinds(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind) error
 }
 
 type Access interface {

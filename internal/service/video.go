@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"vilib-api/config"
@@ -10,6 +11,7 @@ import (
 	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 	"vilib-api/internal/s3"
+	"vilib-api/internal/saga"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -310,6 +312,258 @@ func (s *VideoService) publishOriginalUploaded(
 	}
 
 	return nil
+}
+
+// processingStatuses — статусы, из которых допустимы переходы по событиям обработки воркера
+// (§1.3 эпика: диаграмма состояний видео).
+func processingStatuses() []domain.VideoStatus {
+	return []domain.VideoStatus{domain.VideoStatusQueued, domain.VideoStatusCompressing}
+}
+
+// validProcessingResultKind проверяет, что вид ассета из результата обработки допустим для
+// регистрации по ProcessingCompleted (оригинал регистрируется отдельно при CompleteUpload).
+func validProcessingResultKind(kind string) (domain.VideoAssetKind, bool) {
+	switch domain.VideoAssetKind(kind) {
+	case domain.VideoAssetKindHLSMaster, domain.VideoAssetKindHLSVariant:
+		return domain.VideoAssetKind(kind), true
+	case domain.VideoAssetKindOriginal:
+		return "", false
+	default:
+		return "", false
+	}
+}
+
+// ApplyProcessingStarted переводит видео из очереди в обработку по событию ProcessingStarted
+// воркера (§7.2 эпика). Системный вызов без проверки прав. Переход выполняется условным
+// UPDATE (queued → compressing, только при совпадении номера попытки); если строка не
+// обновилась — переход недопустим (устаревшая попытка, повторный ProcessingStarted, гонка с
+// watchdog'ом) и молча игнорируется с логом.
+func (s *VideoService) ApplyProcessingStarted(
+	ctx context.Context,
+	evt events.Envelope,
+	_ events.ProcessingStarted,
+) error {
+	attempt := evt.Attempt
+
+	updated, err := s.repo.UpdateStatusIf(
+		ctx,
+		evt.VideoID,
+		[]domain.VideoStatus{domain.VideoStatusQueued},
+		domain.VideoStatusCompressing,
+		domain.VideoPatch{ExpectedAttempt: &attempt},
+	)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if !updated {
+		zap.L().Info("processing started transition ignored",
+			zap.String("video_id", evt.VideoID.String()),
+			zap.Int("attempt", evt.Attempt),
+		)
+	}
+
+	return nil
+}
+
+// ApplyProcessingCompleted обрабатывает событие ProcessingCompleted (§7.2 эпика). Переход в
+// ready выполняется условным UPDATE первым: только если он применился (видео было в
+// queued/compressing и номер попытки совпал), в этой же транзакции идемпотентно
+// перерегистрируются ассеты результатов — старые hls_master/hls_variant удаляются и
+// вставляются заново (Э1-Т14). Если переход не применился (видео не найдено, статус вне
+// ожидаемого набора или попытка устарела), новые ассеты не регистрируются: после коммита
+// транзакции best-effort зачищаются возможные результаты-сироты в хранилище (Э1-Т22).
+func (s *VideoService) ApplyProcessingCompleted(
+	ctx context.Context,
+	evt events.Envelope,
+	p events.ProcessingCompleted,
+) error {
+	attempt := evt.Attempt
+
+	patch := domain.VideoPatch{ExpectedAttempt: &attempt, ClearFailure: true}
+	if p.Metadata.DurationMs > 0 {
+		patch.DurationMs = &p.Metadata.DurationMs
+	}
+	if p.Metadata.Width > 0 {
+		patch.Width = &p.Metadata.Width
+	}
+	if p.Metadata.Height > 0 {
+		patch.Height = &p.Metadata.Height
+	}
+
+	updated, err := s.repo.UpdateStatusIf(ctx, evt.VideoID, processingStatuses(), domain.VideoStatusReady, patch)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if !updated {
+		zap.L().Info("processing completed event ignored: stale attempt or video not in processing status",
+			zap.String("video_id", evt.VideoID.String()),
+			zap.Int("attempt", evt.Attempt),
+		)
+		s.cleanupOrphanProcessingResults(ctx, evt.VideoID)
+		return nil
+	}
+
+	return s.registerProcessingResults(ctx, evt.VideoID, p.Results)
+}
+
+// registerProcessingResults идемпотентно перерегистрирует ассеты результатов обработки видео:
+// удаляет ранее зарегистрированные hls_master/hls_variant и вставляет присланные заново.
+func (s *VideoService) registerProcessingResults(
+	ctx context.Context,
+	videoID uuid.UUID,
+	results []events.AssetResult,
+) error {
+	if err := s.srv.VideoAsset.DeleteByVideoAndKinds(
+		ctx,
+		videoID,
+		[]domain.VideoAssetKind{domain.VideoAssetKindHLSMaster, domain.VideoAssetKindHLSVariant},
+	); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	for _, result := range results {
+		kind, ok := validProcessingResultKind(result.Kind)
+		if !ok {
+			err := fmt.Errorf("%w: unsupported processing result asset kind %q", ErrValidation, result.Kind)
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		if _, createErr := s.srv.VideoAsset.Create(
+			ctx,
+			videoID,
+			kind,
+			domain.VideoProfile(result.Profile),
+			result.Bucket, result.Key, result.ContentType,
+			result.SizeBytes,
+		); createErr != nil {
+			zap.L().Error(createErr.Error())
+			return createErr
+		}
+	}
+
+	return nil
+}
+
+// cleanupOrphanProcessingResults регистрирует best-effort зачистку результатов обработки
+// в хранилище после коммита транзакции (§7.3 эпика) — на случай, если воркер уже успел
+// загрузить объекты по устаревшему/отклонённому событию (удалённое видео, гонка с watchdog'ом).
+func (s *VideoService) cleanupOrphanProcessingResults(ctx context.Context, videoID uuid.UUID) {
+	prefix := domain.VideoHLSPrefix(videoID)
+
+	saga.AfterCommit(ctx, func(hookCtx context.Context) {
+		if _, err := s.s3.DeleteByPrefix(hookCtx, s.cfg.Bucket, prefix); err != nil {
+			zap.L().Error("failed to cleanup orphan processing results",
+				zap.String("video_id", videoID.String()),
+				zap.String("prefix", prefix),
+				zap.Error(err),
+			)
+		}
+	})
+}
+
+// ApplyProcessingFailed обрабатывает событие ProcessingFailed (§7.2 эпика). Постоянная ошибка
+// или временная с исчерпанными попытками переводят видео в failed; временная ошибка с запасом
+// попыток возвращает видео в очередь с увеличенным номером попытки и публикует повторное
+// событие OriginalUploaded. Неизвестный класс ошибки трактуется как временный. Переход
+// выполняется условным UPDATE — недопустимый (видео не найдено, статус вне ожидаемого набора,
+// устаревшая попытка) молча игнорируется с логом.
+func (s *VideoService) ApplyProcessingFailed(
+	ctx context.Context,
+	evt events.Envelope,
+	p events.ProcessingFailed,
+) error {
+	if p.ErrorClass == events.ErrorClassPermanent {
+		return s.failProcessing(ctx, evt.VideoID, evt.Attempt, domain.VideoFailureClassPermanent, p.Reason)
+	}
+
+	if evt.Attempt < s.cfg.Video.MaxProcessingAttempts {
+		return s.requeueAfterTemporaryFailure(ctx, evt.VideoID, evt.Attempt)
+	}
+
+	return s.failProcessing(
+		ctx, evt.VideoID, evt.Attempt, domain.VideoFailureClassTemporary, "attempts exhausted: "+p.Reason,
+	)
+}
+
+// failProcessing условно переводит видео в failed с указанным классом и причиной ошибки.
+func (s *VideoService) failProcessing(
+	ctx context.Context,
+	videoID uuid.UUID,
+	attempt int,
+	class domain.VideoFailureClass,
+	reason string,
+) error {
+	updated, err := s.repo.UpdateStatusIf(
+		ctx,
+		videoID,
+		processingStatuses(),
+		domain.VideoStatusFailed,
+		domain.VideoPatch{ExpectedAttempt: &attempt, FailureClass: &class, FailureReason: &reason},
+	)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if !updated {
+		zap.L().Info("processing failed transition ignored: stale attempt or video not in processing status",
+			zap.String("video_id", videoID.String()),
+			zap.Int("attempt", attempt),
+		)
+	}
+
+	return nil
+}
+
+// requeueAfterTemporaryFailure условно возвращает видео из обработки в очередь с очередным
+// номером попытки и публикует повторное событие OriginalUploaded по данным уже
+// зарегистрированного ассета-оригинала.
+func (s *VideoService) requeueAfterTemporaryFailure(ctx context.Context, videoID uuid.UUID, attempt int) error {
+	next := attempt + 1
+
+	updated, err := s.repo.UpdateStatusIf(
+		ctx,
+		videoID,
+		processingStatuses(),
+		domain.VideoStatusQueued,
+		domain.VideoPatch{ExpectedAttempt: &attempt, ProcessingAttempt: &next},
+	)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if !updated {
+		zap.L().Info("temporary failure requeue ignored: stale attempt or video not in processing status",
+			zap.String("video_id", videoID.String()),
+			zap.Int("attempt", attempt),
+		)
+		return nil
+	}
+
+	assets, err := s.srv.VideoAsset.Get(ctx, videoID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	original := findAssetByKind(assets, domain.VideoAssetKindOriginal)
+	if original == nil {
+		notFoundErr := fmt.Errorf("original asset not found for video %s", videoID)
+		zap.L().Error(notFoundErr.Error())
+		return notFoundErr
+	}
+
+	return s.publishOriginalUploaded(ctx, videoID, next, original.ObjectKey, s3.ObjectInfo{
+		Size:        original.SizeBytes,
+		ContentType: original.ContentType,
+	})
 }
 
 func (s *VideoService) GetAll(

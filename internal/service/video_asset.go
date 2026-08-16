@@ -46,3 +46,18 @@ func (s *VideoAssetService) Create(
 
 	return asset, nil
 }
+
+// DeleteByVideoAndKinds удаляет ассеты видео указанных видов вместе со связанными файлами —
+// идемпотентная перерегистрация результатов обработки при повторном ProcessingCompleted (Э1-Т14).
+func (s *VideoAssetService) DeleteByVideoAndKinds(
+	ctx context.Context,
+	videoID uuid.UUID,
+	kinds []domain.VideoAssetKind,
+) error {
+	if err := s.repo.DeleteByVideoAndKinds(ctx, videoID, kinds); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
+}

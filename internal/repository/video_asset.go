@@ -7,7 +7,9 @@ import (
 
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
+	"github.com/stephenafamo/bob"
 	"github.com/stephenafamo/bob/dialect/psql"
+	"github.com/stephenafamo/bob/dialect/psql/dm"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"go.uber.org/zap"
 )
@@ -86,4 +88,53 @@ func (r *VideoAssetRepository) Insert(
 	asset.FromDBWithFile(assetDB, fileDB)
 
 	return asset, nil
+}
+
+// DeleteByVideoAndKinds удаляет ассеты видео указанных видов вместе со связанными файлами
+// (идемпотентная перерегистрация результатов обработки, Э1-Т14). Удаление выполняется через
+// files: video_assets.file_id → files.file_id объявлен ON DELETE CASCADE, поэтому строки
+// video_assets удаляются автоматически вслед за files. Отсутствие ассетов указанных видов —
+// не ошибка.
+func (r *VideoAssetRepository) DeleteByVideoAndKinds(
+	ctx context.Context,
+	videoID uuid.UUID,
+	kinds []domain.VideoAssetKind,
+) error {
+	if len(kinds) == 0 {
+		return nil
+	}
+
+	exec := r.provider.GetExecutor(ctx)
+
+	kindArgs := make([]bob.Expression, len(kinds))
+	for i, kind := range kinds {
+		kindArgs[i] = psql.Arg(string(kind))
+	}
+
+	assetsDB, err := schema.VideoAssets.Query(
+		sm.Where(schema.VideoAssets.Columns.VideoID.EQ(psql.Arg(videoID))),
+		sm.Where(schema.VideoAssets.Columns.Kind.In(kindArgs...)),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if len(assetsDB) == 0 {
+		return nil
+	}
+
+	fileIDArgs := make([]bob.Expression, len(assetsDB))
+	for i, asset := range assetsDB {
+		fileIDArgs[i] = psql.Arg(asset.FileID)
+	}
+
+	if _, deleteErr := schema.Files.Delete(
+		dm.Where(schema.Files.Columns.FileID.In(fileIDArgs...)),
+	).Exec(ctx, exec); deleteErr != nil {
+		zap.L().Error(deleteErr.Error())
+		return deleteErr
+	}
+
+	return nil
 }

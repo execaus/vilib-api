@@ -72,6 +72,13 @@ func VideoOriginalObjectKey(videoID uuid.UUID) string {
 	return "videos/" + videoID.String() + "/original"
 }
 
+// VideoHLSPrefix вычисляет префикс ключей объектов HLS-результатов обработки видео в
+// хранилище (§3.3 эпика): мастер-манифест, медиаплейлисты и сегменты по профилям. Используется
+// для best-effort зачистки результатов-сирот (§7.2) и повторной загрузки при обработке.
+func VideoHLSPrefix(videoID uuid.UUID) string {
+	return "videos/" + videoID.String() + "/hls/"
+}
+
 // VideoUpload — результат создания загрузки видео: идентификатор видео и преподписанный
 // URL на PUT-загрузку оригинала.
 type VideoUpload struct {

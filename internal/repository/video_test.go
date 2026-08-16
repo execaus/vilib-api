@@ -300,3 +300,85 @@ func TestRepository_VideoAssetSelect_Empty(t *testing.T) {
 		require.Empty(t, assets)
 	})
 }
+
+// TestRepository_VideoAssetDeleteByVideoAndKinds_DeletesOnlyRequestedKinds проверяет, что
+// удаляются только ассеты указанных видов вместе со связанными файлами, а оригинал остаётся
+// (Э1-Т14: идемпотентная перерегистрация результатов обработки не должна трогать оригинал).
+func TestRepository_VideoAssetDeleteByVideoAndKinds_DeletesOnlyRequestedKinds(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		video := newTestVideo(t, r, f, domain.VideoStatusCompressing)
+
+		original, err := r.VideoAsset.Insert(
+			t.Context(),
+			video.ID,
+			domain.VideoAssetKindOriginal,
+			domain.VideoProfile(""),
+			"bucket",
+			"videos/"+video.ID.String()+"/original",
+			"video/mp4",
+			1024,
+		)
+		require.NoError(t, err)
+
+		master, err := r.VideoAsset.Insert(
+			t.Context(),
+			video.ID,
+			domain.VideoAssetKindHLSMaster,
+			domain.VideoProfile(""),
+			"bucket",
+			"videos/"+video.ID.String()+"/hls/master.m3u8",
+			"application/vnd.apple.mpegurl",
+			512,
+		)
+		require.NoError(t, err)
+
+		variant, err := r.VideoAsset.Insert(
+			t.Context(),
+			video.ID,
+			domain.VideoAssetKindHLSVariant,
+			domain.VideoProfile("720p"),
+			"bucket",
+			"videos/"+video.ID.String()+"/hls/720p/playlist.m3u8",
+			"application/vnd.apple.mpegurl",
+			2048,
+		)
+		require.NoError(t, err)
+
+		err = r.VideoAsset.DeleteByVideoAndKinds(
+			t.Context(),
+			video.ID,
+			[]domain.VideoAssetKind{domain.VideoAssetKindHLSMaster, domain.VideoAssetKindHLSVariant},
+		)
+		require.NoError(t, err)
+
+		remaining, err := r.VideoAsset.Select(t.Context(), video.ID)
+		require.NoError(t, err)
+		require.Len(t, remaining, 1)
+		require.Equal(t, original.FileID, remaining[0].FileID)
+		require.Equal(t, domain.VideoAssetKindOriginal, remaining[0].Kind)
+
+		remainingIDs := []uuid.UUID{remaining[0].FileID}
+		require.NotContains(t, remainingIDs, master.FileID)
+		require.NotContains(t, remainingIDs, variant.FileID)
+	})
+}
+
+// TestRepository_VideoAssetDeleteByVideoAndKinds_NoMatchingAssets_NoError проверяет, что
+// удаление при отсутствии ассетов указанных видов у видео не возвращает ошибку.
+func TestRepository_VideoAssetDeleteByVideoAndKinds_NoMatchingAssets_NoError(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		video := newTestVideo(t, r, f, domain.VideoStatusQueued)
+
+		err := r.VideoAsset.DeleteByVideoAndKinds(
+			t.Context(),
+			video.ID,
+			[]domain.VideoAssetKind{domain.VideoAssetKindHLSMaster, domain.VideoAssetKindHLSVariant},
+		)
+
+		require.NoError(t, err)
+	})
+}
