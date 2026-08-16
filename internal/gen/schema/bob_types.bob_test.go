@@ -6,9 +6,11 @@ package schema
 import (
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/stephenafamo/bob"
+	"github.com/stephenafamo/bob/types"
 )
 
 // Set the testDB to enable tests that use the database
@@ -29,6 +31,9 @@ var _ bob.HookableType = &GroupMember{}
 // Make sure the type GroupRole runs hooks after queries
 var _ bob.HookableType = &GroupRole{}
 
+// Make sure the type OutboxEvent runs hooks after queries
+var _ bob.HookableType = &OutboxEvent{}
+
 // Make sure the type UserGroupVideo runs hooks after queries
 var _ bob.HookableType = &UserGroupVideo{}
 
@@ -46,3 +51,9 @@ var _ sql.Scanner = (*uuid.UUID)(nil)
 
 // Make sure the type uuid.UUID satisfies database/sql/driver.Valuer
 var _ driver.Valuer = *new(uuid.UUID)
+
+// Make sure the type types.JSON[json.RawMessage] satisfies database/sql.Scanner
+var _ sql.Scanner = (*types.JSON[json.RawMessage])(nil)
+
+// Make sure the type types.JSON[json.RawMessage] satisfies database/sql/driver.Valuer
+var _ driver.Valuer = *new(types.JSON[json.RawMessage])

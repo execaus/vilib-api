@@ -33,6 +33,8 @@ type File struct {
 	SizeBytes int64 `db:"size_bytes" `
 	// Время создания файла
 	CreatedAt time.Time `db:"created_at" `
+	// Ключ объекта в бакете хранилища
+	ObjectKey string `db:"object_key" `
 
 	R fileR `db:"-" `
 }
@@ -55,7 +57,7 @@ type fileR struct {
 func buildFileColumns(alias string) fileColumns {
 	return fileColumns{
 		ColumnsExpr: expr.NewColumnsExpr(
-			"file_id", "bucket", "content_type", "size_bytes", "created_at",
+			"file_id", "bucket", "content_type", "size_bytes", "created_at", "object_key",
 		).WithParent("files"),
 		tableAlias:  alias,
 		FileID:      psql.Quote(alias, "file_id"),
@@ -63,6 +65,7 @@ func buildFileColumns(alias string) fileColumns {
 		ContentType: psql.Quote(alias, "content_type"),
 		SizeBytes:   psql.Quote(alias, "size_bytes"),
 		CreatedAt:   psql.Quote(alias, "created_at"),
+		ObjectKey:   psql.Quote(alias, "object_key"),
 	}
 }
 
@@ -74,6 +77,7 @@ type fileColumns struct {
 	ContentType psql.Expression
 	SizeBytes   psql.Expression
 	CreatedAt   psql.Expression
+	ObjectKey   psql.Expression
 }
 
 func (c fileColumns) Alias() string {
@@ -93,10 +97,11 @@ type FileSetter struct {
 	ContentType omit.Val[string]    `db:"content_type" `
 	SizeBytes   omit.Val[int64]     `db:"size_bytes" `
 	CreatedAt   omit.Val[time.Time] `db:"created_at" `
+	ObjectKey   omit.Val[string]    `db:"object_key" `
 }
 
 func (s FileSetter) SetColumns() []string {
-	vals := make([]string, 0, 5)
+	vals := make([]string, 0, 6)
 	if s.FileID.IsValue() {
 		vals = append(vals, "file_id")
 	}
@@ -111,6 +116,9 @@ func (s FileSetter) SetColumns() []string {
 	}
 	if s.CreatedAt.IsValue() {
 		vals = append(vals, "created_at")
+	}
+	if s.ObjectKey.IsValue() {
+		vals = append(vals, "object_key")
 	}
 	return vals
 }
@@ -131,6 +139,9 @@ func (s FileSetter) Overwrite(t *File) {
 	if s.CreatedAt.IsValue() {
 		t.CreatedAt = s.CreatedAt.MustGet()
 	}
+	if s.ObjectKey.IsValue() {
+		t.ObjectKey = s.ObjectKey.MustGet()
+	}
 }
 
 func (s *FileSetter) Apply(q *dialect.InsertQuery) {
@@ -139,7 +150,7 @@ func (s *FileSetter) Apply(q *dialect.InsertQuery) {
 	})
 
 	q.AppendValues(bob.ExpressionFunc(func(ctx context.Context, w io.StringWriter, d bob.Dialect, start int) ([]any, error) {
-		vals := make([]bob.Expression, 5)
+		vals := make([]bob.Expression, 6)
 		if s.FileID.IsValue() {
 			vals[0] = psql.Arg(s.FileID.MustGet())
 		} else {
@@ -170,6 +181,12 @@ func (s *FileSetter) Apply(q *dialect.InsertQuery) {
 			vals[4] = psql.Raw("DEFAULT")
 		}
 
+		if s.ObjectKey.IsValue() {
+			vals[5] = psql.Arg(s.ObjectKey.MustGet())
+		} else {
+			vals[5] = psql.Raw("DEFAULT")
+		}
+
 		return bob.ExpressSlice(ctx, w, d, start, vals, "", ", ", "")
 	}))
 }
@@ -179,7 +196,7 @@ func (s FileSetter) UpdateMod() bob.Mod[*dialect.UpdateQuery] {
 }
 
 func (s FileSetter) Expressions(prefix ...string) []bob.Expression {
-	exprs := make([]bob.Expression, 0, 5)
+	exprs := make([]bob.Expression, 0, 6)
 
 	if s.FileID.IsValue() {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
@@ -213,6 +230,13 @@ func (s FileSetter) Expressions(prefix ...string) []bob.Expression {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
 			psql.Quote(append(prefix, "created_at")...),
 			psql.Arg(s.CreatedAt),
+		}})
+	}
+
+	if s.ObjectKey.IsValue() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "object_key")...),
+			psql.Arg(s.ObjectKey),
 		}})
 	}
 

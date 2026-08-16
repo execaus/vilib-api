@@ -10,8 +10,17 @@ var VideoAssetErrors = &videoAssetErrors{
 		columns: []string{"file_id"},
 		s:       "video_assets_pkey",
 	},
+
+	ErrUniqueVideoAssetsVideoIdKindProfileKey: &UniqueConstraintError{
+		schema:  "",
+		table:   "video_assets",
+		columns: []string{"video_id", "kind", "profile"},
+		s:       "video_assets_video_id_kind_profile_key",
+	},
 }
 
 type videoAssetErrors struct {
 	ErrUniqueVideoAssetsPkey *UniqueConstraintError
+
+	ErrUniqueVideoAssetsVideoIdKindProfileKey *UniqueConstraintError
 }

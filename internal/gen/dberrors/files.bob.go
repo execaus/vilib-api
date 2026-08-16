@@ -10,8 +10,17 @@ var FileErrors = &fileErrors{
 		columns: []string{"file_id"},
 		s:       "files_pkey",
 	},
+
+	ErrUniqueFilesBucketObjectKeyKey: &UniqueConstraintError{
+		schema:  "",
+		table:   "files",
+		columns: []string{"bucket", "object_key"},
+		s:       "files_bucket_object_key_key",
+	},
 }
 
 type fileErrors struct {
 	ErrUniqueFilesPkey *UniqueConstraintError
+
+	ErrUniqueFilesBucketObjectKeyKey *UniqueConstraintError
 }

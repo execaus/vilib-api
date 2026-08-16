@@ -27,10 +27,12 @@ type VideoAsset struct {
 	FileID uuid.UUID `db:"file_id,pk" `
 	// Идентификатор видео
 	VideoID uuid.UUID `db:"video_id" `
-	// Тег видео
-	Tag int32 `db:"tag" `
 	// Время создания записи
 	CreatedAt time.Time `db:"created_at" `
+	// Вид ассета: original, hls_master, hls_variant
+	Kind string `db:"kind" `
+	// Профиль качества (360p/720p/1080p) для hls_variant, пустая строка для остальных
+	Profile string `db:"profile" `
 
 	R videoAssetR `db:"-" `
 }
@@ -54,13 +56,14 @@ type videoAssetR struct {
 func buildVideoAssetColumns(alias string) videoAssetColumns {
 	return videoAssetColumns{
 		ColumnsExpr: expr.NewColumnsExpr(
-			"file_id", "video_id", "tag", "created_at",
+			"file_id", "video_id", "created_at", "kind", "profile",
 		).WithParent("video_assets"),
 		tableAlias: alias,
 		FileID:     psql.Quote(alias, "file_id"),
 		VideoID:    psql.Quote(alias, "video_id"),
-		Tag:        psql.Quote(alias, "tag"),
 		CreatedAt:  psql.Quote(alias, "created_at"),
+		Kind:       psql.Quote(alias, "kind"),
+		Profile:    psql.Quote(alias, "profile"),
 	}
 }
 
@@ -69,8 +72,9 @@ type videoAssetColumns struct {
 	tableAlias string
 	FileID     psql.Expression
 	VideoID    psql.Expression
-	Tag        psql.Expression
 	CreatedAt  psql.Expression
+	Kind       psql.Expression
+	Profile    psql.Expression
 }
 
 func (c videoAssetColumns) Alias() string {
@@ -87,23 +91,27 @@ func (videoAssetColumns) AliasedAs(alias string) videoAssetColumns {
 type VideoAssetSetter struct {
 	FileID    omit.Val[uuid.UUID] `db:"file_id,pk" `
 	VideoID   omit.Val[uuid.UUID] `db:"video_id" `
-	Tag       omit.Val[int32]     `db:"tag" `
 	CreatedAt omit.Val[time.Time] `db:"created_at" `
+	Kind      omit.Val[string]    `db:"kind" `
+	Profile   omit.Val[string]    `db:"profile" `
 }
 
 func (s VideoAssetSetter) SetColumns() []string {
-	vals := make([]string, 0, 4)
+	vals := make([]string, 0, 5)
 	if s.FileID.IsValue() {
 		vals = append(vals, "file_id")
 	}
 	if s.VideoID.IsValue() {
 		vals = append(vals, "video_id")
 	}
-	if s.Tag.IsValue() {
-		vals = append(vals, "tag")
-	}
 	if s.CreatedAt.IsValue() {
 		vals = append(vals, "created_at")
+	}
+	if s.Kind.IsValue() {
+		vals = append(vals, "kind")
+	}
+	if s.Profile.IsValue() {
+		vals = append(vals, "profile")
 	}
 	return vals
 }
@@ -115,11 +123,14 @@ func (s VideoAssetSetter) Overwrite(t *VideoAsset) {
 	if s.VideoID.IsValue() {
 		t.VideoID = s.VideoID.MustGet()
 	}
-	if s.Tag.IsValue() {
-		t.Tag = s.Tag.MustGet()
-	}
 	if s.CreatedAt.IsValue() {
 		t.CreatedAt = s.CreatedAt.MustGet()
+	}
+	if s.Kind.IsValue() {
+		t.Kind = s.Kind.MustGet()
+	}
+	if s.Profile.IsValue() {
+		t.Profile = s.Profile.MustGet()
 	}
 }
 
@@ -129,7 +140,7 @@ func (s *VideoAssetSetter) Apply(q *dialect.InsertQuery) {
 	})
 
 	q.AppendValues(bob.ExpressionFunc(func(ctx context.Context, w io.StringWriter, d bob.Dialect, start int) ([]any, error) {
-		vals := make([]bob.Expression, 4)
+		vals := make([]bob.Expression, 5)
 		if s.FileID.IsValue() {
 			vals[0] = psql.Arg(s.FileID.MustGet())
 		} else {
@@ -142,16 +153,22 @@ func (s *VideoAssetSetter) Apply(q *dialect.InsertQuery) {
 			vals[1] = psql.Raw("DEFAULT")
 		}
 
-		if s.Tag.IsValue() {
-			vals[2] = psql.Arg(s.Tag.MustGet())
+		if s.CreatedAt.IsValue() {
+			vals[2] = psql.Arg(s.CreatedAt.MustGet())
 		} else {
 			vals[2] = psql.Raw("DEFAULT")
 		}
 
-		if s.CreatedAt.IsValue() {
-			vals[3] = psql.Arg(s.CreatedAt.MustGet())
+		if s.Kind.IsValue() {
+			vals[3] = psql.Arg(s.Kind.MustGet())
 		} else {
 			vals[3] = psql.Raw("DEFAULT")
+		}
+
+		if s.Profile.IsValue() {
+			vals[4] = psql.Arg(s.Profile.MustGet())
+		} else {
+			vals[4] = psql.Raw("DEFAULT")
 		}
 
 		return bob.ExpressSlice(ctx, w, d, start, vals, "", ", ", "")
@@ -163,7 +180,7 @@ func (s VideoAssetSetter) UpdateMod() bob.Mod[*dialect.UpdateQuery] {
 }
 
 func (s VideoAssetSetter) Expressions(prefix ...string) []bob.Expression {
-	exprs := make([]bob.Expression, 0, 4)
+	exprs := make([]bob.Expression, 0, 5)
 
 	if s.FileID.IsValue() {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
@@ -179,17 +196,24 @@ func (s VideoAssetSetter) Expressions(prefix ...string) []bob.Expression {
 		}})
 	}
 
-	if s.Tag.IsValue() {
-		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
-			psql.Quote(append(prefix, "tag")...),
-			psql.Arg(s.Tag),
-		}})
-	}
-
 	if s.CreatedAt.IsValue() {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
 			psql.Quote(append(prefix, "created_at")...),
 			psql.Arg(s.CreatedAt),
+		}})
+	}
+
+	if s.Kind.IsValue() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "kind")...),
+			psql.Arg(s.Kind),
+		}})
+	}
+
+	if s.Profile.IsValue() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "profile")...),
+			psql.Arg(s.Profile),
 		}})
 	}
 

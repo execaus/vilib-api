@@ -9,7 +9,9 @@ import (
 	"io"
 	"time"
 
+	"github.com/aarondl/opt/null"
 	"github.com/aarondl/opt/omit"
+	"github.com/aarondl/opt/omitnull"
 	"github.com/google/uuid"
 	"github.com/stephenafamo/bob"
 	"github.com/stephenafamo/bob/dialect/psql"
@@ -31,10 +33,24 @@ type UserGroupVideo struct {
 	Name string `db:"name" `
 	// Автор (пользователь)
 	Author uuid.UUID `db:"author" `
-	// Статус видео
+	// Статус видео: 0 uploading, 1 compressing, 2 ready, 3 failed, 4 queued
 	Status int32 `db:"status" `
 	// Время создания записи
 	CreatedAt time.Time `db:"created_at" `
+	// Время последнего изменения статуса
+	StatusChangedAt time.Time `db:"status_changed_at" `
+	// Номер текущей попытки обработки
+	ProcessingAttempt int32 `db:"processing_attempt" `
+	// Класс ошибки обработки: permanent, temporary, timeout
+	FailureClass null.Val[string] `db:"failure_class" `
+	// Человекочитаемая причина ошибки обработки
+	FailureReason null.Val[string] `db:"failure_reason" `
+	// Длительность видео в миллисекундах
+	DurationMS null.Val[int64] `db:"duration_ms" `
+	// Ширина видео в пикселях
+	Width null.Val[int32] `db:"width" `
+	// Высота видео в пикселях
+	Height null.Val[int32] `db:"height" `
 
 	R userGroupVideoR `db:"-" `
 }
@@ -58,27 +74,41 @@ type userGroupVideoR struct {
 func buildUserGroupVideoColumns(alias string) userGroupVideoColumns {
 	return userGroupVideoColumns{
 		ColumnsExpr: expr.NewColumnsExpr(
-			"id", "user_group_id", "name", "author", "status", "created_at",
+			"id", "user_group_id", "name", "author", "status", "created_at", "status_changed_at", "processing_attempt", "failure_class", "failure_reason", "duration_ms", "width", "height",
 		).WithParent("user_group_videos"),
-		tableAlias:  alias,
-		ID:          psql.Quote(alias, "id"),
-		UserGroupID: psql.Quote(alias, "user_group_id"),
-		Name:        psql.Quote(alias, "name"),
-		Author:      psql.Quote(alias, "author"),
-		Status:      psql.Quote(alias, "status"),
-		CreatedAt:   psql.Quote(alias, "created_at"),
+		tableAlias:        alias,
+		ID:                psql.Quote(alias, "id"),
+		UserGroupID:       psql.Quote(alias, "user_group_id"),
+		Name:              psql.Quote(alias, "name"),
+		Author:            psql.Quote(alias, "author"),
+		Status:            psql.Quote(alias, "status"),
+		CreatedAt:         psql.Quote(alias, "created_at"),
+		StatusChangedAt:   psql.Quote(alias, "status_changed_at"),
+		ProcessingAttempt: psql.Quote(alias, "processing_attempt"),
+		FailureClass:      psql.Quote(alias, "failure_class"),
+		FailureReason:     psql.Quote(alias, "failure_reason"),
+		DurationMS:        psql.Quote(alias, "duration_ms"),
+		Width:             psql.Quote(alias, "width"),
+		Height:            psql.Quote(alias, "height"),
 	}
 }
 
 type userGroupVideoColumns struct {
 	expr.ColumnsExpr
-	tableAlias  string
-	ID          psql.Expression
-	UserGroupID psql.Expression
-	Name        psql.Expression
-	Author      psql.Expression
-	Status      psql.Expression
-	CreatedAt   psql.Expression
+	tableAlias        string
+	ID                psql.Expression
+	UserGroupID       psql.Expression
+	Name              psql.Expression
+	Author            psql.Expression
+	Status            psql.Expression
+	CreatedAt         psql.Expression
+	StatusChangedAt   psql.Expression
+	ProcessingAttempt psql.Expression
+	FailureClass      psql.Expression
+	FailureReason     psql.Expression
+	DurationMS        psql.Expression
+	Width             psql.Expression
+	Height            psql.Expression
 }
 
 func (c userGroupVideoColumns) Alias() string {
@@ -93,16 +123,23 @@ func (userGroupVideoColumns) AliasedAs(alias string) userGroupVideoColumns {
 // All values are optional, and do not have to be set
 // Generated columns are not included
 type UserGroupVideoSetter struct {
-	ID          omit.Val[uuid.UUID] `db:"id,pk" `
-	UserGroupID omit.Val[uuid.UUID] `db:"user_group_id" `
-	Name        omit.Val[string]    `db:"name" `
-	Author      omit.Val[uuid.UUID] `db:"author" `
-	Status      omit.Val[int32]     `db:"status" `
-	CreatedAt   omit.Val[time.Time] `db:"created_at" `
+	ID                omit.Val[uuid.UUID]  `db:"id,pk" `
+	UserGroupID       omit.Val[uuid.UUID]  `db:"user_group_id" `
+	Name              omit.Val[string]     `db:"name" `
+	Author            omit.Val[uuid.UUID]  `db:"author" `
+	Status            omit.Val[int32]      `db:"status" `
+	CreatedAt         omit.Val[time.Time]  `db:"created_at" `
+	StatusChangedAt   omit.Val[time.Time]  `db:"status_changed_at" `
+	ProcessingAttempt omit.Val[int32]      `db:"processing_attempt" `
+	FailureClass      omitnull.Val[string] `db:"failure_class" `
+	FailureReason     omitnull.Val[string] `db:"failure_reason" `
+	DurationMS        omitnull.Val[int64]  `db:"duration_ms" `
+	Width             omitnull.Val[int32]  `db:"width" `
+	Height            omitnull.Val[int32]  `db:"height" `
 }
 
 func (s UserGroupVideoSetter) SetColumns() []string {
-	vals := make([]string, 0, 6)
+	vals := make([]string, 0, 13)
 	if s.ID.IsValue() {
 		vals = append(vals, "id")
 	}
@@ -120,6 +157,27 @@ func (s UserGroupVideoSetter) SetColumns() []string {
 	}
 	if s.CreatedAt.IsValue() {
 		vals = append(vals, "created_at")
+	}
+	if s.StatusChangedAt.IsValue() {
+		vals = append(vals, "status_changed_at")
+	}
+	if s.ProcessingAttempt.IsValue() {
+		vals = append(vals, "processing_attempt")
+	}
+	if !s.FailureClass.IsUnset() {
+		vals = append(vals, "failure_class")
+	}
+	if !s.FailureReason.IsUnset() {
+		vals = append(vals, "failure_reason")
+	}
+	if !s.DurationMS.IsUnset() {
+		vals = append(vals, "duration_ms")
+	}
+	if !s.Width.IsUnset() {
+		vals = append(vals, "width")
+	}
+	if !s.Height.IsUnset() {
+		vals = append(vals, "height")
 	}
 	return vals
 }
@@ -143,6 +201,27 @@ func (s UserGroupVideoSetter) Overwrite(t *UserGroupVideo) {
 	if s.CreatedAt.IsValue() {
 		t.CreatedAt = s.CreatedAt.MustGet()
 	}
+	if s.StatusChangedAt.IsValue() {
+		t.StatusChangedAt = s.StatusChangedAt.MustGet()
+	}
+	if s.ProcessingAttempt.IsValue() {
+		t.ProcessingAttempt = s.ProcessingAttempt.MustGet()
+	}
+	if !s.FailureClass.IsUnset() {
+		t.FailureClass = s.FailureClass.MustGetNull()
+	}
+	if !s.FailureReason.IsUnset() {
+		t.FailureReason = s.FailureReason.MustGetNull()
+	}
+	if !s.DurationMS.IsUnset() {
+		t.DurationMS = s.DurationMS.MustGetNull()
+	}
+	if !s.Width.IsUnset() {
+		t.Width = s.Width.MustGetNull()
+	}
+	if !s.Height.IsUnset() {
+		t.Height = s.Height.MustGetNull()
+	}
 }
 
 func (s *UserGroupVideoSetter) Apply(q *dialect.InsertQuery) {
@@ -151,7 +230,7 @@ func (s *UserGroupVideoSetter) Apply(q *dialect.InsertQuery) {
 	})
 
 	q.AppendValues(bob.ExpressionFunc(func(ctx context.Context, w io.StringWriter, d bob.Dialect, start int) ([]any, error) {
-		vals := make([]bob.Expression, 6)
+		vals := make([]bob.Expression, 13)
 		if s.ID.IsValue() {
 			vals[0] = psql.Arg(s.ID.MustGet())
 		} else {
@@ -188,6 +267,48 @@ func (s *UserGroupVideoSetter) Apply(q *dialect.InsertQuery) {
 			vals[5] = psql.Raw("DEFAULT")
 		}
 
+		if s.StatusChangedAt.IsValue() {
+			vals[6] = psql.Arg(s.StatusChangedAt.MustGet())
+		} else {
+			vals[6] = psql.Raw("DEFAULT")
+		}
+
+		if s.ProcessingAttempt.IsValue() {
+			vals[7] = psql.Arg(s.ProcessingAttempt.MustGet())
+		} else {
+			vals[7] = psql.Raw("DEFAULT")
+		}
+
+		if !s.FailureClass.IsUnset() {
+			vals[8] = psql.Arg(s.FailureClass.MustGetNull())
+		} else {
+			vals[8] = psql.Raw("DEFAULT")
+		}
+
+		if !s.FailureReason.IsUnset() {
+			vals[9] = psql.Arg(s.FailureReason.MustGetNull())
+		} else {
+			vals[9] = psql.Raw("DEFAULT")
+		}
+
+		if !s.DurationMS.IsUnset() {
+			vals[10] = psql.Arg(s.DurationMS.MustGetNull())
+		} else {
+			vals[10] = psql.Raw("DEFAULT")
+		}
+
+		if !s.Width.IsUnset() {
+			vals[11] = psql.Arg(s.Width.MustGetNull())
+		} else {
+			vals[11] = psql.Raw("DEFAULT")
+		}
+
+		if !s.Height.IsUnset() {
+			vals[12] = psql.Arg(s.Height.MustGetNull())
+		} else {
+			vals[12] = psql.Raw("DEFAULT")
+		}
+
 		return bob.ExpressSlice(ctx, w, d, start, vals, "", ", ", "")
 	}))
 }
@@ -197,7 +318,7 @@ func (s UserGroupVideoSetter) UpdateMod() bob.Mod[*dialect.UpdateQuery] {
 }
 
 func (s UserGroupVideoSetter) Expressions(prefix ...string) []bob.Expression {
-	exprs := make([]bob.Expression, 0, 6)
+	exprs := make([]bob.Expression, 0, 13)
 
 	if s.ID.IsValue() {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
@@ -238,6 +359,55 @@ func (s UserGroupVideoSetter) Expressions(prefix ...string) []bob.Expression {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
 			psql.Quote(append(prefix, "created_at")...),
 			psql.Arg(s.CreatedAt),
+		}})
+	}
+
+	if s.StatusChangedAt.IsValue() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "status_changed_at")...),
+			psql.Arg(s.StatusChangedAt),
+		}})
+	}
+
+	if s.ProcessingAttempt.IsValue() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "processing_attempt")...),
+			psql.Arg(s.ProcessingAttempt),
+		}})
+	}
+
+	if !s.FailureClass.IsUnset() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "failure_class")...),
+			psql.Arg(s.FailureClass),
+		}})
+	}
+
+	if !s.FailureReason.IsUnset() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "failure_reason")...),
+			psql.Arg(s.FailureReason),
+		}})
+	}
+
+	if !s.DurationMS.IsUnset() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "duration_ms")...),
+			psql.Arg(s.DurationMS),
+		}})
+	}
+
+	if !s.Width.IsUnset() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "width")...),
+			psql.Arg(s.Width),
+		}})
+	}
+
+	if !s.Height.IsUnset() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "height")...),
+			psql.Arg(s.Height),
 		}})
 	}
 
