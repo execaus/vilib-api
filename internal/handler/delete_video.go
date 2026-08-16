@@ -18,9 +18,10 @@ import (
 // @Param videoId path string true "ID видео"
 // @Success 204
 // @Failure 400 {object} dto.ErrorMessage
+// @Failure 401
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 404 {object} dto.ErrorMessage
-// @Failure 500 {object} dto.ErrorMessage
+// @Failure 500
 // @Router /api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId} [delete]
 func (h *Handler) DeleteVideo(c *gin.Context) {
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)

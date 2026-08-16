@@ -21,10 +21,10 @@ import (
 // @Param request body dto.UploadVideoRequest true "Тело запроса"
 // @Success 201 {object} dto.UploadVideoResponse
 // @Failure 400 {object} dto.ErrorMessage
-// @Failure 401 {object} dto.ErrorMessage
+// @Failure 401
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 409 {object} dto.ErrorMessage
-// @Failure 500 {object} dto.ErrorMessage
+// @Failure 500
 // @Router /api/v1/accounts/{accountId}/user-groups/{groupId}/video [post]
 func (h *Handler) UploadVideo(c *gin.Context) {
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)

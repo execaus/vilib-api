@@ -541,10 +541,7 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
+                        "description": "Unauthorized"
                     },
                     "403": {
                         "description": "Forbidden",
@@ -559,10 +556,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
+                        "description": "Internal Server Error"
                     }
                 }
             }
@@ -623,10 +617,7 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
+                        "description": "Unauthorized"
                     },
                     "403": {
                         "description": "Forbidden",
@@ -647,10 +638,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
+                        "description": "Internal Server Error"
                     }
                 }
             }
@@ -702,10 +690,7 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
+                        "description": "Unauthorized"
                     },
                     "403": {
                         "description": "Forbidden",
@@ -726,10 +711,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
+                        "description": "Internal Server Error"
                     }
                 }
             }
@@ -1080,6 +1062,9 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.ErrorMessage"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
@@ -1093,10 +1078,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
+                        "description": "Internal Server Error"
                     }
                 }
             },
@@ -1142,6 +1124,9 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.ErrorMessage"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
@@ -1155,17 +1140,14 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
+                        "description": "Internal Server Error"
                     }
                 }
             }
         },
         "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/videos": {
             "get": {
-                "description": "Возвращает список видео в группе пользователей",
+                "description": "Возвращает список видео в группе пользователей: статус, профили HLS и признак\nналичия обработанной версии — из ассетов видео. Причина сбоя (failure) видна\nтолько инициатору с правом ManageVideo, иначе поле — null (Э1-Т17).",
                 "produces": [
                     "application/json"
                 ],
@@ -1202,6 +1184,9 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.ErrorMessage"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
@@ -1209,10 +1194,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
+                        "description": "Internal Server Error"
                     }
                 }
             }
@@ -2056,8 +2038,28 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "duration_ms": {
+                    "description": "DurationMs — длительность видео в миллисекундах, известна после успешной обработки.",
+                    "type": "integer"
+                },
+                "failure": {
+                    "description": "Failure — причина сбоя обработки видео, заполняется только для инициатора с правом\nManageVideo (Э1-Т17); для остальных — всегда null, даже если видео в статусе failed.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.VideoFailure"
+                        }
+                    ]
+                },
                 "group_id": {
                     "type": "string"
+                },
+                "has_processed": {
+                    "description": "HasProcessed — признак наличия обработанной версии (готового мастер-плейлиста HLS).",
+                    "type": "boolean"
+                },
+                "height": {
+                    "description": "Height — высота кадра оригинала в пикселях, известна после успешной обработки.",
+                    "type": "integer"
                 },
                 "id": {
                     "type": "string"
@@ -2065,10 +2067,34 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "profiles": {
+                    "description": "Profiles — имена HLS-профилей видео по возрастанию качества (пустой список, пока\nпрофилей нет).",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "status": {
                     "type": "integer"
                 },
                 "status_name": {
+                    "type": "string"
+                },
+                "width": {
+                    "description": "Width — ширина кадра оригинала в пикселях, известна после успешной обработки.",
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.VideoFailure": {
+            "type": "object",
+            "properties": {
+                "class": {
+                    "description": "Class — класс ошибки: permanent, temporary, timeout.",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Reason — человекочитаемая причина сбоя.",
                     "type": "string"
                 }
             }

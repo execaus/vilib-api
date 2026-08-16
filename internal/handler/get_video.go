@@ -26,11 +26,11 @@ import (
 // @Param is_prefer_original query bool false "Предпочитать оригинальное видео"
 // @Success 200 {object} dto.GetVideoResponse
 // @Failure 400 {object} dto.ErrorMessage
-// @Failure 401 {object} dto.ErrorMessage
+// @Failure 401
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 404 {object} dto.ErrorMessage
 // @Failure 409 {object} dto.ErrorMessage
-// @Failure 500 {object} dto.ErrorMessage
+// @Failure 500
 // @Router /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId} [get]
 func (h *Handler) GetVideo(c *gin.Context) {
 	var query dto.GetVideoQuery
