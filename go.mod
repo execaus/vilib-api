@@ -16,6 +16,7 @@ require (
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/jaswdr/faker/v2 v2.9.1
 	github.com/pressly/goose/v3 v3.27.0
+	github.com/segmentio/kafka-go v0.4.51
 	github.com/spf13/viper v1.21.0
 	github.com/stephenafamo/bob v0.42.0
 	github.com/stephenafamo/scan v0.7.0
@@ -133,6 +134,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pganalyze/pg_query_go/v6 v6.1.0 // indirect
+	github.com/pierrec/lz4/v4 v4.1.25 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
