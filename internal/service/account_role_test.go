@@ -130,14 +130,14 @@ func TestService_AccountRole_GetByID(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "repo error returns nil", // Note: actual behavior - code does not return error
+			name: "repo error propagates",
 			setupMocks: func(repo *repository_mocks.AccountRoleMock) {
 				repo.SelectByIDMock.Expect(minimock.AnyContext, testRoleID).
 					Return(nil, errSomeError)
 			},
 			args:    args{[]uuid.UUID{testRoleID}},
 			want:    nil,
-			wantErr: nil,
+			wantErr: errSomeError,
 		},
 	}
 
@@ -248,7 +248,7 @@ func TestService_AccountRole_Create(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "forbidden returns empty role", // Note: actual behavior - code returns empty role instead of error
+			name: "forbidden",
 			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.AccountRoleMock) {
 				access.IsCheckAccountActionMock.
 					Expect(
@@ -260,7 +260,7 @@ func TestService_AccountRole_Create(t *testing.T) {
 			},
 			args:    args{testAccountID, testInitiatorID, testName, nil, testPermission, false},
 			want:    domain.AccountRole{},
-			wantErr: nil,
+			wantErr: service.ErrForbidden,
 		},
 		{
 			name: "select error",

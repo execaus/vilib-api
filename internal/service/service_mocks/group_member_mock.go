@@ -34,9 +34,9 @@ type GroupMemberMock struct {
 	beforeGetByUserIDAndGroupIDCounter uint64
 	GetByUserIDAndGroupIDMock          mGroupMemberMockGetByUserIDAndGroupID
 
-	funcRemoveMember          func(ctx context.Context, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID) (err error)
+	funcRemoveMember          func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID) (err error)
 	funcRemoveMemberOrigin    string
-	inspectFuncRemoveMember   func(ctx context.Context, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID)
+	inspectFuncRemoveMember   func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID)
 	afterRemoveMemberCounter  uint64
 	beforeRemoveMemberCounter uint64
 	RemoveMemberMock          mGroupMemberMockRemoveMember
@@ -870,6 +870,7 @@ type GroupMemberMockRemoveMemberExpectation struct {
 // GroupMemberMockRemoveMemberParams contains parameters of the GroupMember.RemoveMember
 type GroupMemberMockRemoveMemberParams struct {
 	ctx         context.Context
+	accountID   uuid.UUID
 	initiatorID uuid.UUID
 	groupID     uuid.UUID
 	targetID    uuid.UUID
@@ -878,6 +879,7 @@ type GroupMemberMockRemoveMemberParams struct {
 // GroupMemberMockRemoveMemberParamPtrs contains pointers to parameters of the GroupMember.RemoveMember
 type GroupMemberMockRemoveMemberParamPtrs struct {
 	ctx         *context.Context
+	accountID   *uuid.UUID
 	initiatorID *uuid.UUID
 	groupID     *uuid.UUID
 	targetID    *uuid.UUID
@@ -892,6 +894,7 @@ type GroupMemberMockRemoveMemberResults struct {
 type GroupMemberMockRemoveMemberExpectationOrigins struct {
 	origin            string
 	originCtx         string
+	originAccountID   string
 	originInitiatorID string
 	originGroupID     string
 	originTargetID    string
@@ -908,7 +911,7 @@ func (mmRemoveMember *mGroupMemberMockRemoveMember) Optional() *mGroupMemberMock
 }
 
 // Expect sets up expected params for GroupMember.RemoveMember
-func (mmRemoveMember *mGroupMemberMockRemoveMember) Expect(ctx context.Context, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID) *mGroupMemberMockRemoveMember {
+func (mmRemoveMember *mGroupMemberMockRemoveMember) Expect(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID) *mGroupMemberMockRemoveMember {
 	if mmRemoveMember.mock.funcRemoveMember != nil {
 		mmRemoveMember.mock.t.Fatalf("GroupMemberMock.RemoveMember mock is already set by Set")
 	}
@@ -921,7 +924,7 @@ func (mmRemoveMember *mGroupMemberMockRemoveMember) Expect(ctx context.Context, 
 		mmRemoveMember.mock.t.Fatalf("GroupMemberMock.RemoveMember mock is already set by ExpectParams functions")
 	}
 
-	mmRemoveMember.defaultExpectation.params = &GroupMemberMockRemoveMemberParams{ctx, initiatorID, groupID, targetID}
+	mmRemoveMember.defaultExpectation.params = &GroupMemberMockRemoveMemberParams{ctx, accountID, initiatorID, groupID, targetID}
 	mmRemoveMember.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmRemoveMember.expectations {
 		if minimock.Equal(e.params, mmRemoveMember.defaultExpectation.params) {
@@ -955,8 +958,31 @@ func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectCtxParam1(ctx context.
 	return mmRemoveMember
 }
 
-// ExpectInitiatorIDParam2 sets up expected param initiatorID for GroupMember.RemoveMember
-func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectInitiatorIDParam2(initiatorID uuid.UUID) *mGroupMemberMockRemoveMember {
+// ExpectAccountIDParam2 sets up expected param accountID for GroupMember.RemoveMember
+func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectAccountIDParam2(accountID uuid.UUID) *mGroupMemberMockRemoveMember {
+	if mmRemoveMember.mock.funcRemoveMember != nil {
+		mmRemoveMember.mock.t.Fatalf("GroupMemberMock.RemoveMember mock is already set by Set")
+	}
+
+	if mmRemoveMember.defaultExpectation == nil {
+		mmRemoveMember.defaultExpectation = &GroupMemberMockRemoveMemberExpectation{}
+	}
+
+	if mmRemoveMember.defaultExpectation.params != nil {
+		mmRemoveMember.mock.t.Fatalf("GroupMemberMock.RemoveMember mock is already set by Expect")
+	}
+
+	if mmRemoveMember.defaultExpectation.paramPtrs == nil {
+		mmRemoveMember.defaultExpectation.paramPtrs = &GroupMemberMockRemoveMemberParamPtrs{}
+	}
+	mmRemoveMember.defaultExpectation.paramPtrs.accountID = &accountID
+	mmRemoveMember.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmRemoveMember
+}
+
+// ExpectInitiatorIDParam3 sets up expected param initiatorID for GroupMember.RemoveMember
+func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectInitiatorIDParam3(initiatorID uuid.UUID) *mGroupMemberMockRemoveMember {
 	if mmRemoveMember.mock.funcRemoveMember != nil {
 		mmRemoveMember.mock.t.Fatalf("GroupMemberMock.RemoveMember mock is already set by Set")
 	}
@@ -978,8 +1004,8 @@ func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectInitiatorIDParam2(init
 	return mmRemoveMember
 }
 
-// ExpectGroupIDParam3 sets up expected param groupID for GroupMember.RemoveMember
-func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectGroupIDParam3(groupID uuid.UUID) *mGroupMemberMockRemoveMember {
+// ExpectGroupIDParam4 sets up expected param groupID for GroupMember.RemoveMember
+func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectGroupIDParam4(groupID uuid.UUID) *mGroupMemberMockRemoveMember {
 	if mmRemoveMember.mock.funcRemoveMember != nil {
 		mmRemoveMember.mock.t.Fatalf("GroupMemberMock.RemoveMember mock is already set by Set")
 	}
@@ -1001,8 +1027,8 @@ func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectGroupIDParam3(groupID 
 	return mmRemoveMember
 }
 
-// ExpectTargetIDParam4 sets up expected param targetID for GroupMember.RemoveMember
-func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectTargetIDParam4(targetID uuid.UUID) *mGroupMemberMockRemoveMember {
+// ExpectTargetIDParam5 sets up expected param targetID for GroupMember.RemoveMember
+func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectTargetIDParam5(targetID uuid.UUID) *mGroupMemberMockRemoveMember {
 	if mmRemoveMember.mock.funcRemoveMember != nil {
 		mmRemoveMember.mock.t.Fatalf("GroupMemberMock.RemoveMember mock is already set by Set")
 	}
@@ -1025,7 +1051,7 @@ func (mmRemoveMember *mGroupMemberMockRemoveMember) ExpectTargetIDParam4(targetI
 }
 
 // Inspect accepts an inspector function that has same arguments as the GroupMember.RemoveMember
-func (mmRemoveMember *mGroupMemberMockRemoveMember) Inspect(f func(ctx context.Context, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID)) *mGroupMemberMockRemoveMember {
+func (mmRemoveMember *mGroupMemberMockRemoveMember) Inspect(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID)) *mGroupMemberMockRemoveMember {
 	if mmRemoveMember.mock.inspectFuncRemoveMember != nil {
 		mmRemoveMember.mock.t.Fatalf("Inspect function is already set for GroupMemberMock.RemoveMember")
 	}
@@ -1050,7 +1076,7 @@ func (mmRemoveMember *mGroupMemberMockRemoveMember) Return(err error) *GroupMemb
 }
 
 // Set uses given function f to mock the GroupMember.RemoveMember method
-func (mmRemoveMember *mGroupMemberMockRemoveMember) Set(f func(ctx context.Context, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID) (err error)) *GroupMemberMock {
+func (mmRemoveMember *mGroupMemberMockRemoveMember) Set(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID) (err error)) *GroupMemberMock {
 	if mmRemoveMember.defaultExpectation != nil {
 		mmRemoveMember.mock.t.Fatalf("Default expectation is already set for the GroupMember.RemoveMember method")
 	}
@@ -1066,14 +1092,14 @@ func (mmRemoveMember *mGroupMemberMockRemoveMember) Set(f func(ctx context.Conte
 
 // When sets expectation for the GroupMember.RemoveMember which will trigger the result defined by the following
 // Then helper
-func (mmRemoveMember *mGroupMemberMockRemoveMember) When(ctx context.Context, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID) *GroupMemberMockRemoveMemberExpectation {
+func (mmRemoveMember *mGroupMemberMockRemoveMember) When(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID) *GroupMemberMockRemoveMemberExpectation {
 	if mmRemoveMember.mock.funcRemoveMember != nil {
 		mmRemoveMember.mock.t.Fatalf("GroupMemberMock.RemoveMember mock is already set by Set")
 	}
 
 	expectation := &GroupMemberMockRemoveMemberExpectation{
 		mock:               mmRemoveMember.mock,
-		params:             &GroupMemberMockRemoveMemberParams{ctx, initiatorID, groupID, targetID},
+		params:             &GroupMemberMockRemoveMemberParams{ctx, accountID, initiatorID, groupID, targetID},
 		expectationOrigins: GroupMemberMockRemoveMemberExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmRemoveMember.expectations = append(mmRemoveMember.expectations, expectation)
@@ -1108,17 +1134,17 @@ func (mmRemoveMember *mGroupMemberMockRemoveMember) invocationsDone() bool {
 }
 
 // RemoveMember implements mm_service.GroupMember
-func (mmRemoveMember *GroupMemberMock) RemoveMember(ctx context.Context, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID) (err error) {
+func (mmRemoveMember *GroupMemberMock) RemoveMember(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, targetID uuid.UUID) (err error) {
 	mm_atomic.AddUint64(&mmRemoveMember.beforeRemoveMemberCounter, 1)
 	defer mm_atomic.AddUint64(&mmRemoveMember.afterRemoveMemberCounter, 1)
 
 	mmRemoveMember.t.Helper()
 
 	if mmRemoveMember.inspectFuncRemoveMember != nil {
-		mmRemoveMember.inspectFuncRemoveMember(ctx, initiatorID, groupID, targetID)
+		mmRemoveMember.inspectFuncRemoveMember(ctx, accountID, initiatorID, groupID, targetID)
 	}
 
-	mm_params := GroupMemberMockRemoveMemberParams{ctx, initiatorID, groupID, targetID}
+	mm_params := GroupMemberMockRemoveMemberParams{ctx, accountID, initiatorID, groupID, targetID}
 
 	// Record call args
 	mmRemoveMember.RemoveMemberMock.mutex.Lock()
@@ -1137,13 +1163,18 @@ func (mmRemoveMember *GroupMemberMock) RemoveMember(ctx context.Context, initiat
 		mm_want := mmRemoveMember.RemoveMemberMock.defaultExpectation.params
 		mm_want_ptrs := mmRemoveMember.RemoveMemberMock.defaultExpectation.paramPtrs
 
-		mm_got := GroupMemberMockRemoveMemberParams{ctx, initiatorID, groupID, targetID}
+		mm_got := GroupMemberMockRemoveMemberParams{ctx, accountID, initiatorID, groupID, targetID}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
 				mmRemoveMember.t.Errorf("GroupMemberMock.RemoveMember got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmRemoveMember.RemoveMemberMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmRemoveMember.t.Errorf("GroupMemberMock.RemoveMember got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRemoveMember.RemoveMemberMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
 			}
 
 			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
@@ -1173,9 +1204,9 @@ func (mmRemoveMember *GroupMemberMock) RemoveMember(ctx context.Context, initiat
 		return (*mm_results).err
 	}
 	if mmRemoveMember.funcRemoveMember != nil {
-		return mmRemoveMember.funcRemoveMember(ctx, initiatorID, groupID, targetID)
+		return mmRemoveMember.funcRemoveMember(ctx, accountID, initiatorID, groupID, targetID)
 	}
-	mmRemoveMember.t.Fatalf("Unexpected call to GroupMemberMock.RemoveMember. %v %v %v %v", ctx, initiatorID, groupID, targetID)
+	mmRemoveMember.t.Fatalf("Unexpected call to GroupMemberMock.RemoveMember. %v %v %v %v %v", ctx, accountID, initiatorID, groupID, targetID)
 	return
 }
 

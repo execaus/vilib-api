@@ -40,7 +40,7 @@ func (s *GroupRoleService) Create(
 	role, err := s.repo.Insert(ctx, accountID, name, permission, isDefault)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return domain.GroupRole{}, nil
+		return domain.GroupRole{}, err
 	}
 
 	return role, nil

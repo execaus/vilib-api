@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"vilib-api/internal/domain"
+	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 
 	"github.com/google/uuid"
@@ -24,12 +26,12 @@ func (s *UserGroupService) Create(
 	accountID, initiatorID uuid.UUID,
 	name string,
 ) (domain.UserGroup, error) {
-	// Проверка прав доступа на создание группы (только владельцы аккаунта могут создавать группы)
+	// Проверка прав доступа на создание группы (§6.4 ТЗ: право ManageGroups уровня аккаунта)
 	if err := s.srv.Access.IsCheckAccountAction(
 		ctx,
 		accountID,
 		initiatorID,
-		domain.AccountPermissionManageUsers,
+		domain.AccountPermissionManageGroups,
 	); err != nil {
 		zap.L().Error(err.Error())
 		return domain.UserGroup{}, err
@@ -38,8 +40,12 @@ func (s *UserGroupService) Create(
 	// Создание группы пользователей
 	group, err := s.repo.Insert(ctx, accountID, name)
 	if err != nil {
+		if errors.Is(dberrors.UserGroupErrors.ErrUniqueUserGroupsNameAccountIdKey, err) {
+			zap.L().Warn(err.Error())
+			return domain.UserGroup{}, NewConflictError("group name already exists")
+		}
 		zap.L().Error(err.Error())
-		return domain.UserGroup{}, nil
+		return domain.UserGroup{}, err
 	}
 
 	return group, nil
@@ -163,11 +169,23 @@ func (s *UserGroupService) isAccessAddMembers(
 		}
 	}
 
-	// Получение роли инициатора в группе
+	// OR-логика: право уровня аккаунта ManageGroups (или владелец аккаунта) достаточно —
+	// членство инициатора в самой группе в этом случае не требуется.
+	if accessErr := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageGroups,
+	); accessErr == nil {
+		return nil
+	}
+
+	// Получение роли инициатора в группе. Если инициатор не состоит в группе (в т.ч.
+	// repository.ErrNotFound/"sql: no rows") — запрещено, а не 500.
 	initiatorGroupMember, err := s.srv.GroupMember.GetByUserIDAndGroupID(ctx, initiatorID, groupID)
 	if err != nil {
-		zap.L().Error(err.Error())
-		return err
+		zap.L().Warn(err.Error())
+		return ErrForbidden
 	}
 
 	// Получение group role инициатора

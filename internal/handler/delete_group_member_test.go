@@ -53,7 +53,7 @@ func TestHandler_DeleteGroupMember(t *testing.T) {
 			UserID:           testInitiatorID,
 			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.GroupMember.RemoveMemberMock.When(minimock.AnyContext, testInitiatorID, testGroupID, testMemberID).
+		svcMock.GroupMember.RemoveMemberMock.When(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID, testMemberID).
 			Then(nil)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
@@ -80,7 +80,7 @@ func TestHandler_DeleteGroupMember(t *testing.T) {
 			UserID:           testInitiatorID,
 			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.GroupMember.RemoveMemberMock.When(minimock.AnyContext, testInitiatorID, testGroupID, testMemberID).
+		svcMock.GroupMember.RemoveMemberMock.When(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID, testMemberID).
 			Then(service.ErrNotFound)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
@@ -107,7 +107,7 @@ func TestHandler_DeleteGroupMember(t *testing.T) {
 			UserID:           testInitiatorID,
 			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.GroupMember.RemoveMemberMock.When(minimock.AnyContext, testInitiatorID, testGroupID, testMemberID).
+		svcMock.GroupMember.RemoveMemberMock.When(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID, testMemberID).
 			Then(service.ErrForbidden)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))

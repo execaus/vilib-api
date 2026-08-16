@@ -23,7 +23,8 @@ import (
 // @Failure 500 {object} dto.ErrorMessage
 // @Router /api/v1/accounts/{accountId}/user-groups/{userGroupId}/members/{memberId} [delete]
 func (h *Handler) DeleteGroupMember(c *gin.Context) {
-	if _, err := h.GetPathUUIDValue(c, pathKeyAccountID); err != nil {
+	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
+	if err != nil {
 		sendBadRequest(c, err)
 		return
 	}
@@ -47,7 +48,7 @@ func (h *Handler) DeleteGroupMember(c *gin.Context) {
 			return err
 		}
 
-		if err = services.GroupMember.RemoveMember(ctx, claims.UserID, groupID, targetUserID); err != nil {
+		if err = services.GroupMember.RemoveMember(ctx, accountID, claims.UserID, groupID, targetUserID); err != nil {
 			zap.L().Error(err.Error())
 			return err
 		}

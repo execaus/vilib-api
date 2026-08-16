@@ -158,7 +158,7 @@ func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]do
 	}
 
 	for i, role := range accountsRole {
-		accountsID[i] = role.ID
+		accountsID[i] = role.AccountID
 	}
 
 	accounts, err := s.GetByID(ctx, accountsID...)

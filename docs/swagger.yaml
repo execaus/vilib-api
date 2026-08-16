@@ -538,6 +538,14 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
         "500":
           description: Internal Server Error
           schema:
@@ -576,6 +584,10 @@ paths:
             $ref: '#/definitions/dto.AddGroupMemberResponse'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
         "500":

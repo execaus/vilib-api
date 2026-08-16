@@ -64,7 +64,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	accounts, err := s.srv.Account.GetByUserEmail(ctx, email)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return "", nil
+		return "", err
 	}
 
 	if len(accounts) == 0 {

@@ -164,7 +164,7 @@ func TestService_Auth_Login(t *testing.T) {
 			},
 			args:    args{testEmail, testPassword},
 			want:    "",
-			wantErr: nil,
+			wantErr: errSomeError,
 		},
 		{
 			name: "generate token error",

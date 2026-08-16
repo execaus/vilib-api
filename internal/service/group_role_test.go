@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"errors"
 	"testing"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
@@ -22,6 +23,8 @@ func TestService_GroupRole_Create(t *testing.T) {
 	testRoleID := uuid.New()
 	testName := testutil.Faker.Lorem().Word()
 	testPermission := domain.PermissionMask(1)
+
+	var errSomeError = errors.New("some error")
 
 	type args struct {
 		accountID   uuid.UUID
@@ -72,6 +75,23 @@ func TestService_GroupRole_Create(t *testing.T) {
 			args:    args{testAccountID, testInitiatorID, testName, testPermission, false},
 			want:    domain.GroupRole{ID: testRoleID},
 			wantErr: nil,
+		},
+		{
+			name: "insert error propagates",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.GroupRoleMock) {
+				access.IsCheckAccountActionMock.
+					Expect(
+						minimock.AnyContext,
+						testAccountID,
+						testInitiatorID,
+						domain.AccountPermissionManageRoles,
+					).Return(nil)
+				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testName, testPermission, false).
+					Return(domain.GroupRole{}, errSomeError)
+			},
+			args:    args{testAccountID, testInitiatorID, testName, testPermission, false},
+			want:    domain.GroupRole{},
+			wantErr: errSomeError,
 		},
 	}
 

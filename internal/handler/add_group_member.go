@@ -21,6 +21,7 @@ import (
 // @Param request body dto.AddGroupMemberRequest true "Тело запроса для добавления участников"
 // @Success 201 {object} dto.AddGroupMemberResponse
 // @Failure 400 {object} dto.ErrorMessage
+// @Failure 403 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
 // @Router /api/v1/accounts/{accountId}/user-groups/{groupId}/members [post]
 func (h *Handler) AddGroupMember(c *gin.Context) {

@@ -20,6 +20,8 @@ import (
 // @Param request body dto.CreateUserGroupRequest true "Тело запроса для создания группы"
 // @Success 201 {object} dto.CreateUserGroupResponse
 // @Failure 400 {object} dto.ErrorMessage
+// @Failure 403 {object} dto.ErrorMessage
+// @Failure 409 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
 // @Router /api/v1/accounts/{accountId}/user-groups [post]
 func (h *Handler) CreateUserGroup(c *gin.Context) {

@@ -77,7 +77,7 @@ func (s *AccountRoleService) Create(
 		domain.AccountPermissionManageRoles,
 	); err != nil {
 		zap.L().Error(err.Error())
-		return domain.AccountRole{}, nil
+		return domain.AccountRole{}, err
 	}
 
 	if _, err := s.repo.Insert(ctx, accountID, name, parentID, permission, isDefault, false); err != nil {
@@ -169,6 +169,7 @@ func (s *AccountRoleService) GetByID(ctx context.Context, rolesID ...uuid.UUID) 
 	roles, err := s.repo.SelectByID(ctx, rolesID...)
 	if err != nil {
 		zap.L().Error(err.Error())
+		return nil, err
 	}
 
 	return roles, nil

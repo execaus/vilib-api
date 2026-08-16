@@ -797,8 +797,10 @@ func TestService_Account_GetByUserEmail(t *testing.T) {
 				users := []domain.User{
 					{ID: userID, RoleID: roleID},
 				}
+				// ID роли намеренно отличается от AccountID — аккаунты возвращаются по
+				// AccountID роли, а не по её собственному ID (В-18).
 				accountRoles := []domain.AccountRole{
-					{ID: accountID},
+					{ID: roleID, AccountID: accountID},
 				}
 				user.GetByEmailMock.Expect(minimock.AnyContext, email).
 					Return(users, nil)
@@ -817,8 +819,10 @@ func TestService_Account_GetByUserEmail(t *testing.T) {
 				users := []domain.User{
 					{ID: userID, RoleID: roleID},
 				}
+				// ID роли намеренно отличается от AccountID — аккаунты возвращаются по
+				// AccountID роли, а не по её собственному ID (В-18).
 				accountRoles := []domain.AccountRole{
-					{ID: accountID},
+					{ID: roleID, AccountID: accountID},
 				}
 				accounts := []domain.Account{
 					{ID: accountID, Email: email},

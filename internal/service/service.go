@@ -98,7 +98,10 @@ type UserGroup interface {
 type GroupMember interface {
 	Create(ctx context.Context, groupID, roleID uuid.UUID, usersID ...uuid.UUID) ([]domain.GroupMember, error)
 	GetByUserIDAndGroupID(ctx context.Context, userID, groupID uuid.UUID) (domain.GroupMember, error)
-	RemoveMember(ctx context.Context, initiatorID, groupID, targetID uuid.UUID) error
+	// RemoveMember удаляет участника groupID/targetID. Разрешено владельцу/участнику группы с
+	// правом ManageMembers, либо (OR-логика, см. AddMembers) инициатору с правом уровня
+	// аккаунта ManageGroups — в этом случае членство инициатора в группе не требуется.
+	RemoveMember(ctx context.Context, accountID, initiatorID, groupID, targetID uuid.UUID) error
 }
 
 type GroupRole interface {
