@@ -11,6 +11,8 @@ import (
 
 	"vilib-api/config"
 	"vilib-api/internal/handler"
+	"vilib-api/internal/kafka"
+	"vilib-api/internal/outbox"
 	"vilib-api/internal/repository"
 	"vilib-api/internal/s3"
 	"vilib-api/internal/saga"
@@ -19,6 +21,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
+
+// shutdownTimeout — время на штатное завершение HTTP-сервера при получении сигнала остановки.
+const shutdownTimeout = 30 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -66,14 +71,20 @@ func run() error {
 
 	localMailBox := make(chan string, 1)
 	svc := service.NewService(cfg, localMailBox, s3Client, repo)
-
 	sagaRunner := saga.NewSagaRunner(svc, executorProvider)
-	h := handler.NewHandler(sagaRunner)
-	router := h.GetRouter()
 
+	producer := kafka.NewProducer(cfg.Kafka.Brokers)
+	relay := outbox.NewRelay(
+		sagaRunner, repo.Outbox, producer, cfg.Kafka.OutboxPollInterval, cfg.Kafka.OutboxBatchSize, logger,
+	)
+
+	relayCtx, stopRelay := context.WithCancel(context.Background())
+	relayDone := runRelay(relayCtx, relay)
+
+	h := handler.NewHandler(sagaRunner)
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
-		Handler: router,
+		Handler: h.GetRouter(),
 	}
 
 	go func() {
@@ -83,17 +94,57 @@ func run() error {
 		}
 	}()
 
+	waitForShutdownSignal()
+
+	return shutdown(srv, stopRelay, relayDone, producer)
+}
+
+// runRelay запускает релей outbox-очереди в фоновой горутине и возвращает канал, закрываемый
+// после завершения relay.Run — по нему дожидаются остановки при graceful shutdown.
+func runRelay(ctx context.Context, relay *outbox.Relay) <-chan struct{} {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		if err := relay.Run(ctx); err != nil {
+			zap.L().Error("outbox relay stopped with error", zap.Error(err))
+		}
+	}()
+
+	return done
+}
+
+// waitForShutdownSignal блокируется до получения SIGINT или SIGTERM.
+func waitForShutdownSignal() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+}
 
+// shutdown останавливает компоненты приложения в порядке: HTTP-сервер → релей outbox →
+// продюсер Kafka (§7.1 эпика — сначала перестаём принимать новую работу и публиковать,
+// затем закрываем транспорт).
+func shutdown(
+	srv *http.Server,
+	stopRelay context.CancelFunc,
+	relayDone <-chan struct{},
+	producer *kafka.WriterProducer,
+) error {
 	zap.L().Info("shutting down server...")
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("server forced to shutdown: %w", err)
+	}
+
+	stopRelay()
+	<-relayDone
+
+	if err := producer.Close(); err != nil {
+		zap.L().Error("failed to close kafka producer", zap.Error(err))
 	}
 
 	zap.L().Info("server exited properly")
