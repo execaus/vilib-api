@@ -134,6 +134,9 @@ func (s *AccountService) CreateUser(
 	return user, nil
 }
 
+// GetByUserEmail возвращает организации, в которых у email есть активная строка пользователя
+// (§2.4 дизайна эпика Э2, A-03 ТЗ) — деактивированные строки исключены: вход и переключение
+// в такую организацию невозможны, значит и включать её в список некорректно.
 func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]domain.Account, error) {
 	// Получение пользователей с таким email
 	users, err := s.srv.User.GetByEmail(ctx, email)
@@ -142,21 +145,24 @@ func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]do
 		return nil, err
 	}
 
-	// Получение аккаунтов найденных пользователей
-	usersID := make([]uuid.UUID, len(users))
-	accountRolesID := make([]uuid.UUID, len(users))
-	for i, user := range users {
-		usersID[i] = user.ID
-		accountRolesID[i] = user.RoleID
+	// Роли только активных строк — деактивированные организации недоступны для входа.
+	accountRolesID := make([]uuid.UUID, 0, len(users))
+	for _, user := range users {
+		if user.IsActive() {
+			accountRolesID = append(accountRolesID, user.RoleID)
+		}
+	}
+	if len(accountRolesID) == 0 {
+		return []domain.Account{}, nil
 	}
 
-	accountsID := make([]uuid.UUID, len(accountRolesID))
 	accountsRole, err := s.srv.AccountRole.GetByID(ctx, accountRolesID...)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return nil, err
 	}
 
+	accountsID := make([]uuid.UUID, len(accountsRole))
 	for i, role := range accountsRole {
 		accountsID[i] = role.AccountID
 	}

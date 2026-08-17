@@ -99,6 +99,18 @@ func (s *UserGroupService) GetAll(
 	return groups, nil
 }
 
+// GetByID выбирает группы по идентификаторам без проверки прав — батч-выборка для
+// внутренней сборки (например, профиля пользователя, §2.3 дизайна эпика Э2).
+func (s *UserGroupService) GetByID(ctx context.Context, groupsID ...uuid.UUID) ([]domain.UserGroup, error) {
+	groups, err := s.repo.GetByID(ctx, groupsID...)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return groups, nil
+}
+
 func (s *UserGroupService) Delete(
 	ctx context.Context,
 	initiatorID, accountID, groupID uuid.UUID,

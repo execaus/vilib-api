@@ -25,6 +25,7 @@ import (
 //go:generate minimock -i VideoAsset -o ./service_mocks/video_asset_mock.go
 //go:generate minimock -i Access -o ./service_mocks/access_mock.go
 //go:generate minimock -i Outbox -o ./service_mocks/outbox_mock.go
+//go:generate minimock -i Profile -o ./service_mocks/profile_mock.go
 //go:generate minimock -i vilib-api/internal/s3.S3 -o ./service_mocks/s3_mock.go
 
 type Auth interface {
@@ -41,6 +42,11 @@ type Auth interface {
 	// проверки возвращается как ErrUnauthorized (HTTP 401) — принадлежность токена конкретному
 	// видео проверяет вызывающий сервис отдельно (HTTP 403 при несовпадении).
 	ParseHLSToken(token string) (domain.HLSClaims, error)
+	// SwitchAccount выпускает новый токен с current_account_id, переключённым на accountID —
+	// организацию, в которой у пользователя (по email текущей строки) есть активная строка
+	// (§2.4 дизайна эпика Э2). Нет строки в организации → ErrNotAccountMember (403 forbidden),
+	// строка деактивирована → ErrForbiddenUserDeactivated (403 forbidden.user_deactivated).
+	SwitchAccount(ctx context.Context, userID, accountID uuid.UUID) (string, error)
 }
 
 type Account interface {
@@ -77,6 +83,9 @@ type User interface {
 		initiatorID, accountID uuid.UUID,
 		status repository.UserStatus,
 	) ([]domain.User, error)
+	// GetByEmailAndAccountID возвращает строку пользователя с указанным email в указанной
+	// организации — используется переключением организации (§2.4 дизайна эпика Э2).
+	GetByEmailAndAccountID(ctx context.Context, email string, accountID uuid.UUID) (domain.User, error)
 }
 
 type Email interface {
@@ -93,6 +102,9 @@ type UserGroup interface {
 	) ([]domain.GroupMember, error)
 	GetAll(ctx context.Context, initiatorID, accountID uuid.UUID) ([]domain.UserGroup, error)
 	Delete(ctx context.Context, initiatorID, accountID, groupID uuid.UUID) error
+	// GetByID выбирает группы по идентификаторам без проверки прав — батч-выборка для
+	// внутренней сборки (например, профиля пользователя, §2.3 дизайна эпика Э2).
+	GetByID(ctx context.Context, groupsID ...uuid.UUID) ([]domain.UserGroup, error)
 }
 
 type GroupMember interface {
@@ -102,6 +114,9 @@ type GroupMember interface {
 	// правом ManageMembers, либо (OR-логика, см. AddMembers) инициатору с правом уровня
 	// аккаунта ManageGroups — в этом случае членство инициатора в группе не требуется.
 	RemoveMember(ctx context.Context, accountID, initiatorID, groupID, targetID uuid.UUID) error
+	// GetByUserID выбирает все членства пользователя во всех группах без проверки прав —
+	// используется сборкой профиля пользователя (§2.3 дизайна эпика Э2).
+	GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain.GroupMember, error)
 }
 
 type GroupRole interface {
@@ -116,6 +131,10 @@ type GroupRole interface {
 	GetDefault(ctx context.Context, accountID uuid.UUID) (domain.GroupRole, error)
 	GetAll(ctx context.Context, initiatorID, accountID uuid.UUID) ([]domain.GroupRole, error)
 	Delete(ctx context.Context, initiatorID, accountID, roleID uuid.UUID) error
+	// GetByAccountID выбирает все роли групп аккаунта без проверки прав — батч-выборка для
+	// сборки профиля пользователя (§2.3 дизайна эпика Э2): роль в собственных группах видна
+	// пользователю без права ManageGroups, требуемого GetAll.
+	GetByAccountID(ctx context.Context, accountID uuid.UUID) ([]domain.GroupRole, error)
 }
 
 type Video interface {
@@ -208,6 +227,15 @@ type Outbox interface {
 	Publish(ctx context.Context, topic, key string, payload []byte) error
 }
 
+// Profile агрегирует контекст текущего пользователя для ручки GET /me (§2.3 дизайна эпика Э2).
+type Profile interface {
+	// Get собирает профиль пользователя userID: организацию текущей строки, все организации
+	// по email с активной строкой, роль в текущей организации, признак владельца аккаунта
+	// и членства в группах. Деактивированная строка — ErrForbiddenUserDeactivated
+	// (403 forbidden.user_deactivated).
+	Get(ctx context.Context, userID uuid.UUID) (domain.Profile, error)
+}
+
 type Service struct {
 	Auth
 	Account
@@ -221,6 +249,7 @@ type Service struct {
 	VideoAsset
 	Access
 	Outbox
+	Profile
 }
 
 func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *repository.Repository) *Service {
@@ -242,6 +271,7 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 	s.VideoAsset = NewVideoAssetService(r.VideoAsset, s)
 	s.Access = NewAccessService(s)
 	s.Outbox = NewOutboxService(r.Outbox, s)
+	s.Profile = NewProfileService(s)
 
 	return s
 }

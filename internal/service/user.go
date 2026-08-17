@@ -91,6 +91,22 @@ func (s *UserService) Update(
 	return users[0], nil
 }
 
+// GetByEmailAndAccountID возвращает строку пользователя с указанным email в указанной
+// организации — используется переключением организации (§2.4 дизайна эпика Э2).
+func (s *UserService) GetByEmailAndAccountID(
+	ctx context.Context,
+	email string,
+	accountID uuid.UUID,
+) (domain.User, error) {
+	user, err := s.repo.SelectByEmailAndAccountID(ctx, email, accountID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+
+	return user, nil
+}
+
 func (s *UserService) GetByID(ctx context.Context, userID ...uuid.UUID) ([]domain.User, error) {
 	// Получение пользователей по ID
 	users, err := s.repo.SelectByID(ctx, userID...)

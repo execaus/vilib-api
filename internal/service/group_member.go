@@ -48,6 +48,18 @@ func (s *GroupMemberService) GetByUserIDAndGroupID(
 	return member, nil
 }
 
+// GetByUserID выбирает все членства пользователя во всех группах без проверки прав —
+// используется сборкой профиля пользователя (§2.3 дизайна эпика Э2).
+func (s *GroupMemberService) GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain.GroupMember, error) {
+	members, err := s.repo.SelectByUserID(ctx, userID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return members, nil
+}
+
 func (s *GroupMemberService) RemoveMember(
 	ctx context.Context,
 	accountID, initiatorID, groupID, targetID uuid.UUID,

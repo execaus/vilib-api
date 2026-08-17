@@ -11,6 +11,9 @@ var (
 	// ErrInvalidCredentials — email/пароль не совпали ни в одной строке пользователя. HTTP 401
 	// (§2.4 дизайна эпика).
 	ErrInvalidCredentials = NewUnauthorizedErrorCode("invalid_credentials", "invalid credentials")
+	// ErrNotAccountMember — у пользователя нет строки в организации, на которую он пытается
+	// переключиться (HTTP 403 forbidden, §2.4 дизайна эпика Э2).
+	ErrNotAccountMember = NewForbiddenError("user is not a member of the account")
 )
 
 var (

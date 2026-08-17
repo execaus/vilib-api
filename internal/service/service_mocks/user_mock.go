@@ -42,6 +42,13 @@ type UserMock struct {
 	beforeGetByEmailCounter uint64
 	GetByEmailMock          mUserMockGetByEmail
 
+	funcGetByEmailAndAccountID          func(ctx context.Context, email string, accountID uuid.UUID) (u1 domain.User, err error)
+	funcGetByEmailAndAccountIDOrigin    string
+	inspectFuncGetByEmailAndAccountID   func(ctx context.Context, email string, accountID uuid.UUID)
+	afterGetByEmailAndAccountIDCounter  uint64
+	beforeGetByEmailAndAccountIDCounter uint64
+	GetByEmailAndAccountIDMock          mUserMockGetByEmailAndAccountID
+
 	funcGetByID          func(ctx context.Context, userID ...uuid.UUID) (ua1 []domain.User, err error)
 	funcGetByIDOrigin    string
 	inspectFuncGetByID   func(ctx context.Context, userID ...uuid.UUID)
@@ -87,6 +94,9 @@ func NewUserMock(t minimock.Tester) *UserMock {
 
 	m.GetByEmailMock = mUserMockGetByEmail{mock: m}
 	m.GetByEmailMock.callArgs = []*UserMockGetByEmailParams{}
+
+	m.GetByEmailAndAccountIDMock = mUserMockGetByEmailAndAccountID{mock: m}
+	m.GetByEmailAndAccountIDMock.callArgs = []*UserMockGetByEmailAndAccountIDParams{}
 
 	m.GetByIDMock = mUserMockGetByID{mock: m}
 	m.GetByIDMock.callArgs = []*UserMockGetByIDParams{}
@@ -1316,6 +1326,380 @@ func (m *UserMock) MinimockGetByEmailInspect() {
 	if !m.GetByEmailMock.invocationsDone() && afterGetByEmailCounter > 0 {
 		m.t.Errorf("Expected %d calls to UserMock.GetByEmail at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetByEmailMock.expectedInvocations), m.GetByEmailMock.expectedInvocationsOrigin, afterGetByEmailCounter)
+	}
+}
+
+type mUserMockGetByEmailAndAccountID struct {
+	optional           bool
+	mock               *UserMock
+	defaultExpectation *UserMockGetByEmailAndAccountIDExpectation
+	expectations       []*UserMockGetByEmailAndAccountIDExpectation
+
+	callArgs []*UserMockGetByEmailAndAccountIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// UserMockGetByEmailAndAccountIDExpectation specifies expectation struct of the User.GetByEmailAndAccountID
+type UserMockGetByEmailAndAccountIDExpectation struct {
+	mock               *UserMock
+	params             *UserMockGetByEmailAndAccountIDParams
+	paramPtrs          *UserMockGetByEmailAndAccountIDParamPtrs
+	expectationOrigins UserMockGetByEmailAndAccountIDExpectationOrigins
+	results            *UserMockGetByEmailAndAccountIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// UserMockGetByEmailAndAccountIDParams contains parameters of the User.GetByEmailAndAccountID
+type UserMockGetByEmailAndAccountIDParams struct {
+	ctx       context.Context
+	email     string
+	accountID uuid.UUID
+}
+
+// UserMockGetByEmailAndAccountIDParamPtrs contains pointers to parameters of the User.GetByEmailAndAccountID
+type UserMockGetByEmailAndAccountIDParamPtrs struct {
+	ctx       *context.Context
+	email     *string
+	accountID *uuid.UUID
+}
+
+// UserMockGetByEmailAndAccountIDResults contains results of the User.GetByEmailAndAccountID
+type UserMockGetByEmailAndAccountIDResults struct {
+	u1  domain.User
+	err error
+}
+
+// UserMockGetByEmailAndAccountIDOrigins contains origins of expectations of the User.GetByEmailAndAccountID
+type UserMockGetByEmailAndAccountIDExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originEmail     string
+	originAccountID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) Optional() *mUserMockGetByEmailAndAccountID {
+	mmGetByEmailAndAccountID.optional = true
+	return mmGetByEmailAndAccountID
+}
+
+// Expect sets up expected params for User.GetByEmailAndAccountID
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) Expect(ctx context.Context, email string, accountID uuid.UUID) *mUserMockGetByEmailAndAccountID {
+	if mmGetByEmailAndAccountID.mock.funcGetByEmailAndAccountID != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("UserMock.GetByEmailAndAccountID mock is already set by Set")
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation == nil {
+		mmGetByEmailAndAccountID.defaultExpectation = &UserMockGetByEmailAndAccountIDExpectation{}
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation.paramPtrs != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("UserMock.GetByEmailAndAccountID mock is already set by ExpectParams functions")
+	}
+
+	mmGetByEmailAndAccountID.defaultExpectation.params = &UserMockGetByEmailAndAccountIDParams{ctx, email, accountID}
+	mmGetByEmailAndAccountID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmGetByEmailAndAccountID.expectations {
+		if minimock.Equal(e.params, mmGetByEmailAndAccountID.defaultExpectation.params) {
+			mmGetByEmailAndAccountID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGetByEmailAndAccountID.defaultExpectation.params)
+		}
+	}
+
+	return mmGetByEmailAndAccountID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for User.GetByEmailAndAccountID
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) ExpectCtxParam1(ctx context.Context) *mUserMockGetByEmailAndAccountID {
+	if mmGetByEmailAndAccountID.mock.funcGetByEmailAndAccountID != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("UserMock.GetByEmailAndAccountID mock is already set by Set")
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation == nil {
+		mmGetByEmailAndAccountID.defaultExpectation = &UserMockGetByEmailAndAccountIDExpectation{}
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation.params != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("UserMock.GetByEmailAndAccountID mock is already set by Expect")
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation.paramPtrs == nil {
+		mmGetByEmailAndAccountID.defaultExpectation.paramPtrs = &UserMockGetByEmailAndAccountIDParamPtrs{}
+	}
+	mmGetByEmailAndAccountID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmGetByEmailAndAccountID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmGetByEmailAndAccountID
+}
+
+// ExpectEmailParam2 sets up expected param email for User.GetByEmailAndAccountID
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) ExpectEmailParam2(email string) *mUserMockGetByEmailAndAccountID {
+	if mmGetByEmailAndAccountID.mock.funcGetByEmailAndAccountID != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("UserMock.GetByEmailAndAccountID mock is already set by Set")
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation == nil {
+		mmGetByEmailAndAccountID.defaultExpectation = &UserMockGetByEmailAndAccountIDExpectation{}
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation.params != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("UserMock.GetByEmailAndAccountID mock is already set by Expect")
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation.paramPtrs == nil {
+		mmGetByEmailAndAccountID.defaultExpectation.paramPtrs = &UserMockGetByEmailAndAccountIDParamPtrs{}
+	}
+	mmGetByEmailAndAccountID.defaultExpectation.paramPtrs.email = &email
+	mmGetByEmailAndAccountID.defaultExpectation.expectationOrigins.originEmail = minimock.CallerInfo(1)
+
+	return mmGetByEmailAndAccountID
+}
+
+// ExpectAccountIDParam3 sets up expected param accountID for User.GetByEmailAndAccountID
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) ExpectAccountIDParam3(accountID uuid.UUID) *mUserMockGetByEmailAndAccountID {
+	if mmGetByEmailAndAccountID.mock.funcGetByEmailAndAccountID != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("UserMock.GetByEmailAndAccountID mock is already set by Set")
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation == nil {
+		mmGetByEmailAndAccountID.defaultExpectation = &UserMockGetByEmailAndAccountIDExpectation{}
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation.params != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("UserMock.GetByEmailAndAccountID mock is already set by Expect")
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation.paramPtrs == nil {
+		mmGetByEmailAndAccountID.defaultExpectation.paramPtrs = &UserMockGetByEmailAndAccountIDParamPtrs{}
+	}
+	mmGetByEmailAndAccountID.defaultExpectation.paramPtrs.accountID = &accountID
+	mmGetByEmailAndAccountID.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmGetByEmailAndAccountID
+}
+
+// Inspect accepts an inspector function that has same arguments as the User.GetByEmailAndAccountID
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) Inspect(f func(ctx context.Context, email string, accountID uuid.UUID)) *mUserMockGetByEmailAndAccountID {
+	if mmGetByEmailAndAccountID.mock.inspectFuncGetByEmailAndAccountID != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("Inspect function is already set for UserMock.GetByEmailAndAccountID")
+	}
+
+	mmGetByEmailAndAccountID.mock.inspectFuncGetByEmailAndAccountID = f
+
+	return mmGetByEmailAndAccountID
+}
+
+// Return sets up results that will be returned by User.GetByEmailAndAccountID
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) Return(u1 domain.User, err error) *UserMock {
+	if mmGetByEmailAndAccountID.mock.funcGetByEmailAndAccountID != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("UserMock.GetByEmailAndAccountID mock is already set by Set")
+	}
+
+	if mmGetByEmailAndAccountID.defaultExpectation == nil {
+		mmGetByEmailAndAccountID.defaultExpectation = &UserMockGetByEmailAndAccountIDExpectation{mock: mmGetByEmailAndAccountID.mock}
+	}
+	mmGetByEmailAndAccountID.defaultExpectation.results = &UserMockGetByEmailAndAccountIDResults{u1, err}
+	mmGetByEmailAndAccountID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmGetByEmailAndAccountID.mock
+}
+
+// Set uses given function f to mock the User.GetByEmailAndAccountID method
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) Set(f func(ctx context.Context, email string, accountID uuid.UUID) (u1 domain.User, err error)) *UserMock {
+	if mmGetByEmailAndAccountID.defaultExpectation != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("Default expectation is already set for the User.GetByEmailAndAccountID method")
+	}
+
+	if len(mmGetByEmailAndAccountID.expectations) > 0 {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("Some expectations are already set for the User.GetByEmailAndAccountID method")
+	}
+
+	mmGetByEmailAndAccountID.mock.funcGetByEmailAndAccountID = f
+	mmGetByEmailAndAccountID.mock.funcGetByEmailAndAccountIDOrigin = minimock.CallerInfo(1)
+	return mmGetByEmailAndAccountID.mock
+}
+
+// When sets expectation for the User.GetByEmailAndAccountID which will trigger the result defined by the following
+// Then helper
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) When(ctx context.Context, email string, accountID uuid.UUID) *UserMockGetByEmailAndAccountIDExpectation {
+	if mmGetByEmailAndAccountID.mock.funcGetByEmailAndAccountID != nil {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("UserMock.GetByEmailAndAccountID mock is already set by Set")
+	}
+
+	expectation := &UserMockGetByEmailAndAccountIDExpectation{
+		mock:               mmGetByEmailAndAccountID.mock,
+		params:             &UserMockGetByEmailAndAccountIDParams{ctx, email, accountID},
+		expectationOrigins: UserMockGetByEmailAndAccountIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmGetByEmailAndAccountID.expectations = append(mmGetByEmailAndAccountID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up User.GetByEmailAndAccountID return parameters for the expectation previously defined by the When method
+func (e *UserMockGetByEmailAndAccountIDExpectation) Then(u1 domain.User, err error) *UserMock {
+	e.results = &UserMockGetByEmailAndAccountIDResults{u1, err}
+	return e.mock
+}
+
+// Times sets number of times User.GetByEmailAndAccountID should be invoked
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) Times(n uint64) *mUserMockGetByEmailAndAccountID {
+	if n == 0 {
+		mmGetByEmailAndAccountID.mock.t.Fatalf("Times of UserMock.GetByEmailAndAccountID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmGetByEmailAndAccountID.expectedInvocations, n)
+	mmGetByEmailAndAccountID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmGetByEmailAndAccountID
+}
+
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) invocationsDone() bool {
+	if len(mmGetByEmailAndAccountID.expectations) == 0 && mmGetByEmailAndAccountID.defaultExpectation == nil && mmGetByEmailAndAccountID.mock.funcGetByEmailAndAccountID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmGetByEmailAndAccountID.mock.afterGetByEmailAndAccountIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmGetByEmailAndAccountID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// GetByEmailAndAccountID implements mm_service.User
+func (mmGetByEmailAndAccountID *UserMock) GetByEmailAndAccountID(ctx context.Context, email string, accountID uuid.UUID) (u1 domain.User, err error) {
+	mm_atomic.AddUint64(&mmGetByEmailAndAccountID.beforeGetByEmailAndAccountIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmGetByEmailAndAccountID.afterGetByEmailAndAccountIDCounter, 1)
+
+	mmGetByEmailAndAccountID.t.Helper()
+
+	if mmGetByEmailAndAccountID.inspectFuncGetByEmailAndAccountID != nil {
+		mmGetByEmailAndAccountID.inspectFuncGetByEmailAndAccountID(ctx, email, accountID)
+	}
+
+	mm_params := UserMockGetByEmailAndAccountIDParams{ctx, email, accountID}
+
+	// Record call args
+	mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.mutex.Lock()
+	mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.callArgs = append(mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.callArgs, &mm_params)
+	mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.mutex.Unlock()
+
+	for _, e := range mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.u1, e.results.err
+		}
+	}
+
+	if mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.defaultExpectation.params
+		mm_want_ptrs := mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.defaultExpectation.paramPtrs
+
+		mm_got := UserMockGetByEmailAndAccountIDParams{ctx, email, accountID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmGetByEmailAndAccountID.t.Errorf("UserMock.GetByEmailAndAccountID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.email != nil && !minimock.Equal(*mm_want_ptrs.email, mm_got.email) {
+				mmGetByEmailAndAccountID.t.Errorf("UserMock.GetByEmailAndAccountID got unexpected parameter email, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.defaultExpectation.expectationOrigins.originEmail, *mm_want_ptrs.email, mm_got.email, minimock.Diff(*mm_want_ptrs.email, mm_got.email))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmGetByEmailAndAccountID.t.Errorf("UserMock.GetByEmailAndAccountID got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmGetByEmailAndAccountID.t.Errorf("UserMock.GetByEmailAndAccountID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmGetByEmailAndAccountID.GetByEmailAndAccountIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmGetByEmailAndAccountID.t.Fatal("No results are set for the UserMock.GetByEmailAndAccountID")
+		}
+		return (*mm_results).u1, (*mm_results).err
+	}
+	if mmGetByEmailAndAccountID.funcGetByEmailAndAccountID != nil {
+		return mmGetByEmailAndAccountID.funcGetByEmailAndAccountID(ctx, email, accountID)
+	}
+	mmGetByEmailAndAccountID.t.Fatalf("Unexpected call to UserMock.GetByEmailAndAccountID. %v %v %v", ctx, email, accountID)
+	return
+}
+
+// GetByEmailAndAccountIDAfterCounter returns a count of finished UserMock.GetByEmailAndAccountID invocations
+func (mmGetByEmailAndAccountID *UserMock) GetByEmailAndAccountIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetByEmailAndAccountID.afterGetByEmailAndAccountIDCounter)
+}
+
+// GetByEmailAndAccountIDBeforeCounter returns a count of UserMock.GetByEmailAndAccountID invocations
+func (mmGetByEmailAndAccountID *UserMock) GetByEmailAndAccountIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmGetByEmailAndAccountID.beforeGetByEmailAndAccountIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to UserMock.GetByEmailAndAccountID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmGetByEmailAndAccountID *mUserMockGetByEmailAndAccountID) Calls() []*UserMockGetByEmailAndAccountIDParams {
+	mmGetByEmailAndAccountID.mutex.RLock()
+
+	argCopy := make([]*UserMockGetByEmailAndAccountIDParams, len(mmGetByEmailAndAccountID.callArgs))
+	copy(argCopy, mmGetByEmailAndAccountID.callArgs)
+
+	mmGetByEmailAndAccountID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockGetByEmailAndAccountIDDone returns true if the count of the GetByEmailAndAccountID invocations corresponds
+// the number of defined expectations
+func (m *UserMock) MinimockGetByEmailAndAccountIDDone() bool {
+	if m.GetByEmailAndAccountIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.GetByEmailAndAccountIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.GetByEmailAndAccountIDMock.invocationsDone()
+}
+
+// MinimockGetByEmailAndAccountIDInspect logs each unmet expectation
+func (m *UserMock) MinimockGetByEmailAndAccountIDInspect() {
+	for _, e := range m.GetByEmailAndAccountIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to UserMock.GetByEmailAndAccountID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterGetByEmailAndAccountIDCounter := mm_atomic.LoadUint64(&m.afterGetByEmailAndAccountIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.GetByEmailAndAccountIDMock.defaultExpectation != nil && afterGetByEmailAndAccountIDCounter < 1 {
+		if m.GetByEmailAndAccountIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to UserMock.GetByEmailAndAccountID at\n%s", m.GetByEmailAndAccountIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to UserMock.GetByEmailAndAccountID at\n%s with params: %#v", m.GetByEmailAndAccountIDMock.defaultExpectation.expectationOrigins.origin, *m.GetByEmailAndAccountIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcGetByEmailAndAccountID != nil && afterGetByEmailAndAccountIDCounter < 1 {
+		m.t.Errorf("Expected call to UserMock.GetByEmailAndAccountID at\n%s", m.funcGetByEmailAndAccountIDOrigin)
+	}
+
+	if !m.GetByEmailAndAccountIDMock.invocationsDone() && afterGetByEmailAndAccountIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to UserMock.GetByEmailAndAccountID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.GetByEmailAndAccountIDMock.expectedInvocations), m.GetByEmailAndAccountIDMock.expectedInvocationsOrigin, afterGetByEmailAndAccountIDCounter)
 	}
 }
 
@@ -2917,6 +3301,8 @@ func (m *UserMock) MinimockFinish() {
 
 			m.MinimockGetByEmailInspect()
 
+			m.MinimockGetByEmailAndAccountIDInspect()
+
 			m.MinimockGetByIDInspect()
 
 			m.MinimockListByAccountInspect()
@@ -2950,6 +3336,7 @@ func (m *UserMock) minimockDone() bool {
 		m.MinimockCreateDone() &&
 		m.MinimockDeactivateDone() &&
 		m.MinimockGetByEmailDone() &&
+		m.MinimockGetByEmailAndAccountIDDone() &&
 		m.MinimockGetByIDDone() &&
 		m.MinimockListByAccountDone() &&
 		m.MinimockReactivateDone() &&

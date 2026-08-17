@@ -157,7 +157,11 @@ func TestService_Auth_Login(t *testing.T) {
 	testEmail := testutil.Faker.Person().Contact().Email
 	testPassword := testutil.Faker.Person().Name()
 	testUserID := uuid.New()
-	testAccountID := uuid.New()
+	testRoleID := uuid.New()
+	// testCurrentAccountID — организация роли совпавшей строки; намеренно не совпадает с
+	// первым элементом accounts[], чтобы тест ловил регресс на accounts[0] (§2.4 дизайна эпика).
+	testCurrentAccountID := uuid.New()
+	testOtherAccountID := uuid.New()
 	testPasswordHash := testutil.Faker.Hash().MD5()
 
 	var errSomeError = errors.New("some error")
@@ -172,6 +176,7 @@ func TestService_Auth_Login(t *testing.T) {
 		setupMocks func(
 			*service_mocks.UserMock,
 			*service_mocks.AccountMock,
+			*service_mocks.AccountRoleMock,
 			*service_mocks.AuthMock,
 		)
 		args    args
@@ -180,7 +185,10 @@ func TestService_Auth_Login(t *testing.T) {
 	}{
 		{
 			name: "user not found",
-			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, auth *service_mocks.AuthMock) {
+			setupMocks: func(
+				user *service_mocks.UserMock, _ *service_mocks.AccountMock,
+				_ *service_mocks.AccountRoleMock, _ *service_mocks.AuthMock,
+			) {
 				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
 					Return(nil, errSomeError)
 			},
@@ -190,7 +198,10 @@ func TestService_Auth_Login(t *testing.T) {
 		},
 		{
 			name: "invalid password",
-			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, auth *service_mocks.AuthMock) {
+			setupMocks: func(
+				user *service_mocks.UserMock, _ *service_mocks.AccountMock,
+				_ *service_mocks.AccountRoleMock, auth *service_mocks.AuthMock,
+			) {
 				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
 					Return([]domain.User{{ID: testUserID, PasswordHash: testPasswordHash}}, nil)
 				auth.ComparePasswordMock.Expect(testPasswordHash, testPassword).
@@ -202,7 +213,10 @@ func TestService_Auth_Login(t *testing.T) {
 		},
 		{
 			name: "deactivated user",
-			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, auth *service_mocks.AuthMock) {
+			setupMocks: func(
+				user *service_mocks.UserMock, _ *service_mocks.AccountMock,
+				_ *service_mocks.AccountRoleMock, auth *service_mocks.AuthMock,
+			) {
 				deactivatedAt := time.Now()
 				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
 					Return([]domain.User{{ID: testUserID, PasswordHash: testPasswordHash, DeactivatedAt: &deactivatedAt}}, nil)
@@ -214,12 +228,34 @@ func TestService_Auth_Login(t *testing.T) {
 			wantErr: service.ErrUserDeactivated,
 		},
 		{
-			name: "accounts not found",
-			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, auth *service_mocks.AuthMock) {
+			name: "get current role error",
+			setupMocks: func(
+				user *service_mocks.UserMock, _ *service_mocks.AccountMock,
+				role *service_mocks.AccountRoleMock, auth *service_mocks.AuthMock,
+			) {
 				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return([]domain.User{{ID: testUserID, PasswordHash: testPasswordHash}}, nil)
+					Return([]domain.User{{ID: testUserID, RoleID: testRoleID, PasswordHash: testPasswordHash}}, nil)
 				auth.ComparePasswordMock.Expect(testPasswordHash, testPassword).
 					Return(true)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return(nil, errSomeError)
+			},
+			args:    args{testEmail, testPassword},
+			want:    "",
+			wantErr: errSomeError,
+		},
+		{
+			name: "accounts not found",
+			setupMocks: func(
+				user *service_mocks.UserMock, acc *service_mocks.AccountMock,
+				role *service_mocks.AccountRoleMock, auth *service_mocks.AuthMock,
+			) {
+				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
+					Return([]domain.User{{ID: testUserID, RoleID: testRoleID, PasswordHash: testPasswordHash}}, nil)
+				auth.ComparePasswordMock.Expect(testPasswordHash, testPassword).
+					Return(true)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{ID: testRoleID, AccountID: testCurrentAccountID}}, nil)
 				acc.GetByUserEmailMock.Expect(minimock.AnyContext, testEmail).
 					Return([]domain.Account{}, nil)
 			},
@@ -229,11 +265,16 @@ func TestService_Auth_Login(t *testing.T) {
 		},
 		{
 			name: "get accounts error",
-			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, auth *service_mocks.AuthMock) {
+			setupMocks: func(
+				user *service_mocks.UserMock, acc *service_mocks.AccountMock,
+				role *service_mocks.AccountRoleMock, auth *service_mocks.AuthMock,
+			) {
 				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return([]domain.User{{ID: testUserID, PasswordHash: testPasswordHash}}, nil)
+					Return([]domain.User{{ID: testUserID, RoleID: testRoleID, PasswordHash: testPasswordHash}}, nil)
 				auth.ComparePasswordMock.Expect(testPasswordHash, testPassword).
 					Return(true)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{ID: testRoleID, AccountID: testCurrentAccountID}}, nil)
 				acc.GetByUserEmailMock.Expect(minimock.AnyContext, testEmail).
 					Return(nil, errSomeError)
 			},
@@ -243,31 +284,43 @@ func TestService_Auth_Login(t *testing.T) {
 		},
 		{
 			name: "generate token error",
-			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, auth *service_mocks.AuthMock) {
+			setupMocks: func(
+				user *service_mocks.UserMock, acc *service_mocks.AccountMock,
+				role *service_mocks.AccountRoleMock, auth *service_mocks.AuthMock,
+			) {
 				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return([]domain.User{{ID: testUserID, PasswordHash: testPasswordHash}}, nil)
+					Return([]domain.User{{ID: testUserID, RoleID: testRoleID, PasswordHash: testPasswordHash}}, nil)
 				auth.ComparePasswordMock.Expect(testPasswordHash, testPassword).
 					Return(true)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{ID: testRoleID, AccountID: testCurrentAccountID}}, nil)
 				acc.GetByUserEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return([]domain.Account{{ID: testAccountID}}, nil)
-				auth.GenerateTokenMock.Expect(testUserID, []uuid.UUID{testAccountID}, testAccountID).
-					Return("", errSomeError)
+					Return([]domain.Account{{ID: testOtherAccountID}, {ID: testCurrentAccountID}}, nil)
+				auth.GenerateTokenMock.Expect(
+					testUserID, []uuid.UUID{testOtherAccountID, testCurrentAccountID}, testCurrentAccountID,
+				).Return("", errSomeError)
 			},
 			args:    args{testEmail, testPassword},
 			want:    "",
 			wantErr: errSomeError,
 		},
 		{
-			name: "success",
-			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, auth *service_mocks.AuthMock) {
+			name: "success returns current account id of the matched row, not accounts[0]",
+			setupMocks: func(
+				user *service_mocks.UserMock, acc *service_mocks.AccountMock,
+				role *service_mocks.AccountRoleMock, auth *service_mocks.AuthMock,
+			) {
 				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return([]domain.User{{ID: testUserID, PasswordHash: testPasswordHash}}, nil)
+					Return([]domain.User{{ID: testUserID, RoleID: testRoleID, PasswordHash: testPasswordHash}}, nil)
 				auth.ComparePasswordMock.Expect(testPasswordHash, testPassword).
 					Return(true)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{ID: testRoleID, AccountID: testCurrentAccountID}}, nil)
 				acc.GetByUserEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return([]domain.Account{{ID: testAccountID}}, nil)
-				auth.GenerateTokenMock.Expect(testUserID, []uuid.UUID{testAccountID}, testAccountID).
-					Return("test-token", nil)
+					Return([]domain.Account{{ID: testOtherAccountID}, {ID: testCurrentAccountID}}, nil)
+				auth.GenerateTokenMock.Expect(
+					testUserID, []uuid.UUID{testOtherAccountID, testCurrentAccountID}, testCurrentAccountID,
+				).Return("test-token", nil)
 			},
 			args:    args{testEmail, testPassword},
 			want:    "test-token",
@@ -282,13 +335,159 @@ func TestService_Auth_Login(t *testing.T) {
 			testutil.TestService(
 				t,
 				func(mockServices *testutil.ServiceMock, _ *testutil.RepositoryMock) {
-					tt.setupMocks(mockServices.User, mockServices.Account, mockServices.Auth)
+					tt.setupMocks(mockServices.User, mockServices.Account, mockServices.AccountRole, mockServices.Auth)
 				},
 				func(s *service.Service, r *repository.Repository) {
 					cfg := config.AuthConfig{Key: "test-secret-key"}
 					srv := service.NewAuthService(cfg, s)
 
 					got, err := srv.Login(t.Context(), tt.args.email, tt.args.password)
+
+					require.Equal(t, tt.want, got)
+					require.Equal(t, tt.wantErr, err)
+				},
+			)
+		})
+	}
+}
+
+// TestService_Auth_SwitchAccount проверяет переключение текущей организации сессии (§2.4
+// дизайна эпика Э2): успех, отсутствие строки пользователя в целевой организации (403
+// forbidden), деактивированная строка (403 forbidden.user_deactivated) и проброс ошибок.
+func TestService_Auth_SwitchAccount(t *testing.T) {
+	t.Parallel()
+
+	testUserID := uuid.New()
+	testTargetUserID := uuid.New()
+	testAccountID := uuid.New()
+	testOtherAccountID := uuid.New()
+	testEmail := testutil.Faker.Person().Contact().Email
+
+	var errSomeError = errors.New("some error")
+
+	type args struct {
+		userID    uuid.UUID
+		accountID uuid.UUID
+	}
+
+	tests := []struct {
+		name       string
+		setupMocks func(*service_mocks.UserMock, *service_mocks.AccountMock, *service_mocks.AuthMock)
+		args       args
+		want       string
+		wantErr    error
+	}{
+		{
+			name: "get current user error",
+			setupMocks: func(user *service_mocks.UserMock, _ *service_mocks.AccountMock, _ *service_mocks.AuthMock) {
+				user.GetByIDMock.Expect(minimock.AnyContext, testUserID).
+					Return(nil, errSomeError)
+			},
+			args:    args{testUserID, testAccountID},
+			want:    "",
+			wantErr: errSomeError,
+		},
+		{
+			name: "not a member of the target account",
+			setupMocks: func(user *service_mocks.UserMock, _ *service_mocks.AccountMock, _ *service_mocks.AuthMock) {
+				user.GetByIDMock.Expect(minimock.AnyContext, testUserID).
+					Return([]domain.User{{ID: testUserID, Email: testEmail}}, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{}, repository.ErrNotFound)
+			},
+			args:    args{testUserID, testAccountID},
+			want:    "",
+			wantErr: service.ErrNotAccountMember,
+		},
+		{
+			name: "get target user error",
+			setupMocks: func(user *service_mocks.UserMock, _ *service_mocks.AccountMock, _ *service_mocks.AuthMock) {
+				user.GetByIDMock.Expect(minimock.AnyContext, testUserID).
+					Return([]domain.User{{ID: testUserID, Email: testEmail}}, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{}, errSomeError)
+			},
+			args:    args{testUserID, testAccountID},
+			want:    "",
+			wantErr: errSomeError,
+		},
+		{
+			name: "target row deactivated",
+			setupMocks: func(user *service_mocks.UserMock, _ *service_mocks.AccountMock, _ *service_mocks.AuthMock) {
+				deactivatedAt := time.Now()
+				user.GetByIDMock.Expect(minimock.AnyContext, testUserID).
+					Return([]domain.User{{ID: testUserID, Email: testEmail}}, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{ID: testTargetUserID, Email: testEmail, DeactivatedAt: &deactivatedAt}, nil)
+			},
+			args:    args{testUserID, testAccountID},
+			want:    "",
+			wantErr: service.ErrForbiddenUserDeactivated,
+		},
+		{
+			name: "get accounts error",
+			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, _ *service_mocks.AuthMock) {
+				user.GetByIDMock.Expect(minimock.AnyContext, testUserID).
+					Return([]domain.User{{ID: testUserID, Email: testEmail}}, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{ID: testTargetUserID, Email: testEmail}, nil)
+				acc.GetByUserEmailMock.Expect(minimock.AnyContext, testEmail).
+					Return(nil, errSomeError)
+			},
+			args:    args{testUserID, testAccountID},
+			want:    "",
+			wantErr: errSomeError,
+		},
+		{
+			name: "generate token error",
+			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, auth *service_mocks.AuthMock) {
+				user.GetByIDMock.Expect(minimock.AnyContext, testUserID).
+					Return([]domain.User{{ID: testUserID, Email: testEmail}}, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{ID: testTargetUserID, Email: testEmail}, nil)
+				acc.GetByUserEmailMock.Expect(minimock.AnyContext, testEmail).
+					Return([]domain.Account{{ID: testOtherAccountID}, {ID: testAccountID}}, nil)
+				auth.GenerateTokenMock.Expect(
+					testTargetUserID, []uuid.UUID{testOtherAccountID, testAccountID}, testAccountID,
+				).Return("", errSomeError)
+			},
+			args:    args{testUserID, testAccountID},
+			want:    "",
+			wantErr: errSomeError,
+		},
+		{
+			name: "success",
+			setupMocks: func(user *service_mocks.UserMock, acc *service_mocks.AccountMock, auth *service_mocks.AuthMock) {
+				user.GetByIDMock.Expect(minimock.AnyContext, testUserID).
+					Return([]domain.User{{ID: testUserID, Email: testEmail}}, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{ID: testTargetUserID, Email: testEmail}, nil)
+				acc.GetByUserEmailMock.Expect(minimock.AnyContext, testEmail).
+					Return([]domain.Account{{ID: testOtherAccountID}, {ID: testAccountID}}, nil)
+				auth.GenerateTokenMock.Expect(
+					testTargetUserID, []uuid.UUID{testOtherAccountID, testAccountID}, testAccountID,
+				).Return("test-token", nil)
+			},
+			args:    args{testUserID, testAccountID},
+			want:    "test-token",
+			wantErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			testutil.TestService(
+				t,
+				func(mockServices *testutil.ServiceMock, _ *testutil.RepositoryMock) {
+					tt.setupMocks(mockServices.User, mockServices.Account, mockServices.Auth)
+				},
+				func(s *service.Service, _ *repository.Repository) {
+					cfg := config.AuthConfig{Key: "test-secret-key"}
+					srv := service.NewAuthService(cfg, s)
+
+					got, err := srv.SwitchAccount(t.Context(), tt.args.userID, tt.args.accountID)
 
 					require.Equal(t, tt.want, got)
 					require.Equal(t, tt.wantErr, err)

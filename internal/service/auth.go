@@ -9,6 +9,7 @@ import (
 	"time"
 	"vilib-api/config"
 	"vilib-api/internal/domain"
+	"vilib-api/internal/repository"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -64,7 +65,17 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 		return "", ErrUserDeactivated
 	}
 
-	// Получение всех организаций пользователя
+	// Текущая организация токена — организация роли совпавшей строки, а не первая по email
+	// (§2.4 дизайна эпика: пользователь в двух организациях мог войти паролем одной, но
+	// получить current_account_id другой).
+	roles, err := s.srv.AccountRole.GetByID(ctx, matchedUser.RoleID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
+	currentAccountID := roles[0].AccountID
+
+	// Получение всех организаций пользователя с активной строкой (§2.4 дизайна эпика, A-03 ТЗ)
 	accounts, err := s.srv.Account.GetByUserEmail(ctx, email)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -83,7 +94,56 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	}
 
 	// Генерация токена для авторизации пользователя
-	token, err := s.srv.Auth.GenerateToken(userID, accountsID, accountsID[0])
+	token, err := s.srv.Auth.GenerateToken(userID, accountsID, currentAccountID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
+
+	return token, nil
+}
+
+// SwitchAccount выпускает новый токен с current_account_id, переключённым на accountID —
+// организацию, в которой у пользователя (по email текущей строки userID) есть строка
+// (§2.4 дизайна эпика Э2). Нет строки в организации → ErrNotAccountMember (403 forbidden);
+// строка деактивирована → ErrForbiddenUserDeactivated (403 forbidden.user_deactivated).
+func (s *AuthService) SwitchAccount(ctx context.Context, userID, accountID uuid.UUID) (string, error) {
+	// Текущая строка пользователя — источник email.
+	users, err := s.srv.User.GetByID(ctx, userID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
+	email := users[0].Email
+
+	// Строка пользователя в целевой организации.
+	targetUser, err := s.srv.User.GetByEmailAndAccountID(ctx, email, accountID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			zap.L().Warn(err.Error())
+			return "", ErrNotAccountMember
+		}
+		zap.L().Error(err.Error())
+		return "", err
+	}
+
+	if !targetUser.IsActive() {
+		return "", ErrForbiddenUserDeactivated
+	}
+
+	// Все организации пользователя с активной строкой — новый список accounts[] токена.
+	accounts, err := s.srv.Account.GetByUserEmail(ctx, email)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return "", err
+	}
+
+	accountsID := make([]uuid.UUID, len(accounts))
+	for i, account := range accounts {
+		accountsID[i] = account.ID
+	}
+
+	token, err := s.srv.Auth.GenerateToken(targetUser.ID, accountsID, accountID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return "", err

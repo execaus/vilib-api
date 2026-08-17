@@ -76,6 +76,13 @@ type AuthMock struct {
 	afterParseHLSTokenCounter  uint64
 	beforeParseHLSTokenCounter uint64
 	ParseHLSTokenMock          mAuthMockParseHLSToken
+
+	funcSwitchAccount          func(ctx context.Context, userID uuid.UUID, accountID uuid.UUID) (s1 string, err error)
+	funcSwitchAccountOrigin    string
+	inspectFuncSwitchAccount   func(ctx context.Context, userID uuid.UUID, accountID uuid.UUID)
+	afterSwitchAccountCounter  uint64
+	beforeSwitchAccountCounter uint64
+	SwitchAccountMock          mAuthMockSwitchAccount
 }
 
 // NewAuthMock returns a mock for mm_service.Auth
@@ -108,6 +115,9 @@ func NewAuthMock(t minimock.Tester) *AuthMock {
 
 	m.ParseHLSTokenMock = mAuthMockParseHLSToken{mock: m}
 	m.ParseHLSTokenMock.callArgs = []*AuthMockParseHLSTokenParams{}
+
+	m.SwitchAccountMock = mAuthMockSwitchAccount{mock: m}
+	m.SwitchAccountMock.callArgs = []*AuthMockSwitchAccountParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -2670,6 +2680,380 @@ func (m *AuthMock) MinimockParseHLSTokenInspect() {
 	}
 }
 
+type mAuthMockSwitchAccount struct {
+	optional           bool
+	mock               *AuthMock
+	defaultExpectation *AuthMockSwitchAccountExpectation
+	expectations       []*AuthMockSwitchAccountExpectation
+
+	callArgs []*AuthMockSwitchAccountParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AuthMockSwitchAccountExpectation specifies expectation struct of the Auth.SwitchAccount
+type AuthMockSwitchAccountExpectation struct {
+	mock               *AuthMock
+	params             *AuthMockSwitchAccountParams
+	paramPtrs          *AuthMockSwitchAccountParamPtrs
+	expectationOrigins AuthMockSwitchAccountExpectationOrigins
+	results            *AuthMockSwitchAccountResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AuthMockSwitchAccountParams contains parameters of the Auth.SwitchAccount
+type AuthMockSwitchAccountParams struct {
+	ctx       context.Context
+	userID    uuid.UUID
+	accountID uuid.UUID
+}
+
+// AuthMockSwitchAccountParamPtrs contains pointers to parameters of the Auth.SwitchAccount
+type AuthMockSwitchAccountParamPtrs struct {
+	ctx       *context.Context
+	userID    *uuid.UUID
+	accountID *uuid.UUID
+}
+
+// AuthMockSwitchAccountResults contains results of the Auth.SwitchAccount
+type AuthMockSwitchAccountResults struct {
+	s1  string
+	err error
+}
+
+// AuthMockSwitchAccountOrigins contains origins of expectations of the Auth.SwitchAccount
+type AuthMockSwitchAccountExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originUserID    string
+	originAccountID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSwitchAccount *mAuthMockSwitchAccount) Optional() *mAuthMockSwitchAccount {
+	mmSwitchAccount.optional = true
+	return mmSwitchAccount
+}
+
+// Expect sets up expected params for Auth.SwitchAccount
+func (mmSwitchAccount *mAuthMockSwitchAccount) Expect(ctx context.Context, userID uuid.UUID, accountID uuid.UUID) *mAuthMockSwitchAccount {
+	if mmSwitchAccount.mock.funcSwitchAccount != nil {
+		mmSwitchAccount.mock.t.Fatalf("AuthMock.SwitchAccount mock is already set by Set")
+	}
+
+	if mmSwitchAccount.defaultExpectation == nil {
+		mmSwitchAccount.defaultExpectation = &AuthMockSwitchAccountExpectation{}
+	}
+
+	if mmSwitchAccount.defaultExpectation.paramPtrs != nil {
+		mmSwitchAccount.mock.t.Fatalf("AuthMock.SwitchAccount mock is already set by ExpectParams functions")
+	}
+
+	mmSwitchAccount.defaultExpectation.params = &AuthMockSwitchAccountParams{ctx, userID, accountID}
+	mmSwitchAccount.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSwitchAccount.expectations {
+		if minimock.Equal(e.params, mmSwitchAccount.defaultExpectation.params) {
+			mmSwitchAccount.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSwitchAccount.defaultExpectation.params)
+		}
+	}
+
+	return mmSwitchAccount
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Auth.SwitchAccount
+func (mmSwitchAccount *mAuthMockSwitchAccount) ExpectCtxParam1(ctx context.Context) *mAuthMockSwitchAccount {
+	if mmSwitchAccount.mock.funcSwitchAccount != nil {
+		mmSwitchAccount.mock.t.Fatalf("AuthMock.SwitchAccount mock is already set by Set")
+	}
+
+	if mmSwitchAccount.defaultExpectation == nil {
+		mmSwitchAccount.defaultExpectation = &AuthMockSwitchAccountExpectation{}
+	}
+
+	if mmSwitchAccount.defaultExpectation.params != nil {
+		mmSwitchAccount.mock.t.Fatalf("AuthMock.SwitchAccount mock is already set by Expect")
+	}
+
+	if mmSwitchAccount.defaultExpectation.paramPtrs == nil {
+		mmSwitchAccount.defaultExpectation.paramPtrs = &AuthMockSwitchAccountParamPtrs{}
+	}
+	mmSwitchAccount.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSwitchAccount.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSwitchAccount
+}
+
+// ExpectUserIDParam2 sets up expected param userID for Auth.SwitchAccount
+func (mmSwitchAccount *mAuthMockSwitchAccount) ExpectUserIDParam2(userID uuid.UUID) *mAuthMockSwitchAccount {
+	if mmSwitchAccount.mock.funcSwitchAccount != nil {
+		mmSwitchAccount.mock.t.Fatalf("AuthMock.SwitchAccount mock is already set by Set")
+	}
+
+	if mmSwitchAccount.defaultExpectation == nil {
+		mmSwitchAccount.defaultExpectation = &AuthMockSwitchAccountExpectation{}
+	}
+
+	if mmSwitchAccount.defaultExpectation.params != nil {
+		mmSwitchAccount.mock.t.Fatalf("AuthMock.SwitchAccount mock is already set by Expect")
+	}
+
+	if mmSwitchAccount.defaultExpectation.paramPtrs == nil {
+		mmSwitchAccount.defaultExpectation.paramPtrs = &AuthMockSwitchAccountParamPtrs{}
+	}
+	mmSwitchAccount.defaultExpectation.paramPtrs.userID = &userID
+	mmSwitchAccount.defaultExpectation.expectationOrigins.originUserID = minimock.CallerInfo(1)
+
+	return mmSwitchAccount
+}
+
+// ExpectAccountIDParam3 sets up expected param accountID for Auth.SwitchAccount
+func (mmSwitchAccount *mAuthMockSwitchAccount) ExpectAccountIDParam3(accountID uuid.UUID) *mAuthMockSwitchAccount {
+	if mmSwitchAccount.mock.funcSwitchAccount != nil {
+		mmSwitchAccount.mock.t.Fatalf("AuthMock.SwitchAccount mock is already set by Set")
+	}
+
+	if mmSwitchAccount.defaultExpectation == nil {
+		mmSwitchAccount.defaultExpectation = &AuthMockSwitchAccountExpectation{}
+	}
+
+	if mmSwitchAccount.defaultExpectation.params != nil {
+		mmSwitchAccount.mock.t.Fatalf("AuthMock.SwitchAccount mock is already set by Expect")
+	}
+
+	if mmSwitchAccount.defaultExpectation.paramPtrs == nil {
+		mmSwitchAccount.defaultExpectation.paramPtrs = &AuthMockSwitchAccountParamPtrs{}
+	}
+	mmSwitchAccount.defaultExpectation.paramPtrs.accountID = &accountID
+	mmSwitchAccount.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmSwitchAccount
+}
+
+// Inspect accepts an inspector function that has same arguments as the Auth.SwitchAccount
+func (mmSwitchAccount *mAuthMockSwitchAccount) Inspect(f func(ctx context.Context, userID uuid.UUID, accountID uuid.UUID)) *mAuthMockSwitchAccount {
+	if mmSwitchAccount.mock.inspectFuncSwitchAccount != nil {
+		mmSwitchAccount.mock.t.Fatalf("Inspect function is already set for AuthMock.SwitchAccount")
+	}
+
+	mmSwitchAccount.mock.inspectFuncSwitchAccount = f
+
+	return mmSwitchAccount
+}
+
+// Return sets up results that will be returned by Auth.SwitchAccount
+func (mmSwitchAccount *mAuthMockSwitchAccount) Return(s1 string, err error) *AuthMock {
+	if mmSwitchAccount.mock.funcSwitchAccount != nil {
+		mmSwitchAccount.mock.t.Fatalf("AuthMock.SwitchAccount mock is already set by Set")
+	}
+
+	if mmSwitchAccount.defaultExpectation == nil {
+		mmSwitchAccount.defaultExpectation = &AuthMockSwitchAccountExpectation{mock: mmSwitchAccount.mock}
+	}
+	mmSwitchAccount.defaultExpectation.results = &AuthMockSwitchAccountResults{s1, err}
+	mmSwitchAccount.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSwitchAccount.mock
+}
+
+// Set uses given function f to mock the Auth.SwitchAccount method
+func (mmSwitchAccount *mAuthMockSwitchAccount) Set(f func(ctx context.Context, userID uuid.UUID, accountID uuid.UUID) (s1 string, err error)) *AuthMock {
+	if mmSwitchAccount.defaultExpectation != nil {
+		mmSwitchAccount.mock.t.Fatalf("Default expectation is already set for the Auth.SwitchAccount method")
+	}
+
+	if len(mmSwitchAccount.expectations) > 0 {
+		mmSwitchAccount.mock.t.Fatalf("Some expectations are already set for the Auth.SwitchAccount method")
+	}
+
+	mmSwitchAccount.mock.funcSwitchAccount = f
+	mmSwitchAccount.mock.funcSwitchAccountOrigin = minimock.CallerInfo(1)
+	return mmSwitchAccount.mock
+}
+
+// When sets expectation for the Auth.SwitchAccount which will trigger the result defined by the following
+// Then helper
+func (mmSwitchAccount *mAuthMockSwitchAccount) When(ctx context.Context, userID uuid.UUID, accountID uuid.UUID) *AuthMockSwitchAccountExpectation {
+	if mmSwitchAccount.mock.funcSwitchAccount != nil {
+		mmSwitchAccount.mock.t.Fatalf("AuthMock.SwitchAccount mock is already set by Set")
+	}
+
+	expectation := &AuthMockSwitchAccountExpectation{
+		mock:               mmSwitchAccount.mock,
+		params:             &AuthMockSwitchAccountParams{ctx, userID, accountID},
+		expectationOrigins: AuthMockSwitchAccountExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSwitchAccount.expectations = append(mmSwitchAccount.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Auth.SwitchAccount return parameters for the expectation previously defined by the When method
+func (e *AuthMockSwitchAccountExpectation) Then(s1 string, err error) *AuthMock {
+	e.results = &AuthMockSwitchAccountResults{s1, err}
+	return e.mock
+}
+
+// Times sets number of times Auth.SwitchAccount should be invoked
+func (mmSwitchAccount *mAuthMockSwitchAccount) Times(n uint64) *mAuthMockSwitchAccount {
+	if n == 0 {
+		mmSwitchAccount.mock.t.Fatalf("Times of AuthMock.SwitchAccount mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSwitchAccount.expectedInvocations, n)
+	mmSwitchAccount.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSwitchAccount
+}
+
+func (mmSwitchAccount *mAuthMockSwitchAccount) invocationsDone() bool {
+	if len(mmSwitchAccount.expectations) == 0 && mmSwitchAccount.defaultExpectation == nil && mmSwitchAccount.mock.funcSwitchAccount == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSwitchAccount.mock.afterSwitchAccountCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSwitchAccount.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SwitchAccount implements mm_service.Auth
+func (mmSwitchAccount *AuthMock) SwitchAccount(ctx context.Context, userID uuid.UUID, accountID uuid.UUID) (s1 string, err error) {
+	mm_atomic.AddUint64(&mmSwitchAccount.beforeSwitchAccountCounter, 1)
+	defer mm_atomic.AddUint64(&mmSwitchAccount.afterSwitchAccountCounter, 1)
+
+	mmSwitchAccount.t.Helper()
+
+	if mmSwitchAccount.inspectFuncSwitchAccount != nil {
+		mmSwitchAccount.inspectFuncSwitchAccount(ctx, userID, accountID)
+	}
+
+	mm_params := AuthMockSwitchAccountParams{ctx, userID, accountID}
+
+	// Record call args
+	mmSwitchAccount.SwitchAccountMock.mutex.Lock()
+	mmSwitchAccount.SwitchAccountMock.callArgs = append(mmSwitchAccount.SwitchAccountMock.callArgs, &mm_params)
+	mmSwitchAccount.SwitchAccountMock.mutex.Unlock()
+
+	for _, e := range mmSwitchAccount.SwitchAccountMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.s1, e.results.err
+		}
+	}
+
+	if mmSwitchAccount.SwitchAccountMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSwitchAccount.SwitchAccountMock.defaultExpectation.Counter, 1)
+		mm_want := mmSwitchAccount.SwitchAccountMock.defaultExpectation.params
+		mm_want_ptrs := mmSwitchAccount.SwitchAccountMock.defaultExpectation.paramPtrs
+
+		mm_got := AuthMockSwitchAccountParams{ctx, userID, accountID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSwitchAccount.t.Errorf("AuthMock.SwitchAccount got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSwitchAccount.SwitchAccountMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.userID != nil && !minimock.Equal(*mm_want_ptrs.userID, mm_got.userID) {
+				mmSwitchAccount.t.Errorf("AuthMock.SwitchAccount got unexpected parameter userID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSwitchAccount.SwitchAccountMock.defaultExpectation.expectationOrigins.originUserID, *mm_want_ptrs.userID, mm_got.userID, minimock.Diff(*mm_want_ptrs.userID, mm_got.userID))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmSwitchAccount.t.Errorf("AuthMock.SwitchAccount got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSwitchAccount.SwitchAccountMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSwitchAccount.t.Errorf("AuthMock.SwitchAccount got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSwitchAccount.SwitchAccountMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSwitchAccount.SwitchAccountMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSwitchAccount.t.Fatal("No results are set for the AuthMock.SwitchAccount")
+		}
+		return (*mm_results).s1, (*mm_results).err
+	}
+	if mmSwitchAccount.funcSwitchAccount != nil {
+		return mmSwitchAccount.funcSwitchAccount(ctx, userID, accountID)
+	}
+	mmSwitchAccount.t.Fatalf("Unexpected call to AuthMock.SwitchAccount. %v %v %v", ctx, userID, accountID)
+	return
+}
+
+// SwitchAccountAfterCounter returns a count of finished AuthMock.SwitchAccount invocations
+func (mmSwitchAccount *AuthMock) SwitchAccountAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSwitchAccount.afterSwitchAccountCounter)
+}
+
+// SwitchAccountBeforeCounter returns a count of AuthMock.SwitchAccount invocations
+func (mmSwitchAccount *AuthMock) SwitchAccountBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSwitchAccount.beforeSwitchAccountCounter)
+}
+
+// Calls returns a list of arguments used in each call to AuthMock.SwitchAccount.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSwitchAccount *mAuthMockSwitchAccount) Calls() []*AuthMockSwitchAccountParams {
+	mmSwitchAccount.mutex.RLock()
+
+	argCopy := make([]*AuthMockSwitchAccountParams, len(mmSwitchAccount.callArgs))
+	copy(argCopy, mmSwitchAccount.callArgs)
+
+	mmSwitchAccount.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSwitchAccountDone returns true if the count of the SwitchAccount invocations corresponds
+// the number of defined expectations
+func (m *AuthMock) MinimockSwitchAccountDone() bool {
+	if m.SwitchAccountMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SwitchAccountMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SwitchAccountMock.invocationsDone()
+}
+
+// MinimockSwitchAccountInspect logs each unmet expectation
+func (m *AuthMock) MinimockSwitchAccountInspect() {
+	for _, e := range m.SwitchAccountMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AuthMock.SwitchAccount at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSwitchAccountCounter := mm_atomic.LoadUint64(&m.afterSwitchAccountCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SwitchAccountMock.defaultExpectation != nil && afterSwitchAccountCounter < 1 {
+		if m.SwitchAccountMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AuthMock.SwitchAccount at\n%s", m.SwitchAccountMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AuthMock.SwitchAccount at\n%s with params: %#v", m.SwitchAccountMock.defaultExpectation.expectationOrigins.origin, *m.SwitchAccountMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSwitchAccount != nil && afterSwitchAccountCounter < 1 {
+		m.t.Errorf("Expected call to AuthMock.SwitchAccount at\n%s", m.funcSwitchAccountOrigin)
+	}
+
+	if !m.SwitchAccountMock.invocationsDone() && afterSwitchAccountCounter > 0 {
+		m.t.Errorf("Expected %d calls to AuthMock.SwitchAccount at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SwitchAccountMock.expectedInvocations), m.SwitchAccountMock.expectedInvocationsOrigin, afterSwitchAccountCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *AuthMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
@@ -2689,6 +3073,8 @@ func (m *AuthMock) MinimockFinish() {
 			m.MinimockLoginInspect()
 
 			m.MinimockParseHLSTokenInspect()
+
+			m.MinimockSwitchAccountInspect()
 		}
 	})
 }
@@ -2719,5 +3105,6 @@ func (m *AuthMock) minimockDone() bool {
 		m.MinimockHashPasswordDone() &&
 		m.MinimockIssueHLSTokenDone() &&
 		m.MinimockLoginDone() &&
-		m.MinimockParseHLSTokenDone()
+		m.MinimockParseHLSTokenDone() &&
+		m.MinimockSwitchAccountDone()
 }

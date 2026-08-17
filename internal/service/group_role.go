@@ -103,6 +103,22 @@ func (s *GroupRoleService) GetAll(
 	return roles, nil
 }
 
+// GetByAccountID выбирает все роли групп аккаунта без проверки прав — батч-выборка для
+// сборки профиля пользователя (§2.3 дизайна эпика Э2): роль в собственных группах видна
+// пользователю без права ManageGroups, требуемого GetAll.
+func (s *GroupRoleService) GetByAccountID(ctx context.Context, accountID uuid.UUID) ([]domain.GroupRole, error) {
+	roles, err := s.repo.SelectByAccount(ctx, accountID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return []domain.GroupRole{}, nil
+		}
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return roles, nil
+}
+
 func (s *GroupRoleService) Delete(
 	ctx context.Context,
 	initiatorID, accountID, roleID uuid.UUID,

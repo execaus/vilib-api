@@ -19,6 +19,11 @@ var (
 
 var (
 	ErrChangeAccountStatusForbidden = NewForbiddenError("insufficient rights to perform this action")
+	// ErrForbiddenUserDeactivated — деактивированная строка пользователя пытается получить
+	// собственный профиль или переключить организацию (HTTP 403 forbidden.user_deactivated,
+	// §2.3, §2.4 дизайна эпика Э2). В отличие от ErrUserDeactivated (409, конфликт состояния
+	// при повторной деактивации/входе) — это отказ в доступе к действию, а не конфликт.
+	ErrForbiddenUserDeactivated = NewForbiddenErrorCode("forbidden.user_deactivated", "user is deactivated")
 )
 
 var (

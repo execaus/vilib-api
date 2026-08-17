@@ -3,6 +3,7 @@ package service_test
 import (
 	"errors"
 	"testing"
+	"time"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
@@ -836,6 +837,22 @@ func TestService_Account_GetByUserEmail(t *testing.T) {
 			},
 			args:    args{email},
 			want:    []domain.Account{{ID: accountID, Email: email}},
+			wantErr: nil,
+		},
+		{
+			name: "deactivated row excluded, empty result without account lookups",
+			setupMocks: func(
+				user *service_mocks.UserMock, _ *service_mocks.AccountRoleMock, _ *repository_mocks.AccountMock,
+			) {
+				deactivatedAt := time.Now()
+				users := []domain.User{
+					{ID: userID, RoleID: roleID, DeactivatedAt: &deactivatedAt},
+				}
+				user.GetByEmailMock.Expect(minimock.AnyContext, email).
+					Return(users, nil)
+			},
+			args:    args{email},
+			want:    []domain.Account{},
 			wantErr: nil,
 		},
 	}
