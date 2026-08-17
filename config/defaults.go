@@ -16,6 +16,11 @@ const (
 	defaultServerMode = server.DevelopmentMode
 )
 
+// Дефолты авторизации.
+const (
+	defaultAuthPasswordResetTTL = time.Hour
+)
+
 // Дефолты подключения к базе данных.
 const (
 	defaultDatabaseSchema  = "app"
@@ -74,6 +79,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("database.sslmode", defaultDatabaseSSLMode)
 
 	v.SetDefault("auth.key", "")
+	v.SetDefault("auth.password_reset_ttl", defaultAuthPasswordResetTTL)
+
+	v.SetDefault("frontend.origin", "")
 
 	v.SetDefault("email.host", "")
 	v.SetDefault("email.port", "")

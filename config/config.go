@@ -25,6 +25,7 @@ type Config struct {
 	S3       S3Config       `mapstructure:"s3"`
 	Kafka    KafkaConfig    `mapstructure:"kafka"`
 	Video    VideoConfig    `mapstructure:"video"`
+	Frontend FrontendConfig `mapstructure:"frontend"`
 }
 
 // ServerConfig — параметры HTTP-сервера.
@@ -48,6 +49,15 @@ type DatabaseConfig struct {
 // AuthConfig — параметры выпуска и проверки токенов авторизации.
 type AuthConfig struct {
 	Key string `mapstructure:"key"`
+	// PasswordResetTTL — время жизни токена сброса пароля (§6 дизайна эпика Э2, поправка О-1).
+	PasswordResetTTL time.Duration `mapstructure:"password_reset_ttl"`
+}
+
+// FrontendConfig — параметры веб-интерфейса, нужные API для построения пользовательских ссылок
+// (например, ссылки сброса пароля, §6 дизайна эпика Э2).
+type FrontendConfig struct {
+	// Origin — базовый адрес веб-интерфейса (протокол, хост, порт — без завершающего слеша).
+	Origin string `mapstructure:"origin"`
 }
 
 // EmailConfig — параметры SMTP-сервера для отправки писем.
@@ -152,6 +162,7 @@ func (c Config) Validate() error {
 		"database.name":                 c.Database.Name,
 		"database.schema":               c.Database.Schema,
 		"auth.key":                      c.Auth.Key,
+		"frontend.origin":               c.Frontend.Origin,
 		"s3.endpoint":                   c.S3.Endpoint,
 		"s3.public_endpoint":            c.S3.PublicEndpoint,
 		"s3.access_key_id":              c.S3.AccessKeyID,
@@ -179,6 +190,7 @@ func (c Config) Validate() error {
 	}
 
 	positiveDurations := map[string]time.Duration{
+		"auth.password_reset_ttl":  c.Auth.PasswordResetTTL,
 		"video.upload_timeout":     c.Video.UploadTimeout,
 		"video.queued_timeout":     c.Video.QueuedTimeout,
 		"video.processing_timeout": c.Video.ProcessingTimeout,

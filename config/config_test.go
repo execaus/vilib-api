@@ -19,6 +19,7 @@ func TestLoadConfig_UsesDefaultsWhenFileIsAbsent(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, "8080", cfg.Server.Port)
+	require.Equal(t, time.Hour, cfg.Auth.PasswordResetTTL)
 	require.Equal(t, "app", cfg.Database.Schema)
 	require.Equal(t, "disable", cfg.Database.SSLMode)
 	require.Equal(t, "us-east-1", cfg.S3.Region)
@@ -49,6 +50,8 @@ func TestLoadConfig_EnvironmentOverridesDefaults(t *testing.T) {
 	t.Setenv("DATABASE_SCHEMA", "custom")
 	t.Setenv("DATABASE_SSLMODE", "require")
 	t.Setenv("AUTH_KEY", "secret")
+	t.Setenv("AUTH_PASSWORD_RESET_TTL", "2h")
+	t.Setenv("FRONTEND_ORIGIN", "http://localhost:5173")
 	t.Setenv("S3_ENDPOINT", "http://minio:9000")
 	t.Setenv("S3_PUBLIC_ENDPOINT", "http://localhost:9000")
 	t.Setenv("KAFKA_BROKERS", "broker1:9092,broker2:9092")
@@ -64,6 +67,8 @@ func TestLoadConfig_EnvironmentOverridesDefaults(t *testing.T) {
 	require.Equal(t, "custom", cfg.Database.Schema)
 	require.Equal(t, "require", cfg.Database.SSLMode)
 	require.Equal(t, "secret", cfg.Auth.Key)
+	require.Equal(t, 2*time.Hour, cfg.Auth.PasswordResetTTL)
+	require.Equal(t, "http://localhost:5173", cfg.Frontend.Origin)
 	require.Equal(t, "http://minio:9000", cfg.S3.Endpoint)
 	require.Equal(t, "http://localhost:9000", cfg.S3.PublicEndpoint)
 	require.Equal(t, []string{"broker1:9092", "broker2:9092"}, cfg.Kafka.Brokers)
@@ -115,7 +120,8 @@ func TestConfig_Validate(t *testing.T) {
 			Database: config.DatabaseConfig{
 				Host: "h", Port: "p", User: "u", Name: "n", Schema: "s",
 			},
-			Auth: config.AuthConfig{Key: "key"},
+			Auth:     config.AuthConfig{Key: "key", PasswordResetTTL: time.Hour},
+			Frontend: config.FrontendConfig{Origin: "http://localhost:5173"},
 			S3: config.S3Config{
 				Endpoint: "e", PublicEndpoint: "pe", AccessKeyID: "ak", SecretAccessKey: "sk", Bucket: "b",
 			},
@@ -157,6 +163,16 @@ func TestConfig_Validate(t *testing.T) {
 			name:    "missing auth key",
 			mutate:  func(cfg *config.Config) { cfg.Auth.Key = "" },
 			wantErr: "auth.key",
+		},
+		{
+			name:    "zero auth password reset ttl",
+			mutate:  func(cfg *config.Config) { cfg.Auth.PasswordResetTTL = 0 },
+			wantErr: "auth.password_reset_ttl",
+		},
+		{
+			name:    "missing frontend origin",
+			mutate:  func(cfg *config.Config) { cfg.Frontend.Origin = "" },
+			wantErr: "frontend.origin",
 		},
 		{
 			name:    "missing s3 endpoint",
