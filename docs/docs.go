@@ -1799,6 +1799,26 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/config": {
+            "get": {
+                "description": "Возвращает лимиты и параметры загрузки видео, время жизни ссылок и токенов,\nнабор профилей качества HLS — без авторизации, чтобы форма загрузки могла\nвалидировать файл до входа в систему не дублируя константы на фронте.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Публичный конфиг фронтенда",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ConfigResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/me": {
             "get": {
                 "security": [
@@ -1916,6 +1936,45 @@ const docTemplate = `{
             "properties": {
                 "video": {
                     "$ref": "#/definitions/dto.Video"
+                }
+            }
+        },
+        "dto.ConfigResponse": {
+            "type": "object",
+            "properties": {
+                "allowed_content_types": {
+                    "description": "AllowedContentTypes — допустимые MIME-типы загружаемого видео.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "hls_url_ttl_seconds": {
+                    "description": "HLSURLTTLSeconds — время жизни HLS-токена доступа к мастер-плейлисту, секунды.",
+                    "type": "integer"
+                },
+                "max_upload_size_bytes": {
+                    "description": "MaxUploadSizeBytes — максимальный размер файла видео для загрузки в байтах.",
+                    "type": "integer"
+                },
+                "password_min_length": {
+                    "description": "PasswordMinLength — минимальная длина пароля пользователя.",
+                    "type": "integer"
+                },
+                "profiles": {
+                    "description": "Profiles — имена профилей качества HLS, в которые обрабатывается видео.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "token_ttl_seconds": {
+                    "description": "TokenTTLSeconds — время жизни токена авторизации, секунды.",
+                    "type": "integer"
+                },
+                "upload_url_ttl_seconds": {
+                    "description": "UploadURLTTLSeconds — время жизни преподписанного URL на загрузку оригинала, секунды.",
+                    "type": "integer"
                 }
             }
         },
@@ -2398,7 +2457,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "author": {
-                    "type": "string"
+                    "$ref": "#/definitions/dto.VideoAuthor"
                 },
                 "created_at": {
                     "type": "string"
@@ -2448,6 +2507,20 @@ const docTemplate = `{
                 "width": {
                     "description": "Width — ширина кадра оригинала в пикселях, известна после успешной обработки.",
                     "type": "integer"
+                }
+            }
+        },
+        "dto.VideoAuthor": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "surname": {
+                    "type": "string"
                 }
             }
         },

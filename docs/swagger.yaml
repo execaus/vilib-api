@@ -51,6 +51,38 @@ definitions:
       video:
         $ref: '#/definitions/dto.Video'
     type: object
+  dto.ConfigResponse:
+    properties:
+      allowed_content_types:
+        description: AllowedContentTypes — допустимые MIME-типы загружаемого видео.
+        items:
+          type: string
+        type: array
+      hls_url_ttl_seconds:
+        description: HLSURLTTLSeconds — время жизни HLS-токена доступа к мастер-плейлисту,
+          секунды.
+        type: integer
+      max_upload_size_bytes:
+        description: MaxUploadSizeBytes — максимальный размер файла видео для загрузки
+          в байтах.
+        type: integer
+      password_min_length:
+        description: PasswordMinLength — минимальная длина пароля пользователя.
+        type: integer
+      profiles:
+        description: Profiles — имена профилей качества HLS, в которые обрабатывается
+          видео.
+        items:
+          type: string
+        type: array
+      token_ttl_seconds:
+        description: TokenTTLSeconds — время жизни токена авторизации, секунды.
+        type: integer
+      upload_url_ttl_seconds:
+        description: UploadURLTTLSeconds — время жизни преподписанного URL на загрузку
+          оригинала, секунды.
+        type: integer
+    type: object
   dto.CreateAccountRoleRequest:
     properties:
       is_default:
@@ -368,7 +400,7 @@ definitions:
   dto.Video:
     properties:
       author:
-        type: string
+        $ref: '#/definitions/dto.VideoAuthor'
       created_at:
         type: string
       duration_ms:
@@ -410,6 +442,15 @@ definitions:
         description: Width — ширина кадра оригинала в пикселях, известна после успешной
           обработки.
         type: integer
+    type: object
+  dto.VideoAuthor:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      surname:
+        type: string
     type: object
   dto.VideoFailure:
     properties:
@@ -1612,6 +1653,22 @@ paths:
       summary: Переключение организации
       tags:
       - auth
+  /api/v1/config:
+    get:
+      description: |-
+        Возвращает лимиты и параметры загрузки видео, время жизни ссылок и токенов,
+        набор профилей качества HLS — без авторизации, чтобы форма загрузки могла
+        валидировать файл до входа в систему не дублируя константы на фронте.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ConfigResponse'
+      summary: Публичный конфиг фронтенда
+      tags:
+      - config
   /api/v1/me:
     get:
       description: |-
