@@ -1272,6 +1272,87 @@ const docTemplate = `{
             }
         },
         "/api/v1/accounts/{accountId}/user-groups/{userGroupId}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Переименовывает группу пользователей аккаунта. Право — ManageGroups.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "user_groups"
+                ],
+                "summary": "Переименование группы пользователей",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Тело запроса для переименования группы",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateUserGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateUserGroupResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            },
             "delete": {
                 "security": [
                     {
@@ -1815,7 +1896,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Обновляет данные пользователя (например, роль)",
+                "description": "Частично обновляет ФИО и/или роль пользователя. Смена роли и правка чужого\nпрофиля требуют права ManageUsers; правка своего ФИО без смены роли разрешена\nбез прав. Все поля пустые — 200 без изменений.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1864,6 +1945,9 @@ const docTemplate = `{
                             "$ref": "#/definitions/dto.ErrorMessage"
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
@@ -1877,10 +1961,7 @@ const docTemplate = `{
                         }
                     },
                     "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ErrorMessage"
-                        }
+                        "description": "Internal Server Error"
                     }
                 }
             },
@@ -2859,11 +2940,41 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.UpdateUserGroupRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 64
+                }
+            }
+        },
+        "dto.UpdateUserGroupResponse": {
+            "type": "object",
+            "properties": {
+                "group": {
+                    "$ref": "#/definitions/dto.UserGroup"
+                }
+            }
+        },
         "dto.UpdateUserRequest": {
             "type": "object",
             "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 2
+                },
                 "role_id": {
                     "type": "string"
+                },
+                "surname": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 2
                 }
             }
         },

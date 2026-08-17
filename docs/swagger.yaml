@@ -418,9 +418,30 @@ definitions:
       role:
         $ref: '#/definitions/dto.GroupRole'
     type: object
+  dto.UpdateUserGroupRequest:
+    properties:
+      name:
+        maxLength: 64
+        type: string
+    required:
+    - name
+    type: object
+  dto.UpdateUserGroupResponse:
+    properties:
+      group:
+        $ref: '#/definitions/dto.UserGroup'
+    type: object
   dto.UpdateUserRequest:
     properties:
+      name:
+        maxLength: 64
+        minLength: 2
+        type: string
       role_id:
+        type: string
+      surname:
+        maxLength: 64
+        minLength: 2
         type: string
     type: object
   dto.UpdateUserResponse:
@@ -1265,6 +1286,59 @@ paths:
       summary: Удаление группы пользователей
       tags:
       - user_groups
+    put:
+      consumes:
+      - application/json
+      description: Переименовывает группу пользователей аккаунта. Право — ManageGroups.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      - description: Тело запроса для переименования группы
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateUserGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UpdateUserGroupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Переименование группы пользователей
+      tags:
+      - user_groups
   /api/v1/accounts/{accountId}/user-groups/{userGroupId}/members/{memberId}:
     delete:
       description: Удаляет пользователя из группы
@@ -1790,7 +1864,10 @@ paths:
     put:
       consumes:
       - application/json
-      description: Обновляет данные пользователя (например, роль)
+      description: |-
+        Частично обновляет ФИО и/или роль пользователя. Смена роли и правка чужого
+        профиля требуют права ManageUsers; правка своего ФИО без смены роли разрешена
+        без прав. Все поля пустые — 200 без изменений.
       parameters:
       - description: ID аккаунта
         in: path
@@ -1819,6 +1896,8 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
         "403":
           description: Forbidden
           schema:
@@ -1829,8 +1908,6 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
         "500":
           description: Internal Server Error
-          schema:
-            $ref: '#/definitions/dto.ErrorMessage'
       security:
       - BearerAuth: []
       summary: Обновление пользователя
