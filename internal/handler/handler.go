@@ -33,6 +33,9 @@ var (
 	RegisterURL            = "auth/register"
 	LoginURL               = "auth/login"
 	SwitchAccountURL       = "auth/switch-account"
+	ChangePasswordURL      = "auth/password/change"
+	ForgotPasswordURL      = "auth/password/forgot"
+	ResetPasswordURL       = "auth/password/reset"
 	MeURL                  = "me"
 	ConfigURL              = "config"
 	CreateUserURL          = NewURLSupplier("accounts/%s/users")
@@ -106,6 +109,10 @@ func (h *Handler) GetRouter() *gin.Engine {
 	v1.POST(RegisterURL, h.Register)
 	v1.POST(LoginURL, h.Login)
 	v1.POST(SwitchAccountURL, h.RequireAuthMiddleware, h.SwitchAccount)
+	v1.POST(ChangePasswordURL, h.RequireAuthMiddleware, h.ChangePassword)
+	// Сброс пароля — публичные ручки, пользователь ещё не аутентифицирован (§6 дизайна эпика Э2).
+	v1.POST(ForgotPasswordURL, h.ForgotPassword)
+	v1.POST(ResetPasswordURL, h.ResetPassword)
 	v1.GET(MeURL, h.RequireAuthMiddleware, h.GetMe)
 	// Публичный конфиг фронтенда — без авторизации (§5.2 контракта Э2, П-8).
 	v1.GET(ConfigURL, h.GetConfig)

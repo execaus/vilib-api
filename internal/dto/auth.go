@@ -30,3 +30,34 @@ type SwitchAccountRequest struct {
 type SwitchAccountResponse struct {
 	Token string `json:"token"`
 }
+
+// ChangePasswordRequest — тело POST auth/password/change (§6 дизайна эпика Э2, поправка О-1):
+// меняет пароль только текущей строки пользователя (аккаунт из JWT).
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=8,max=72"`
+}
+
+// ChangePasswordResponse — тело ответа 204, пустое (совпадает с телом ручки в спецификации).
+type ChangePasswordResponse struct{}
+
+// ForgotPasswordRequest — тело POST auth/password/forgot (§6 дизайна эпика Э2, поправка О-1).
+// AccountID необязателен: не задан и активная организация одна — используется она, несколько —
+// письмо со списком организаций и отдельной ссылкой на каждую.
+type ForgotPasswordRequest struct {
+	Email     string     `json:"email"      binding:"required,email,max=64"`
+	AccountID *uuid.UUID `json:"account_id"`
+}
+
+// ForgotPasswordResponse — тело ответа 200, всегда пустое независимо от существования email
+// (§6 дизайна эпика Э2).
+type ForgotPasswordResponse struct{}
+
+// ResetPasswordRequest — тело POST auth/password/reset (§6 дизайна эпика Э2, поправка О-1).
+type ResetPasswordRequest struct {
+	Token       string `json:"token"        binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=8,max=72"`
+}
+
+// ResetPasswordResponse — тело ответа 200, пустое.
+type ResetPasswordResponse struct{}
