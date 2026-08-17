@@ -84,7 +84,13 @@ type AccountRole interface {
 type User interface {
 	Create(ctx context.Context, name, surname, email, password string, roleID uuid.UUID) (domain.User, error)
 	GetByEmail(ctx context.Context, email string) ([]domain.User, error)
-	Update(ctx context.Context, initiatorID, accountID, targetID uuid.UUID, roleID *uuid.UUID) (domain.User, error)
+	// Update частично обновляет пользователя accountID/targetID (§4 дизайна эпика Э2, «Блок
+	// C»): смена роли (patch.RoleID != nil) или правка чужого профиля требуют ManageUsers;
+	// инициатор, правящий собственное ФИО без смены роли (initiatorID == targetID &&
+	// patch.RoleID == nil), — исключение без проверки прав. targetID должен состоять в
+	// accountID (роль пользователя принадлежит accountID), иначе ErrNotFound. Все поля
+	// patch nil — 200 без изменений.
+	Update(ctx context.Context, initiatorID, accountID, targetID uuid.UUID, patch domain.UserPatch) (domain.User, error)
 	GetByID(ctx context.Context, userID ...uuid.UUID) ([]domain.User, error)
 	// GetByIDs батчем выбирает пользователей по списку идентификаторов (П-6 контракта Э2:
 	// резолв авторов видео в списке видео). Отсутствие строки для части id — не ошибка.
@@ -121,6 +127,10 @@ type UserGroup interface {
 	// Get возвращает карточку одной группы (§3.2 дизайна эпика Э2, П-3): право — любой
 	// участник аккаунта (IsHasUser, как список групп); группа не в аккаунте — ErrNotFound.
 	Get(ctx context.Context, initiatorID, accountID, groupID uuid.UUID) (domain.UserGroup, error)
+	// Rename переименовывает группу (§4 дизайна эпика Э2, «Блок C»). Право — ManageGroups;
+	// группа не в accountID — ErrNotFound; дубль имени в пределах аккаунта —
+	// ErrGroupNameExists (409 conflict.group_name).
+	Rename(ctx context.Context, initiatorID, accountID, groupID uuid.UUID, name string) (domain.UserGroup, error)
 }
 
 type GroupMember interface {

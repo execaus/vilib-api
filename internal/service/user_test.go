@@ -78,7 +78,14 @@ func TestService_User_Create(t *testing.T) {
 				func(s *service.Service, r *repository.Repository) {
 					srv := service.NewUserService(r.User, s)
 
-					got, err := srv.Create(t.Context(), tt.args.name, tt.args.surname, tt.args.email, tt.args.password, tt.args.roleID)
+					got, err := srv.Create(
+						t.Context(),
+						tt.args.name,
+						tt.args.surname,
+						tt.args.email,
+						tt.args.password,
+						tt.args.roleID,
+					)
 
 					require.Equal(t, tt.want.Email, got.Email)
 					require.Equal(t, tt.wantErr, err)
@@ -277,39 +284,144 @@ func TestService_User_GetByIDs(t *testing.T) {
 	}
 }
 
+// TestService_User_Update проверяет матрицу правил редактирования пользователя (§4 дизайна
+// эпика Э2, «Блок C»): само-правка ФИО без прав, чужая правка и смена роли требуют
+// ManageUsers, целевой пользователь должен состоять в accountID, пустой patch не меняет
+// ничего.
 func TestService_User_Update(t *testing.T) {
 	t.Parallel()
 
-	testInitiatorID := uuid.New()
-	testAccountID := uuid.New()
-	testTargetUserID := uuid.New()
-	testRoleID := uuid.New()
+	var (
+		testInitiatorID   = uuid.New()
+		testAccountID     = uuid.New()
+		testTargetUserID  = uuid.New()
+		testTargetRoleID  = uuid.New()
+		testNewRoleID     = uuid.New()
+		testOtherAccount  = uuid.New()
+		testName          = testutil.Faker.Person().FirstName()
+		testSurname       = testutil.Faker.Person().LastName()
+		targetUser        = domain.User{ID: testTargetUserID, RoleID: testTargetRoleID}
+		targetAccountRole = domain.AccountRole{ID: testTargetRoleID, AccountID: testAccountID}
+	)
+
+	type args struct {
+		initiatorID  uuid.UUID
+		targetUserID uuid.UUID
+		patch        domain.UserPatch
+	}
 
 	tests := []struct {
 		name       string
 		setupMocks func(*service_mocks.AccessMock, *repository_mocks.UserMock, *service_mocks.AccountRoleMock)
-		args       struct {
-			initiatorID  uuid.UUID
-			accountID    uuid.UUID
-			targetUserID uuid.UUID
-			roleID       *uuid.UUID
-		}
-		want    domain.User
-		wantErr error
+		args       args
+		want       domain.User
+		wantErr    error
 	}{
 		{
-			name: "forbidden - no access",
-			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
-				access.IsCheckAccountActionMock.Return(service.ErrForbidden)
+			name: "self edit name without rights - success",
+			setupMocks: func(_ *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetUserID).Return([]domain.User{targetUser}, nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testTargetRoleID).
+					Return([]domain.AccountRole{targetAccountRole}, nil)
+				repo.UpdateProfileMock.Expect(minimock.AnyContext, testTargetUserID, &testName, nil).
+					Return(domain.User{ID: testTargetUserID, Name: testName}, nil)
 			},
-			args: struct {
-				initiatorID  uuid.UUID
-				accountID    uuid.UUID
-				targetUserID uuid.UUID
-				roleID       *uuid.UUID
-			}{testInitiatorID, testAccountID, testTargetUserID, &testRoleID},
-			want:    domain.User{},
+			args: args{testTargetUserID, testTargetUserID, domain.UserPatch{Name: &testName}},
+			want: domain.User{ID: testTargetUserID, Name: testName},
+		},
+		{
+			name: "self edit role requires rights - forbidden",
+			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testTargetUserID, domain.AccountPermissionManageUsers).
+					Return(service.ErrForbidden)
+			},
+			args:    args{testTargetUserID, testTargetUserID, domain.UserPatch{RoleID: &testNewRoleID}},
 			wantErr: service.ErrForbidden,
+		},
+		{
+			name: "other user edit without rights - forbidden",
+			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageUsers).
+					Return(service.ErrForbidden)
+			},
+			args:    args{testInitiatorID, testTargetUserID, domain.UserPatch{Name: &testName}},
+			wantErr: service.ErrForbidden,
+		},
+		{
+			name: "target not member of account - not found",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetUserID).Return([]domain.User{targetUser}, nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testTargetRoleID).
+					Return([]domain.AccountRole{{ID: testTargetRoleID, AccountID: testOtherAccount}}, nil)
+			},
+			args:    args{testInitiatorID, testTargetUserID, domain.UserPatch{Name: &testName}},
+			wantErr: service.ErrNotFound,
+		},
+		{
+			name: "all fields nil - no changes",
+			setupMocks: func(_ *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetUserID).Return([]domain.User{targetUser}, nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testTargetRoleID).
+					Return([]domain.AccountRole{targetAccountRole}, nil)
+			},
+			args: args{testTargetUserID, testTargetUserID, domain.UserPatch{}},
+			want: targetUser,
+		},
+		{
+			name: "role change by manager - success",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetUserID).Return([]domain.User{targetUser}, nil)
+				ar.GetByIDMock.When(minimock.AnyContext, testTargetRoleID).
+					Then([]domain.AccountRole{targetAccountRole}, nil)
+				ar.GetByIDMock.When(minimock.AnyContext, testNewRoleID).
+					Then([]domain.AccountRole{{ID: testNewRoleID, AccountID: testAccountID}}, nil)
+				repo.UpdateRoleMock.Expect(minimock.AnyContext, testTargetUserID, testNewRoleID).
+					Return(domain.User{ID: testTargetUserID, RoleID: testNewRoleID}, nil)
+			},
+			args: args{testInitiatorID, testTargetUserID, domain.UserPatch{RoleID: &testNewRoleID}},
+			want: domain.User{ID: testTargetUserID, RoleID: testNewRoleID},
+		},
+		{
+			name: "new role belongs to another account - forbidden",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetUserID).Return([]domain.User{targetUser}, nil)
+				ar.GetByIDMock.When(minimock.AnyContext, testTargetRoleID).
+					Then([]domain.AccountRole{targetAccountRole}, nil)
+				ar.GetByIDMock.When(minimock.AnyContext, testNewRoleID).
+					Then([]domain.AccountRole{{ID: testNewRoleID, AccountID: testOtherAccount}}, nil)
+			},
+			args:    args{testInitiatorID, testTargetUserID, domain.UserPatch{RoleID: &testNewRoleID}},
+			wantErr: service.ErrForbidden,
+		},
+		{
+			name: "new role not found",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetUserID).Return([]domain.User{targetUser}, nil)
+				ar.GetByIDMock.When(minimock.AnyContext, testTargetRoleID).
+					Then([]domain.AccountRole{targetAccountRole}, nil)
+				ar.GetByIDMock.When(minimock.AnyContext, testNewRoleID).Then(nil, nil)
+			},
+			args:    args{testInitiatorID, testTargetUserID, domain.UserPatch{RoleID: &testNewRoleID}},
+			wantErr: service.ErrNotFound,
+		},
+		{
+			name: "name and surname update - success",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.Return(nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetUserID).Return([]domain.User{targetUser}, nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testTargetRoleID).
+					Return([]domain.AccountRole{targetAccountRole}, nil)
+				repo.UpdateProfileMock.Expect(minimock.AnyContext, testTargetUserID, &testName, &testSurname).
+					Return(domain.User{ID: testTargetUserID, Name: testName, Surname: testSurname}, nil)
+			},
+			args: args{testInitiatorID, testTargetUserID, domain.UserPatch{Name: &testName, Surname: &testSurname}},
+			want: domain.User{ID: testTargetUserID, Name: testName, Surname: testSurname},
 		},
 	}
 
@@ -325,7 +437,13 @@ func TestService_User_Update(t *testing.T) {
 				func(s *service.Service, r *repository.Repository) {
 					srv := service.NewUserService(r.User, s)
 
-					got, err := srv.Update(t.Context(), tt.args.initiatorID, tt.args.accountID, tt.args.targetUserID, tt.args.roleID)
+					got, err := srv.Update(
+						t.Context(),
+						tt.args.initiatorID,
+						testAccountID,
+						tt.args.targetUserID,
+						tt.args.patch,
+					)
 
 					require.Equal(t, tt.want, got)
 					require.Equal(t, tt.wantErr, err)
@@ -357,7 +475,8 @@ func TestService_User_Deactivate(t *testing.T) {
 			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
 				access.IsCheckAccountActionMock.Return(nil)
 				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{activeUser}, nil)
-				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).Return([]domain.AccountRole{{ID: testRoleID, IsSystem: false}}, nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{ID: testRoleID, IsSystem: false}}, nil)
 				repo.DeactivateMock.Expect(minimock.AnyContext, testTargetID).Return(nil)
 			},
 			wantErr: nil,
@@ -373,7 +492,8 @@ func TestService_User_Deactivate(t *testing.T) {
 			name: "conflict - already deactivated",
 			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
 				access.IsCheckAccountActionMock.Return(nil)
-				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{deactivatedUser}, nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).
+					Return([]domain.User{deactivatedUser}, nil)
 			},
 			wantErr: service.ErrUserDeactivated,
 		},
@@ -382,7 +502,8 @@ func TestService_User_Deactivate(t *testing.T) {
 			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
 				access.IsCheckAccountActionMock.Return(nil)
 				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{activeUser}, nil)
-				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).Return([]domain.AccountRole{{ID: testRoleID, IsSystem: true}}, nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{ID: testRoleID, IsSystem: true}}, nil)
 			},
 			wantErr: service.ErrIsOwner,
 		},
@@ -431,9 +552,11 @@ func TestService_User_Reactivate(t *testing.T) {
 			name: "success",
 			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
 				access.IsCheckAccountActionMock.Return(nil)
-				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{deactivatedUser}, nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).
+					Return([]domain.User{deactivatedUser}, nil)
 				repo.ReactivateMock.Expect(minimock.AnyContext, testTargetID).Return(nil)
-				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).Return([]domain.AccountRole{{ID: testRoleID}}, nil)
+				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{ID: testRoleID}}, nil)
 			},
 			wantErr: nil,
 		},
@@ -441,11 +564,14 @@ func TestService_User_Reactivate(t *testing.T) {
 			name: "success - role not found, assigns default",
 			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserMock, ar *service_mocks.AccountRoleMock) {
 				access.IsCheckAccountActionMock.Return(nil)
-				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).Return([]domain.User{deactivatedUser}, nil)
+				repo.SelectByIDMock.Expect(minimock.AnyContext, testTargetID).
+					Return([]domain.User{deactivatedUser}, nil)
 				repo.ReactivateMock.Expect(minimock.AnyContext, testTargetID).Return(nil)
 				ar.GetByIDMock.Expect(minimock.AnyContext, testRoleID).Return(nil, errors.New("not found"))
-				ar.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).Return(domain.AccountRole{ID: testDefaultRoleID}, nil)
-				repo.UpdateRoleMock.Expect(minimock.AnyContext, testTargetID, testDefaultRoleID).Return(domain.User{}, nil)
+				ar.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).
+					Return(domain.AccountRole{ID: testDefaultRoleID}, nil)
+				repo.UpdateRoleMock.Expect(minimock.AnyContext, testTargetID, testDefaultRoleID).
+					Return(domain.User{}, nil)
 			},
 			wantErr: nil,
 		},

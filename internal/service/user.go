@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
 
@@ -44,51 +45,83 @@ func (s *UserService) GetByEmail(ctx context.Context, email string) ([]domain.Us
 	return users, nil
 }
 
+// Update частично обновляет пользователя targetUserID в аккаунте accountID (§4 дизайна эпика
+// Э2, «Блок C — редактирование»): смена роли или правка чужого профиля требуют ManageUsers;
+// инициатор, правящий собственное ФИО без смены роли, — исключение без проверки прав (правка
+// своего профиля). targetUserID должен состоять в accountID (роль пользователя принадлежит
+// accountID), иначе — ErrNotFound. Пустой patch не меняет ничего и возвращает текущего
+// пользователя.
 func (s *UserService) Update(
 	ctx context.Context,
 	initiatorID, accountID, targetUserID uuid.UUID,
-	roleID *uuid.UUID,
+	patch domain.UserPatch,
 ) (domain.User, error) {
-	// Проверка прав на управление пользователями
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageUsers); err != nil {
+	// Само-правка ФИО без смены роли разрешена без прав; во всех остальных случаях требуется
+	// ManageUsers.
+	if patch.RoleID != nil || initiatorID != targetUserID {
+		if err := s.srv.Access.IsCheckAccountAction(
+			ctx,
+			accountID,
+			initiatorID,
+			domain.AccountPermissionManageUsers,
+		); err != nil {
+			zap.L().Error(err.Error())
+			return domain.User{}, err
+		}
+	}
+
+	// Целевой пользователь должен состоять в accountID (роль пользователя принадлежит
+	// accountID) — иначе не раскрываем чужих пользователей (ErrNotFound).
+	users, err := s.repo.SelectByID(ctx, targetUserID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return domain.User{}, ErrNotFound
+		}
 		zap.L().Error(err.Error())
 		return domain.User{}, err
 	}
+	target := users[0]
 
-	if roleID != nil {
-		// Проверить, что роль принадлежит аккаунту
-		roles, err := s.srv.AccountRole.GetByID(ctx, *roleID)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return domain.User{}, err
-		}
-		if len(roles) == 0 {
-			return domain.User{}, ErrNotFound
-		}
-		if roles[0].AccountID != accountID {
-			return domain.User{}, ErrForbidden
-		}
-
-		// Обновить роль пользователя
-		user, err := s.repo.UpdateRole(ctx, targetUserID, *roleID)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return domain.User{}, err
-		}
-		return user, nil
-	}
-
-	// Если roleID == nil — просто получить текущего пользователя
-	users, err := s.repo.SelectByID(ctx, targetUserID)
+	targetRoles, err := s.srv.AccountRole.GetByID(ctx, target.RoleID)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.User{}, err
 	}
-	if len(users) == 0 {
+	if len(targetRoles) == 0 || targetRoles[0].AccountID != accountID {
 		return domain.User{}, ErrNotFound
 	}
 
-	return users[0], nil
+	if patch.RoleID != nil {
+		// Проверить, что новая роль принадлежит аккаунту
+		var newRoles []domain.AccountRole
+		newRoles, err = s.srv.AccountRole.GetByID(ctx, *patch.RoleID)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return domain.User{}, err
+		}
+		if len(newRoles) == 0 {
+			return domain.User{}, ErrNotFound
+		}
+		if newRoles[0].AccountID != accountID {
+			return domain.User{}, ErrForbidden
+		}
+
+		target, err = s.repo.UpdateRole(ctx, targetUserID, *patch.RoleID)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return domain.User{}, err
+		}
+	}
+
+	if patch.Name != nil || patch.Surname != nil {
+		target, err = s.repo.UpdateProfile(ctx, targetUserID, patch.Name, patch.Surname)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return domain.User{}, err
+		}
+	}
+
+	return target, nil
 }
 
 // GetByEmailAndAccountID возвращает строку пользователя с указанным email в указанной

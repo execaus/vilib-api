@@ -77,9 +77,9 @@ type UserMock struct {
 	beforeReactivateCounter uint64
 	ReactivateMock          mUserMockReactivate
 
-	funcUpdate          func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, roleID *uuid.UUID) (u1 domain.User, err error)
+	funcUpdate          func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, patch domain.UserPatch) (u1 domain.User, err error)
 	funcUpdateOrigin    string
-	inspectFuncUpdate   func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, roleID *uuid.UUID)
+	inspectFuncUpdate   func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, patch domain.UserPatch)
 	afterUpdateCounter  uint64
 	beforeUpdateCounter uint64
 	UpdateMock          mUserMockUpdate
@@ -3238,7 +3238,7 @@ type UserMockUpdateParams struct {
 	initiatorID uuid.UUID
 	accountID   uuid.UUID
 	targetID    uuid.UUID
-	roleID      *uuid.UUID
+	patch       domain.UserPatch
 }
 
 // UserMockUpdateParamPtrs contains pointers to parameters of the User.Update
@@ -3247,7 +3247,7 @@ type UserMockUpdateParamPtrs struct {
 	initiatorID *uuid.UUID
 	accountID   *uuid.UUID
 	targetID    *uuid.UUID
-	roleID      **uuid.UUID
+	patch       *domain.UserPatch
 }
 
 // UserMockUpdateResults contains results of the User.Update
@@ -3263,7 +3263,7 @@ type UserMockUpdateExpectationOrigins struct {
 	originInitiatorID string
 	originAccountID   string
 	originTargetID    string
-	originRoleID      string
+	originPatch       string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -3277,7 +3277,7 @@ func (mmUpdate *mUserMockUpdate) Optional() *mUserMockUpdate {
 }
 
 // Expect sets up expected params for User.Update
-func (mmUpdate *mUserMockUpdate) Expect(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, roleID *uuid.UUID) *mUserMockUpdate {
+func (mmUpdate *mUserMockUpdate) Expect(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, patch domain.UserPatch) *mUserMockUpdate {
 	if mmUpdate.mock.funcUpdate != nil {
 		mmUpdate.mock.t.Fatalf("UserMock.Update mock is already set by Set")
 	}
@@ -3290,7 +3290,7 @@ func (mmUpdate *mUserMockUpdate) Expect(ctx context.Context, initiatorID uuid.UU
 		mmUpdate.mock.t.Fatalf("UserMock.Update mock is already set by ExpectParams functions")
 	}
 
-	mmUpdate.defaultExpectation.params = &UserMockUpdateParams{ctx, initiatorID, accountID, targetID, roleID}
+	mmUpdate.defaultExpectation.params = &UserMockUpdateParams{ctx, initiatorID, accountID, targetID, patch}
 	mmUpdate.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmUpdate.expectations {
 		if minimock.Equal(e.params, mmUpdate.defaultExpectation.params) {
@@ -3393,8 +3393,8 @@ func (mmUpdate *mUserMockUpdate) ExpectTargetIDParam4(targetID uuid.UUID) *mUser
 	return mmUpdate
 }
 
-// ExpectRoleIDParam5 sets up expected param roleID for User.Update
-func (mmUpdate *mUserMockUpdate) ExpectRoleIDParam5(roleID *uuid.UUID) *mUserMockUpdate {
+// ExpectPatchParam5 sets up expected param patch for User.Update
+func (mmUpdate *mUserMockUpdate) ExpectPatchParam5(patch domain.UserPatch) *mUserMockUpdate {
 	if mmUpdate.mock.funcUpdate != nil {
 		mmUpdate.mock.t.Fatalf("UserMock.Update mock is already set by Set")
 	}
@@ -3410,14 +3410,14 @@ func (mmUpdate *mUserMockUpdate) ExpectRoleIDParam5(roleID *uuid.UUID) *mUserMoc
 	if mmUpdate.defaultExpectation.paramPtrs == nil {
 		mmUpdate.defaultExpectation.paramPtrs = &UserMockUpdateParamPtrs{}
 	}
-	mmUpdate.defaultExpectation.paramPtrs.roleID = &roleID
-	mmUpdate.defaultExpectation.expectationOrigins.originRoleID = minimock.CallerInfo(1)
+	mmUpdate.defaultExpectation.paramPtrs.patch = &patch
+	mmUpdate.defaultExpectation.expectationOrigins.originPatch = minimock.CallerInfo(1)
 
 	return mmUpdate
 }
 
 // Inspect accepts an inspector function that has same arguments as the User.Update
-func (mmUpdate *mUserMockUpdate) Inspect(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, roleID *uuid.UUID)) *mUserMockUpdate {
+func (mmUpdate *mUserMockUpdate) Inspect(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, patch domain.UserPatch)) *mUserMockUpdate {
 	if mmUpdate.mock.inspectFuncUpdate != nil {
 		mmUpdate.mock.t.Fatalf("Inspect function is already set for UserMock.Update")
 	}
@@ -3442,7 +3442,7 @@ func (mmUpdate *mUserMockUpdate) Return(u1 domain.User, err error) *UserMock {
 }
 
 // Set uses given function f to mock the User.Update method
-func (mmUpdate *mUserMockUpdate) Set(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, roleID *uuid.UUID) (u1 domain.User, err error)) *UserMock {
+func (mmUpdate *mUserMockUpdate) Set(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, patch domain.UserPatch) (u1 domain.User, err error)) *UserMock {
 	if mmUpdate.defaultExpectation != nil {
 		mmUpdate.mock.t.Fatalf("Default expectation is already set for the User.Update method")
 	}
@@ -3458,14 +3458,14 @@ func (mmUpdate *mUserMockUpdate) Set(f func(ctx context.Context, initiatorID uui
 
 // When sets expectation for the User.Update which will trigger the result defined by the following
 // Then helper
-func (mmUpdate *mUserMockUpdate) When(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, roleID *uuid.UUID) *UserMockUpdateExpectation {
+func (mmUpdate *mUserMockUpdate) When(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, patch domain.UserPatch) *UserMockUpdateExpectation {
 	if mmUpdate.mock.funcUpdate != nil {
 		mmUpdate.mock.t.Fatalf("UserMock.Update mock is already set by Set")
 	}
 
 	expectation := &UserMockUpdateExpectation{
 		mock:               mmUpdate.mock,
-		params:             &UserMockUpdateParams{ctx, initiatorID, accountID, targetID, roleID},
+		params:             &UserMockUpdateParams{ctx, initiatorID, accountID, targetID, patch},
 		expectationOrigins: UserMockUpdateExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmUpdate.expectations = append(mmUpdate.expectations, expectation)
@@ -3500,17 +3500,17 @@ func (mmUpdate *mUserMockUpdate) invocationsDone() bool {
 }
 
 // Update implements mm_service.User
-func (mmUpdate *UserMock) Update(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, roleID *uuid.UUID) (u1 domain.User, err error) {
+func (mmUpdate *UserMock) Update(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, targetID uuid.UUID, patch domain.UserPatch) (u1 domain.User, err error) {
 	mm_atomic.AddUint64(&mmUpdate.beforeUpdateCounter, 1)
 	defer mm_atomic.AddUint64(&mmUpdate.afterUpdateCounter, 1)
 
 	mmUpdate.t.Helper()
 
 	if mmUpdate.inspectFuncUpdate != nil {
-		mmUpdate.inspectFuncUpdate(ctx, initiatorID, accountID, targetID, roleID)
+		mmUpdate.inspectFuncUpdate(ctx, initiatorID, accountID, targetID, patch)
 	}
 
-	mm_params := UserMockUpdateParams{ctx, initiatorID, accountID, targetID, roleID}
+	mm_params := UserMockUpdateParams{ctx, initiatorID, accountID, targetID, patch}
 
 	// Record call args
 	mmUpdate.UpdateMock.mutex.Lock()
@@ -3529,7 +3529,7 @@ func (mmUpdate *UserMock) Update(ctx context.Context, initiatorID uuid.UUID, acc
 		mm_want := mmUpdate.UpdateMock.defaultExpectation.params
 		mm_want_ptrs := mmUpdate.UpdateMock.defaultExpectation.paramPtrs
 
-		mm_got := UserMockUpdateParams{ctx, initiatorID, accountID, targetID, roleID}
+		mm_got := UserMockUpdateParams{ctx, initiatorID, accountID, targetID, patch}
 
 		if mm_want_ptrs != nil {
 
@@ -3553,9 +3553,9 @@ func (mmUpdate *UserMock) Update(ctx context.Context, initiatorID uuid.UUID, acc
 					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originTargetID, *mm_want_ptrs.targetID, mm_got.targetID, minimock.Diff(*mm_want_ptrs.targetID, mm_got.targetID))
 			}
 
-			if mm_want_ptrs.roleID != nil && !minimock.Equal(*mm_want_ptrs.roleID, mm_got.roleID) {
-				mmUpdate.t.Errorf("UserMock.Update got unexpected parameter roleID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
-					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originRoleID, *mm_want_ptrs.roleID, mm_got.roleID, minimock.Diff(*mm_want_ptrs.roleID, mm_got.roleID))
+			if mm_want_ptrs.patch != nil && !minimock.Equal(*mm_want_ptrs.patch, mm_got.patch) {
+				mmUpdate.t.Errorf("UserMock.Update got unexpected parameter patch, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originPatch, *mm_want_ptrs.patch, mm_got.patch, minimock.Diff(*mm_want_ptrs.patch, mm_got.patch))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -3570,9 +3570,9 @@ func (mmUpdate *UserMock) Update(ctx context.Context, initiatorID uuid.UUID, acc
 		return (*mm_results).u1, (*mm_results).err
 	}
 	if mmUpdate.funcUpdate != nil {
-		return mmUpdate.funcUpdate(ctx, initiatorID, accountID, targetID, roleID)
+		return mmUpdate.funcUpdate(ctx, initiatorID, accountID, targetID, patch)
 	}
-	mmUpdate.t.Fatalf("Unexpected call to UserMock.Update. %v %v %v %v %v", ctx, initiatorID, accountID, targetID, roleID)
+	mmUpdate.t.Fatalf("Unexpected call to UserMock.Update. %v %v %v %v %v", ctx, initiatorID, accountID, targetID, patch)
 	return
 }
 

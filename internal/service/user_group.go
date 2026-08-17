@@ -42,7 +42,50 @@ func (s *UserGroupService) Create(
 	if err != nil {
 		if errors.Is(dberrors.UserGroupErrors.ErrUniqueUserGroupsNameAccountIdKey, err) {
 			zap.L().Warn(err.Error())
-			return domain.UserGroup{}, NewConflictErrorCode("conflict.group_name", "group name already exists")
+			return domain.UserGroup{}, ErrGroupNameExists
+		}
+		zap.L().Error(err.Error())
+		return domain.UserGroup{}, err
+	}
+
+	return group, nil
+}
+
+// Rename переименовывает группу (§4 дизайна эпика Э2, «Блок C — редактирование»). Право —
+// ManageGroups; группа должна принадлежать accountID (иначе не раскрываем чужие группы —
+// ErrNotFound); дубль имени в пределах аккаунта — ErrGroupNameExists.
+func (s *UserGroupService) Rename(
+	ctx context.Context,
+	initiatorID, accountID, groupID uuid.UUID,
+	name string,
+) (domain.UserGroup, error) {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageGroups,
+	); err != nil {
+		zap.L().Error(err.Error())
+		return domain.UserGroup{}, err
+	}
+
+	groups, err := s.repo.GetByID(ctx, groupID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return domain.UserGroup{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.UserGroup{}, err
+	}
+	if groups[0].AccountID != accountID {
+		return domain.UserGroup{}, ErrNotFound
+	}
+
+	group, err := s.repo.UpdateName(ctx, groupID, name)
+	if err != nil {
+		if errors.Is(dberrors.UserGroupErrors.ErrUniqueUserGroupsNameAccountIdKey, err) {
+			zap.L().Warn(err.Error())
+			return domain.UserGroup{}, ErrGroupNameExists
 		}
 		zap.L().Error(err.Error())
 		return domain.UserGroup{}, err

@@ -61,6 +61,13 @@ type UserGroupMock struct {
 	afterGetByIDCounter  uint64
 	beforeGetByIDCounter uint64
 	GetByIDMock          mUserGroupMockGetByID
+
+	funcRename          func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID, name string) (u1 domain.UserGroup, err error)
+	funcRenameOrigin    string
+	inspectFuncRename   func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID, name string)
+	afterRenameCounter  uint64
+	beforeRenameCounter uint64
+	RenameMock          mUserGroupMockRename
 }
 
 // NewUserGroupMock returns a mock for mm_service.UserGroup
@@ -88,6 +95,9 @@ func NewUserGroupMock(t minimock.Tester) *UserGroupMock {
 
 	m.GetByIDMock = mUserGroupMockGetByID{mock: m}
 	m.GetByIDMock.callArgs = []*UserGroupMockGetByIDParams{}
+
+	m.RenameMock = mUserGroupMockRename{mock: m}
+	m.RenameMock.callArgs = []*UserGroupMockRenameParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -2461,6 +2471,442 @@ func (m *UserGroupMock) MinimockGetByIDInspect() {
 	}
 }
 
+type mUserGroupMockRename struct {
+	optional           bool
+	mock               *UserGroupMock
+	defaultExpectation *UserGroupMockRenameExpectation
+	expectations       []*UserGroupMockRenameExpectation
+
+	callArgs []*UserGroupMockRenameParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// UserGroupMockRenameExpectation specifies expectation struct of the UserGroup.Rename
+type UserGroupMockRenameExpectation struct {
+	mock               *UserGroupMock
+	params             *UserGroupMockRenameParams
+	paramPtrs          *UserGroupMockRenameParamPtrs
+	expectationOrigins UserGroupMockRenameExpectationOrigins
+	results            *UserGroupMockRenameResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// UserGroupMockRenameParams contains parameters of the UserGroup.Rename
+type UserGroupMockRenameParams struct {
+	ctx         context.Context
+	initiatorID uuid.UUID
+	accountID   uuid.UUID
+	groupID     uuid.UUID
+	name        string
+}
+
+// UserGroupMockRenameParamPtrs contains pointers to parameters of the UserGroup.Rename
+type UserGroupMockRenameParamPtrs struct {
+	ctx         *context.Context
+	initiatorID *uuid.UUID
+	accountID   *uuid.UUID
+	groupID     *uuid.UUID
+	name        *string
+}
+
+// UserGroupMockRenameResults contains results of the UserGroup.Rename
+type UserGroupMockRenameResults struct {
+	u1  domain.UserGroup
+	err error
+}
+
+// UserGroupMockRenameOrigins contains origins of expectations of the UserGroup.Rename
+type UserGroupMockRenameExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originInitiatorID string
+	originAccountID   string
+	originGroupID     string
+	originName        string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmRename *mUserGroupMockRename) Optional() *mUserGroupMockRename {
+	mmRename.optional = true
+	return mmRename
+}
+
+// Expect sets up expected params for UserGroup.Rename
+func (mmRename *mUserGroupMockRename) Expect(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID, name string) *mUserGroupMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &UserGroupMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.paramPtrs != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by ExpectParams functions")
+	}
+
+	mmRename.defaultExpectation.params = &UserGroupMockRenameParams{ctx, initiatorID, accountID, groupID, name}
+	mmRename.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmRename.expectations {
+		if minimock.Equal(e.params, mmRename.defaultExpectation.params) {
+			mmRename.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmRename.defaultExpectation.params)
+		}
+	}
+
+	return mmRename
+}
+
+// ExpectCtxParam1 sets up expected param ctx for UserGroup.Rename
+func (mmRename *mUserGroupMockRename) ExpectCtxParam1(ctx context.Context) *mUserGroupMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &UserGroupMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &UserGroupMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.ctx = &ctx
+	mmRename.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// ExpectInitiatorIDParam2 sets up expected param initiatorID for UserGroup.Rename
+func (mmRename *mUserGroupMockRename) ExpectInitiatorIDParam2(initiatorID uuid.UUID) *mUserGroupMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &UserGroupMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &UserGroupMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmRename.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// ExpectAccountIDParam3 sets up expected param accountID for UserGroup.Rename
+func (mmRename *mUserGroupMockRename) ExpectAccountIDParam3(accountID uuid.UUID) *mUserGroupMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &UserGroupMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &UserGroupMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.accountID = &accountID
+	mmRename.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// ExpectGroupIDParam4 sets up expected param groupID for UserGroup.Rename
+func (mmRename *mUserGroupMockRename) ExpectGroupIDParam4(groupID uuid.UUID) *mUserGroupMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &UserGroupMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &UserGroupMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.groupID = &groupID
+	mmRename.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// ExpectNameParam5 sets up expected param name for UserGroup.Rename
+func (mmRename *mUserGroupMockRename) ExpectNameParam5(name string) *mUserGroupMockRename {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &UserGroupMockRenameExpectation{}
+	}
+
+	if mmRename.defaultExpectation.params != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Expect")
+	}
+
+	if mmRename.defaultExpectation.paramPtrs == nil {
+		mmRename.defaultExpectation.paramPtrs = &UserGroupMockRenameParamPtrs{}
+	}
+	mmRename.defaultExpectation.paramPtrs.name = &name
+	mmRename.defaultExpectation.expectationOrigins.originName = minimock.CallerInfo(1)
+
+	return mmRename
+}
+
+// Inspect accepts an inspector function that has same arguments as the UserGroup.Rename
+func (mmRename *mUserGroupMockRename) Inspect(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID, name string)) *mUserGroupMockRename {
+	if mmRename.mock.inspectFuncRename != nil {
+		mmRename.mock.t.Fatalf("Inspect function is already set for UserGroupMock.Rename")
+	}
+
+	mmRename.mock.inspectFuncRename = f
+
+	return mmRename
+}
+
+// Return sets up results that will be returned by UserGroup.Rename
+func (mmRename *mUserGroupMockRename) Return(u1 domain.UserGroup, err error) *UserGroupMock {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Set")
+	}
+
+	if mmRename.defaultExpectation == nil {
+		mmRename.defaultExpectation = &UserGroupMockRenameExpectation{mock: mmRename.mock}
+	}
+	mmRename.defaultExpectation.results = &UserGroupMockRenameResults{u1, err}
+	mmRename.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmRename.mock
+}
+
+// Set uses given function f to mock the UserGroup.Rename method
+func (mmRename *mUserGroupMockRename) Set(f func(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID, name string) (u1 domain.UserGroup, err error)) *UserGroupMock {
+	if mmRename.defaultExpectation != nil {
+		mmRename.mock.t.Fatalf("Default expectation is already set for the UserGroup.Rename method")
+	}
+
+	if len(mmRename.expectations) > 0 {
+		mmRename.mock.t.Fatalf("Some expectations are already set for the UserGroup.Rename method")
+	}
+
+	mmRename.mock.funcRename = f
+	mmRename.mock.funcRenameOrigin = minimock.CallerInfo(1)
+	return mmRename.mock
+}
+
+// When sets expectation for the UserGroup.Rename which will trigger the result defined by the following
+// Then helper
+func (mmRename *mUserGroupMockRename) When(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID, name string) *UserGroupMockRenameExpectation {
+	if mmRename.mock.funcRename != nil {
+		mmRename.mock.t.Fatalf("UserGroupMock.Rename mock is already set by Set")
+	}
+
+	expectation := &UserGroupMockRenameExpectation{
+		mock:               mmRename.mock,
+		params:             &UserGroupMockRenameParams{ctx, initiatorID, accountID, groupID, name},
+		expectationOrigins: UserGroupMockRenameExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmRename.expectations = append(mmRename.expectations, expectation)
+	return expectation
+}
+
+// Then sets up UserGroup.Rename return parameters for the expectation previously defined by the When method
+func (e *UserGroupMockRenameExpectation) Then(u1 domain.UserGroup, err error) *UserGroupMock {
+	e.results = &UserGroupMockRenameResults{u1, err}
+	return e.mock
+}
+
+// Times sets number of times UserGroup.Rename should be invoked
+func (mmRename *mUserGroupMockRename) Times(n uint64) *mUserGroupMockRename {
+	if n == 0 {
+		mmRename.mock.t.Fatalf("Times of UserGroupMock.Rename mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmRename.expectedInvocations, n)
+	mmRename.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmRename
+}
+
+func (mmRename *mUserGroupMockRename) invocationsDone() bool {
+	if len(mmRename.expectations) == 0 && mmRename.defaultExpectation == nil && mmRename.mock.funcRename == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmRename.mock.afterRenameCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmRename.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// Rename implements mm_service.UserGroup
+func (mmRename *UserGroupMock) Rename(ctx context.Context, initiatorID uuid.UUID, accountID uuid.UUID, groupID uuid.UUID, name string) (u1 domain.UserGroup, err error) {
+	mm_atomic.AddUint64(&mmRename.beforeRenameCounter, 1)
+	defer mm_atomic.AddUint64(&mmRename.afterRenameCounter, 1)
+
+	mmRename.t.Helper()
+
+	if mmRename.inspectFuncRename != nil {
+		mmRename.inspectFuncRename(ctx, initiatorID, accountID, groupID, name)
+	}
+
+	mm_params := UserGroupMockRenameParams{ctx, initiatorID, accountID, groupID, name}
+
+	// Record call args
+	mmRename.RenameMock.mutex.Lock()
+	mmRename.RenameMock.callArgs = append(mmRename.RenameMock.callArgs, &mm_params)
+	mmRename.RenameMock.mutex.Unlock()
+
+	for _, e := range mmRename.RenameMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.u1, e.results.err
+		}
+	}
+
+	if mmRename.RenameMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmRename.RenameMock.defaultExpectation.Counter, 1)
+		mm_want := mmRename.RenameMock.defaultExpectation.params
+		mm_want_ptrs := mmRename.RenameMock.defaultExpectation.paramPtrs
+
+		mm_got := UserGroupMockRenameParams{ctx, initiatorID, accountID, groupID, name}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmRename.t.Errorf("UserGroupMock.Rename got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmRename.t.Errorf("UserGroupMock.Rename got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmRename.t.Errorf("UserGroupMock.Rename got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmRename.t.Errorf("UserGroupMock.Rename got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+			if mm_want_ptrs.name != nil && !minimock.Equal(*mm_want_ptrs.name, mm_got.name) {
+				mmRename.t.Errorf("UserGroupMock.Rename got unexpected parameter name, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRename.RenameMock.defaultExpectation.expectationOrigins.originName, *mm_want_ptrs.name, mm_got.name, minimock.Diff(*mm_want_ptrs.name, mm_got.name))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmRename.t.Errorf("UserGroupMock.Rename got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmRename.RenameMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmRename.RenameMock.defaultExpectation.results
+		if mm_results == nil {
+			mmRename.t.Fatal("No results are set for the UserGroupMock.Rename")
+		}
+		return (*mm_results).u1, (*mm_results).err
+	}
+	if mmRename.funcRename != nil {
+		return mmRename.funcRename(ctx, initiatorID, accountID, groupID, name)
+	}
+	mmRename.t.Fatalf("Unexpected call to UserGroupMock.Rename. %v %v %v %v %v", ctx, initiatorID, accountID, groupID, name)
+	return
+}
+
+// RenameAfterCounter returns a count of finished UserGroupMock.Rename invocations
+func (mmRename *UserGroupMock) RenameAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmRename.afterRenameCounter)
+}
+
+// RenameBeforeCounter returns a count of UserGroupMock.Rename invocations
+func (mmRename *UserGroupMock) RenameBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmRename.beforeRenameCounter)
+}
+
+// Calls returns a list of arguments used in each call to UserGroupMock.Rename.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmRename *mUserGroupMockRename) Calls() []*UserGroupMockRenameParams {
+	mmRename.mutex.RLock()
+
+	argCopy := make([]*UserGroupMockRenameParams, len(mmRename.callArgs))
+	copy(argCopy, mmRename.callArgs)
+
+	mmRename.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockRenameDone returns true if the count of the Rename invocations corresponds
+// the number of defined expectations
+func (m *UserGroupMock) MinimockRenameDone() bool {
+	if m.RenameMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.RenameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.RenameMock.invocationsDone()
+}
+
+// MinimockRenameInspect logs each unmet expectation
+func (m *UserGroupMock) MinimockRenameInspect() {
+	for _, e := range m.RenameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to UserGroupMock.Rename at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterRenameCounter := mm_atomic.LoadUint64(&m.afterRenameCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.RenameMock.defaultExpectation != nil && afterRenameCounter < 1 {
+		if m.RenameMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to UserGroupMock.Rename at\n%s", m.RenameMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to UserGroupMock.Rename at\n%s with params: %#v", m.RenameMock.defaultExpectation.expectationOrigins.origin, *m.RenameMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcRename != nil && afterRenameCounter < 1 {
+		m.t.Errorf("Expected call to UserGroupMock.Rename at\n%s", m.funcRenameOrigin)
+	}
+
+	if !m.RenameMock.invocationsDone() && afterRenameCounter > 0 {
+		m.t.Errorf("Expected %d calls to UserGroupMock.Rename at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.RenameMock.expectedInvocations), m.RenameMock.expectedInvocationsOrigin, afterRenameCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *UserGroupMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
@@ -2476,6 +2922,8 @@ func (m *UserGroupMock) MinimockFinish() {
 			m.MinimockGetAllInspect()
 
 			m.MinimockGetByIDInspect()
+
+			m.MinimockRenameInspect()
 		}
 	})
 }
@@ -2504,5 +2952,6 @@ func (m *UserGroupMock) minimockDone() bool {
 		m.MinimockDeleteDone() &&
 		m.MinimockGetDone() &&
 		m.MinimockGetAllDone() &&
-		m.MinimockGetByIDDone()
+		m.MinimockGetByIDDone() &&
+		m.MinimockRenameDone()
 }

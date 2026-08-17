@@ -522,3 +522,123 @@ func TestService_UserGroup_Get(t *testing.T) {
 		})
 	}
 }
+
+// TestService_UserGroup_Rename проверяет переименование группы (§4 дизайна эпика Э2, «Блок
+// C — редактирование»): право ManageGroups, группа должна принадлежать accountID, дубль имени
+// — ErrGroupNameExists.
+func TestService_UserGroup_Rename(t *testing.T) {
+	t.Parallel()
+
+	testAccountID := uuid.New()
+	testInitiatorID := uuid.New()
+	testGroupID := uuid.New()
+	testNewName := testutil.Faker.Lorem().Word()
+
+	type args struct {
+		initiatorID uuid.UUID
+		accountID   uuid.UUID
+		groupID     uuid.UUID
+		name        string
+	}
+
+	tests := []struct {
+		name       string
+		setupMocks func(*service_mocks.AccessMock, *repository_mocks.UserGroupMock)
+		args       args
+		want       domain.UserGroup
+		wantErr    error
+	}{
+		{
+			name: "forbidden",
+			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.UserGroupMock) {
+				access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageGroups).
+					Return(service.ErrForbidden)
+			},
+			args:    args{testInitiatorID, testAccountID, testGroupID, testNewName},
+			want:    domain.UserGroup{},
+			wantErr: service.ErrForbidden,
+		},
+		{
+			name: "group not found",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserGroupMock) {
+				access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageGroups).
+					Return(nil)
+				repo.GetByIDMock.Expect(minimock.AnyContext, testGroupID).Return(nil, repository.ErrNotFound)
+			},
+			args:    args{testInitiatorID, testAccountID, testGroupID, testNewName},
+			want:    domain.UserGroup{},
+			wantErr: service.ErrNotFound,
+		},
+		{
+			name: "group from another account is not found",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserGroupMock) {
+				access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageGroups).
+					Return(nil)
+				repo.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: uuid.New()}}, nil)
+			},
+			args:    args{testInitiatorID, testAccountID, testGroupID, testNewName},
+			want:    domain.UserGroup{},
+			wantErr: service.ErrNotFound,
+		},
+		{
+			name: "duplicate group name returns conflict",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserGroupMock) {
+				access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageGroups).
+					Return(nil)
+				repo.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID}}, nil)
+				repo.UpdateNameMock.Expect(minimock.AnyContext, testGroupID, testNewName).
+					Return(domain.UserGroup{}, dberrors.UserGroupErrors.ErrUniqueUserGroupsNameAccountIdKey)
+			},
+			args:    args{testInitiatorID, testAccountID, testGroupID, testNewName},
+			want:    domain.UserGroup{},
+			wantErr: service.ErrGroupNameExists,
+		},
+		{
+			name: "success",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserGroupMock) {
+				access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageGroups).
+					Return(nil)
+				repo.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID}}, nil)
+				repo.UpdateNameMock.Expect(minimock.AnyContext, testGroupID, testNewName).
+					Return(domain.UserGroup{ID: testGroupID, AccountID: testAccountID, Name: testNewName}, nil)
+			},
+			args: args{testInitiatorID, testAccountID, testGroupID, testNewName},
+			want: domain.UserGroup{ID: testGroupID, AccountID: testAccountID, Name: testNewName},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			testutil.TestService(
+				t,
+				func(mockServices *testutil.ServiceMock, mockRepos *testutil.RepositoryMock) {
+					tt.setupMocks(mockServices.Access, mockRepos.UserGroup)
+				},
+				func(s *service.Service, r *repository.Repository) {
+					srv := service.NewUserGroupService(r.UserGroup, s)
+
+					got, err := srv.Rename(
+						t.Context(),
+						tt.args.initiatorID,
+						tt.args.accountID,
+						tt.args.groupID,
+						tt.args.name,
+					)
+
+					require.Equal(t, tt.want, got)
+					require.Equal(t, tt.wantErr, err)
+				},
+			)
+		})
+	}
+}
