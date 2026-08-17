@@ -77,6 +77,13 @@ type UserMock struct {
 	beforeSelectByIDsCounter uint64
 	SelectByIDsMock          mUserMockSelectByIDs
 
+	funcUpdateProfile          func(ctx context.Context, userID uuid.UUID, name *string, surname *string) (u1 domain.User, err error)
+	funcUpdateProfileOrigin    string
+	inspectFuncUpdateProfile   func(ctx context.Context, userID uuid.UUID, name *string, surname *string)
+	afterUpdateProfileCounter  uint64
+	beforeUpdateProfileCounter uint64
+	UpdateProfileMock          mUserMockUpdateProfile
+
 	funcUpdateRole          func(ctx context.Context, userID uuid.UUID, roleID uuid.UUID) (u1 domain.User, err error)
 	funcUpdateRoleOrigin    string
 	inspectFuncUpdateRole   func(ctx context.Context, userID uuid.UUID, roleID uuid.UUID)
@@ -116,6 +123,9 @@ func NewUserMock(t minimock.Tester) *UserMock {
 
 	m.SelectByIDsMock = mUserMockSelectByIDs{mock: m}
 	m.SelectByIDsMock.callArgs = []*UserMockSelectByIDsParams{}
+
+	m.UpdateProfileMock = mUserMockUpdateProfile{mock: m}
+	m.UpdateProfileMock.callArgs = []*UserMockUpdateProfileParams{}
 
 	m.UpdateRoleMock = mUserMockUpdateRole{mock: m}
 	m.UpdateRoleMock.callArgs = []*UserMockUpdateRoleParams{}
@@ -3053,6 +3063,411 @@ func (m *UserMock) MinimockSelectByIDsInspect() {
 	}
 }
 
+type mUserMockUpdateProfile struct {
+	optional           bool
+	mock               *UserMock
+	defaultExpectation *UserMockUpdateProfileExpectation
+	expectations       []*UserMockUpdateProfileExpectation
+
+	callArgs []*UserMockUpdateProfileParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// UserMockUpdateProfileExpectation specifies expectation struct of the User.UpdateProfile
+type UserMockUpdateProfileExpectation struct {
+	mock               *UserMock
+	params             *UserMockUpdateProfileParams
+	paramPtrs          *UserMockUpdateProfileParamPtrs
+	expectationOrigins UserMockUpdateProfileExpectationOrigins
+	results            *UserMockUpdateProfileResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// UserMockUpdateProfileParams contains parameters of the User.UpdateProfile
+type UserMockUpdateProfileParams struct {
+	ctx     context.Context
+	userID  uuid.UUID
+	name    *string
+	surname *string
+}
+
+// UserMockUpdateProfileParamPtrs contains pointers to parameters of the User.UpdateProfile
+type UserMockUpdateProfileParamPtrs struct {
+	ctx     *context.Context
+	userID  *uuid.UUID
+	name    **string
+	surname **string
+}
+
+// UserMockUpdateProfileResults contains results of the User.UpdateProfile
+type UserMockUpdateProfileResults struct {
+	u1  domain.User
+	err error
+}
+
+// UserMockUpdateProfileOrigins contains origins of expectations of the User.UpdateProfile
+type UserMockUpdateProfileExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originUserID  string
+	originName    string
+	originSurname string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateProfile *mUserMockUpdateProfile) Optional() *mUserMockUpdateProfile {
+	mmUpdateProfile.optional = true
+	return mmUpdateProfile
+}
+
+// Expect sets up expected params for User.UpdateProfile
+func (mmUpdateProfile *mUserMockUpdateProfile) Expect(ctx context.Context, userID uuid.UUID, name *string, surname *string) *mUserMockUpdateProfile {
+	if mmUpdateProfile.mock.funcUpdateProfile != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Set")
+	}
+
+	if mmUpdateProfile.defaultExpectation == nil {
+		mmUpdateProfile.defaultExpectation = &UserMockUpdateProfileExpectation{}
+	}
+
+	if mmUpdateProfile.defaultExpectation.paramPtrs != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateProfile.defaultExpectation.params = &UserMockUpdateProfileParams{ctx, userID, name, surname}
+	mmUpdateProfile.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateProfile.expectations {
+		if minimock.Equal(e.params, mmUpdateProfile.defaultExpectation.params) {
+			mmUpdateProfile.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateProfile.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateProfile
+}
+
+// ExpectCtxParam1 sets up expected param ctx for User.UpdateProfile
+func (mmUpdateProfile *mUserMockUpdateProfile) ExpectCtxParam1(ctx context.Context) *mUserMockUpdateProfile {
+	if mmUpdateProfile.mock.funcUpdateProfile != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Set")
+	}
+
+	if mmUpdateProfile.defaultExpectation == nil {
+		mmUpdateProfile.defaultExpectation = &UserMockUpdateProfileExpectation{}
+	}
+
+	if mmUpdateProfile.defaultExpectation.params != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Expect")
+	}
+
+	if mmUpdateProfile.defaultExpectation.paramPtrs == nil {
+		mmUpdateProfile.defaultExpectation.paramPtrs = &UserMockUpdateProfileParamPtrs{}
+	}
+	mmUpdateProfile.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateProfile.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateProfile
+}
+
+// ExpectUserIDParam2 sets up expected param userID for User.UpdateProfile
+func (mmUpdateProfile *mUserMockUpdateProfile) ExpectUserIDParam2(userID uuid.UUID) *mUserMockUpdateProfile {
+	if mmUpdateProfile.mock.funcUpdateProfile != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Set")
+	}
+
+	if mmUpdateProfile.defaultExpectation == nil {
+		mmUpdateProfile.defaultExpectation = &UserMockUpdateProfileExpectation{}
+	}
+
+	if mmUpdateProfile.defaultExpectation.params != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Expect")
+	}
+
+	if mmUpdateProfile.defaultExpectation.paramPtrs == nil {
+		mmUpdateProfile.defaultExpectation.paramPtrs = &UserMockUpdateProfileParamPtrs{}
+	}
+	mmUpdateProfile.defaultExpectation.paramPtrs.userID = &userID
+	mmUpdateProfile.defaultExpectation.expectationOrigins.originUserID = minimock.CallerInfo(1)
+
+	return mmUpdateProfile
+}
+
+// ExpectNameParam3 sets up expected param name for User.UpdateProfile
+func (mmUpdateProfile *mUserMockUpdateProfile) ExpectNameParam3(name *string) *mUserMockUpdateProfile {
+	if mmUpdateProfile.mock.funcUpdateProfile != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Set")
+	}
+
+	if mmUpdateProfile.defaultExpectation == nil {
+		mmUpdateProfile.defaultExpectation = &UserMockUpdateProfileExpectation{}
+	}
+
+	if mmUpdateProfile.defaultExpectation.params != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Expect")
+	}
+
+	if mmUpdateProfile.defaultExpectation.paramPtrs == nil {
+		mmUpdateProfile.defaultExpectation.paramPtrs = &UserMockUpdateProfileParamPtrs{}
+	}
+	mmUpdateProfile.defaultExpectation.paramPtrs.name = &name
+	mmUpdateProfile.defaultExpectation.expectationOrigins.originName = minimock.CallerInfo(1)
+
+	return mmUpdateProfile
+}
+
+// ExpectSurnameParam4 sets up expected param surname for User.UpdateProfile
+func (mmUpdateProfile *mUserMockUpdateProfile) ExpectSurnameParam4(surname *string) *mUserMockUpdateProfile {
+	if mmUpdateProfile.mock.funcUpdateProfile != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Set")
+	}
+
+	if mmUpdateProfile.defaultExpectation == nil {
+		mmUpdateProfile.defaultExpectation = &UserMockUpdateProfileExpectation{}
+	}
+
+	if mmUpdateProfile.defaultExpectation.params != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Expect")
+	}
+
+	if mmUpdateProfile.defaultExpectation.paramPtrs == nil {
+		mmUpdateProfile.defaultExpectation.paramPtrs = &UserMockUpdateProfileParamPtrs{}
+	}
+	mmUpdateProfile.defaultExpectation.paramPtrs.surname = &surname
+	mmUpdateProfile.defaultExpectation.expectationOrigins.originSurname = minimock.CallerInfo(1)
+
+	return mmUpdateProfile
+}
+
+// Inspect accepts an inspector function that has same arguments as the User.UpdateProfile
+func (mmUpdateProfile *mUserMockUpdateProfile) Inspect(f func(ctx context.Context, userID uuid.UUID, name *string, surname *string)) *mUserMockUpdateProfile {
+	if mmUpdateProfile.mock.inspectFuncUpdateProfile != nil {
+		mmUpdateProfile.mock.t.Fatalf("Inspect function is already set for UserMock.UpdateProfile")
+	}
+
+	mmUpdateProfile.mock.inspectFuncUpdateProfile = f
+
+	return mmUpdateProfile
+}
+
+// Return sets up results that will be returned by User.UpdateProfile
+func (mmUpdateProfile *mUserMockUpdateProfile) Return(u1 domain.User, err error) *UserMock {
+	if mmUpdateProfile.mock.funcUpdateProfile != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Set")
+	}
+
+	if mmUpdateProfile.defaultExpectation == nil {
+		mmUpdateProfile.defaultExpectation = &UserMockUpdateProfileExpectation{mock: mmUpdateProfile.mock}
+	}
+	mmUpdateProfile.defaultExpectation.results = &UserMockUpdateProfileResults{u1, err}
+	mmUpdateProfile.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateProfile.mock
+}
+
+// Set uses given function f to mock the User.UpdateProfile method
+func (mmUpdateProfile *mUserMockUpdateProfile) Set(f func(ctx context.Context, userID uuid.UUID, name *string, surname *string) (u1 domain.User, err error)) *UserMock {
+	if mmUpdateProfile.defaultExpectation != nil {
+		mmUpdateProfile.mock.t.Fatalf("Default expectation is already set for the User.UpdateProfile method")
+	}
+
+	if len(mmUpdateProfile.expectations) > 0 {
+		mmUpdateProfile.mock.t.Fatalf("Some expectations are already set for the User.UpdateProfile method")
+	}
+
+	mmUpdateProfile.mock.funcUpdateProfile = f
+	mmUpdateProfile.mock.funcUpdateProfileOrigin = minimock.CallerInfo(1)
+	return mmUpdateProfile.mock
+}
+
+// When sets expectation for the User.UpdateProfile which will trigger the result defined by the following
+// Then helper
+func (mmUpdateProfile *mUserMockUpdateProfile) When(ctx context.Context, userID uuid.UUID, name *string, surname *string) *UserMockUpdateProfileExpectation {
+	if mmUpdateProfile.mock.funcUpdateProfile != nil {
+		mmUpdateProfile.mock.t.Fatalf("UserMock.UpdateProfile mock is already set by Set")
+	}
+
+	expectation := &UserMockUpdateProfileExpectation{
+		mock:               mmUpdateProfile.mock,
+		params:             &UserMockUpdateProfileParams{ctx, userID, name, surname},
+		expectationOrigins: UserMockUpdateProfileExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateProfile.expectations = append(mmUpdateProfile.expectations, expectation)
+	return expectation
+}
+
+// Then sets up User.UpdateProfile return parameters for the expectation previously defined by the When method
+func (e *UserMockUpdateProfileExpectation) Then(u1 domain.User, err error) *UserMock {
+	e.results = &UserMockUpdateProfileResults{u1, err}
+	return e.mock
+}
+
+// Times sets number of times User.UpdateProfile should be invoked
+func (mmUpdateProfile *mUserMockUpdateProfile) Times(n uint64) *mUserMockUpdateProfile {
+	if n == 0 {
+		mmUpdateProfile.mock.t.Fatalf("Times of UserMock.UpdateProfile mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateProfile.expectedInvocations, n)
+	mmUpdateProfile.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateProfile
+}
+
+func (mmUpdateProfile *mUserMockUpdateProfile) invocationsDone() bool {
+	if len(mmUpdateProfile.expectations) == 0 && mmUpdateProfile.defaultExpectation == nil && mmUpdateProfile.mock.funcUpdateProfile == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateProfile.mock.afterUpdateProfileCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateProfile.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateProfile implements mm_repository.User
+func (mmUpdateProfile *UserMock) UpdateProfile(ctx context.Context, userID uuid.UUID, name *string, surname *string) (u1 domain.User, err error) {
+	mm_atomic.AddUint64(&mmUpdateProfile.beforeUpdateProfileCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateProfile.afterUpdateProfileCounter, 1)
+
+	mmUpdateProfile.t.Helper()
+
+	if mmUpdateProfile.inspectFuncUpdateProfile != nil {
+		mmUpdateProfile.inspectFuncUpdateProfile(ctx, userID, name, surname)
+	}
+
+	mm_params := UserMockUpdateProfileParams{ctx, userID, name, surname}
+
+	// Record call args
+	mmUpdateProfile.UpdateProfileMock.mutex.Lock()
+	mmUpdateProfile.UpdateProfileMock.callArgs = append(mmUpdateProfile.UpdateProfileMock.callArgs, &mm_params)
+	mmUpdateProfile.UpdateProfileMock.mutex.Unlock()
+
+	for _, e := range mmUpdateProfile.UpdateProfileMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.u1, e.results.err
+		}
+	}
+
+	if mmUpdateProfile.UpdateProfileMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateProfile.UpdateProfileMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateProfile.UpdateProfileMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateProfile.UpdateProfileMock.defaultExpectation.paramPtrs
+
+		mm_got := UserMockUpdateProfileParams{ctx, userID, name, surname}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateProfile.t.Errorf("UserMock.UpdateProfile got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateProfile.UpdateProfileMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.userID != nil && !minimock.Equal(*mm_want_ptrs.userID, mm_got.userID) {
+				mmUpdateProfile.t.Errorf("UserMock.UpdateProfile got unexpected parameter userID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateProfile.UpdateProfileMock.defaultExpectation.expectationOrigins.originUserID, *mm_want_ptrs.userID, mm_got.userID, minimock.Diff(*mm_want_ptrs.userID, mm_got.userID))
+			}
+
+			if mm_want_ptrs.name != nil && !minimock.Equal(*mm_want_ptrs.name, mm_got.name) {
+				mmUpdateProfile.t.Errorf("UserMock.UpdateProfile got unexpected parameter name, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateProfile.UpdateProfileMock.defaultExpectation.expectationOrigins.originName, *mm_want_ptrs.name, mm_got.name, minimock.Diff(*mm_want_ptrs.name, mm_got.name))
+			}
+
+			if mm_want_ptrs.surname != nil && !minimock.Equal(*mm_want_ptrs.surname, mm_got.surname) {
+				mmUpdateProfile.t.Errorf("UserMock.UpdateProfile got unexpected parameter surname, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateProfile.UpdateProfileMock.defaultExpectation.expectationOrigins.originSurname, *mm_want_ptrs.surname, mm_got.surname, minimock.Diff(*mm_want_ptrs.surname, mm_got.surname))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateProfile.t.Errorf("UserMock.UpdateProfile got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateProfile.UpdateProfileMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateProfile.UpdateProfileMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateProfile.t.Fatal("No results are set for the UserMock.UpdateProfile")
+		}
+		return (*mm_results).u1, (*mm_results).err
+	}
+	if mmUpdateProfile.funcUpdateProfile != nil {
+		return mmUpdateProfile.funcUpdateProfile(ctx, userID, name, surname)
+	}
+	mmUpdateProfile.t.Fatalf("Unexpected call to UserMock.UpdateProfile. %v %v %v %v", ctx, userID, name, surname)
+	return
+}
+
+// UpdateProfileAfterCounter returns a count of finished UserMock.UpdateProfile invocations
+func (mmUpdateProfile *UserMock) UpdateProfileAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateProfile.afterUpdateProfileCounter)
+}
+
+// UpdateProfileBeforeCounter returns a count of UserMock.UpdateProfile invocations
+func (mmUpdateProfile *UserMock) UpdateProfileBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateProfile.beforeUpdateProfileCounter)
+}
+
+// Calls returns a list of arguments used in each call to UserMock.UpdateProfile.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateProfile *mUserMockUpdateProfile) Calls() []*UserMockUpdateProfileParams {
+	mmUpdateProfile.mutex.RLock()
+
+	argCopy := make([]*UserMockUpdateProfileParams, len(mmUpdateProfile.callArgs))
+	copy(argCopy, mmUpdateProfile.callArgs)
+
+	mmUpdateProfile.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateProfileDone returns true if the count of the UpdateProfile invocations corresponds
+// the number of defined expectations
+func (m *UserMock) MinimockUpdateProfileDone() bool {
+	if m.UpdateProfileMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateProfileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateProfileMock.invocationsDone()
+}
+
+// MinimockUpdateProfileInspect logs each unmet expectation
+func (m *UserMock) MinimockUpdateProfileInspect() {
+	for _, e := range m.UpdateProfileMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to UserMock.UpdateProfile at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateProfileCounter := mm_atomic.LoadUint64(&m.afterUpdateProfileCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateProfileMock.defaultExpectation != nil && afterUpdateProfileCounter < 1 {
+		if m.UpdateProfileMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to UserMock.UpdateProfile at\n%s", m.UpdateProfileMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to UserMock.UpdateProfile at\n%s with params: %#v", m.UpdateProfileMock.defaultExpectation.expectationOrigins.origin, *m.UpdateProfileMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateProfile != nil && afterUpdateProfileCounter < 1 {
+		m.t.Errorf("Expected call to UserMock.UpdateProfile at\n%s", m.funcUpdateProfileOrigin)
+	}
+
+	if !m.UpdateProfileMock.invocationsDone() && afterUpdateProfileCounter > 0 {
+		m.t.Errorf("Expected %d calls to UserMock.UpdateProfile at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateProfileMock.expectedInvocations), m.UpdateProfileMock.expectedInvocationsOrigin, afterUpdateProfileCounter)
+	}
+}
+
 type mUserMockUpdateRole struct {
 	optional           bool
 	mock               *UserMock
@@ -3447,6 +3862,8 @@ func (m *UserMock) MinimockFinish() {
 
 			m.MinimockSelectByIDsInspect()
 
+			m.MinimockUpdateProfileInspect()
+
 			m.MinimockUpdateRoleInspect()
 		}
 	})
@@ -3479,5 +3896,6 @@ func (m *UserMock) minimockDone() bool {
 		m.MinimockSelectByEmailAndAccountIDDone() &&
 		m.MinimockSelectByIDDone() &&
 		m.MinimockSelectByIDsDone() &&
+		m.MinimockUpdateProfileDone() &&
 		m.MinimockUpdateRoleDone()
 }

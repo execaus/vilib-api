@@ -13,6 +13,7 @@ import (
 	"github.com/stephenafamo/bob/dialect/psql"
 	"github.com/stephenafamo/bob/dialect/psql/dm"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
+	"github.com/stephenafamo/bob/dialect/psql/um"
 	"go.uber.org/zap"
 )
 
@@ -68,6 +69,34 @@ func (r *UserGroupRepository) GetByID(ctx context.Context, groupsID ...uuid.UUID
 	}
 
 	return userGroups, nil
+}
+
+// UpdateName переименовывает группу (§4 дизайна эпика Э2, «Блок C»). Группа не найдена —
+// ErrNotFound; дубль имени в пределах аккаунта — dberrors.UserGroupErrors.
+// ErrUniqueUserGroupsNameAccountIdKey (проверяется вызывающим сервисом).
+func (r *UserGroupRepository) UpdateName(
+	ctx context.Context,
+	groupID uuid.UUID,
+	name string,
+) (domain.UserGroup, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	userGroupDB, err := schema.UserGroups.Update(
+		(&schema.UserGroupSetter{Name: omit.From(name)}).UpdateMod(),
+		um.Where(schema.UserGroups.Columns.GroupID.EQ(psql.Arg(groupID))),
+	).One(ctx, exec)
+	if err != nil {
+		if errors.Is(pgx.ErrNoRows, err) {
+			return domain.UserGroup{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.UserGroup{}, err
+	}
+
+	userGroup := domain.UserGroup{}
+	userGroup.FromDB(userGroupDB)
+
+	return userGroup, nil
 }
 
 func (r *UserGroupRepository) SelectByAccountID(

@@ -32,3 +32,13 @@ func (u *User) FromDB(db *schema.User) {
 
 // IsActive возвращает true, если пользователь активен.
 func (u *User) IsActive() bool { return u.DeactivatedAt == nil }
+
+// UserPatch — частичное обновление пользователя (§4 дизайна эпика Э2, «Блок C —
+// редактирование»): nil-поле оставляет значение без изменений. Смена роли (RoleID) и правка
+// чужого профиля требуют права ManageUsers; инициатор, правящий собственное ФИО без смены
+// роли, — исключение без проверки прав.
+type UserPatch struct {
+	Name    *string
+	Surname *string
+	RoleID  *uuid.UUID
+}

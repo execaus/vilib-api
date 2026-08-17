@@ -42,6 +42,10 @@ type User interface {
 	// не ошибка, такие идентификаторы просто не попадают в результат.
 	SelectByIDs(ctx context.Context, usersID []uuid.UUID) ([]domain.User, error)
 	UpdateRole(ctx context.Context, userID, roleID uuid.UUID) (domain.User, error)
+	// UpdateProfile частично обновляет ФИО пользователя (§4 дизайна эпика Э2, «Блок C»): nil-
+	// поле оставляет значение без изменений. Оба поля nil — строка не трогается, возвращается
+	// текущее состояние пользователя. Пользователь не найден — ErrNotFound.
+	UpdateProfile(ctx context.Context, userID uuid.UUID, name, surname *string) (domain.User, error)
 	Deactivate(ctx context.Context, userID uuid.UUID) error
 	Reactivate(ctx context.Context, userID uuid.UUID) error
 	SelectByAccountID(ctx context.Context, accountID uuid.UUID, status UserStatus) ([]domain.User, error)
@@ -75,6 +79,10 @@ type UserGroup interface {
 	Insert(ctx context.Context, accountID uuid.UUID, name string) (domain.UserGroup, error)
 	GetByID(ctx context.Context, groupsID ...uuid.UUID) ([]domain.UserGroup, error)
 	SelectByAccountID(ctx context.Context, accountID uuid.UUID) ([]domain.UserGroup, error)
+	// UpdateName переименовывает группу (§4 дизайна эпика Э2, «Блок C»). Группа не найдена —
+	// ErrNotFound; дубль имени в пределах аккаунта — dberrors.UserGroupErrors.
+	// ErrUniqueUserGroupsNameAccountIdKey.
+	UpdateName(ctx context.Context, groupID uuid.UUID, name string) (domain.UserGroup, error)
 	// DeleteCascade удаляет группу вместе со всеми её видео, ассетами, файлами и участниками
 	// (Э1-Т21). Возвращает идентификаторы удалённых видео группы — нужны вызывающей стороне
 	// для best-effort зачистки их объектов в хранилище после коммита (§7.3 эпика).

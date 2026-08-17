@@ -190,6 +190,50 @@ func (r *UserRepository) UpdateRole(ctx context.Context, userID, roleID uuid.UUI
 	return user, nil
 }
 
+// UpdateProfile частично обновляет ФИО пользователя (§4 дизайна эпика Э2, «Блок C»): nil-поле
+// не входит в SQL-запрос и оставляет значение колонки без изменений. Если оба поля nil,
+// UPDATE не выполняется — возвращается текущее состояние пользователя (SelectByID).
+func (r *UserRepository) UpdateProfile(
+	ctx context.Context,
+	userID uuid.UUID,
+	name, surname *string,
+) (domain.User, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	if name == nil && surname == nil {
+		users, err := r.SelectByID(ctx, userID)
+		if err != nil {
+			return domain.User{}, err
+		}
+		return users[0], nil
+	}
+
+	setter := &schema.UserSetter{}
+	if name != nil {
+		setter.Name = omit.From(*name)
+	}
+	if surname != nil {
+		setter.Surname = omit.From(*surname)
+	}
+
+	userDB, err := schema.Users.Update(
+		setter.UpdateMod(),
+		um.Where(schema.Users.Columns.UserID.EQ(psql.Arg(userID))),
+	).One(ctx, exec)
+	if err != nil {
+		if errors.Is(pgx.ErrNoRows, err) {
+			return domain.User{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+
+	var user domain.User
+	user.FromDB(userDB)
+
+	return user, nil
+}
+
 func (r *UserRepository) Deactivate(ctx context.Context, userID uuid.UUID) error {
 	exec := r.provider.GetExecutor(ctx)
 

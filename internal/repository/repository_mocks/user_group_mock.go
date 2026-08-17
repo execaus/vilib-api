@@ -47,6 +47,13 @@ type UserGroupMock struct {
 	afterSelectByAccountIDCounter  uint64
 	beforeSelectByAccountIDCounter uint64
 	SelectByAccountIDMock          mUserGroupMockSelectByAccountID
+
+	funcUpdateName          func(ctx context.Context, groupID uuid.UUID, name string) (u1 domain.UserGroup, err error)
+	funcUpdateNameOrigin    string
+	inspectFuncUpdateName   func(ctx context.Context, groupID uuid.UUID, name string)
+	afterUpdateNameCounter  uint64
+	beforeUpdateNameCounter uint64
+	UpdateNameMock          mUserGroupMockUpdateName
 }
 
 // NewUserGroupMock returns a mock for mm_repository.UserGroup
@@ -68,6 +75,9 @@ func NewUserGroupMock(t minimock.Tester) *UserGroupMock {
 
 	m.SelectByAccountIDMock = mUserGroupMockSelectByAccountID{mock: m}
 	m.SelectByAccountIDMock.callArgs = []*UserGroupMockSelectByAccountIDParams{}
+
+	m.UpdateNameMock = mUserGroupMockUpdateName{mock: m}
+	m.UpdateNameMock.callArgs = []*UserGroupMockUpdateNameParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -1477,6 +1487,380 @@ func (m *UserGroupMock) MinimockSelectByAccountIDInspect() {
 	}
 }
 
+type mUserGroupMockUpdateName struct {
+	optional           bool
+	mock               *UserGroupMock
+	defaultExpectation *UserGroupMockUpdateNameExpectation
+	expectations       []*UserGroupMockUpdateNameExpectation
+
+	callArgs []*UserGroupMockUpdateNameParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// UserGroupMockUpdateNameExpectation specifies expectation struct of the UserGroup.UpdateName
+type UserGroupMockUpdateNameExpectation struct {
+	mock               *UserGroupMock
+	params             *UserGroupMockUpdateNameParams
+	paramPtrs          *UserGroupMockUpdateNameParamPtrs
+	expectationOrigins UserGroupMockUpdateNameExpectationOrigins
+	results            *UserGroupMockUpdateNameResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// UserGroupMockUpdateNameParams contains parameters of the UserGroup.UpdateName
+type UserGroupMockUpdateNameParams struct {
+	ctx     context.Context
+	groupID uuid.UUID
+	name    string
+}
+
+// UserGroupMockUpdateNameParamPtrs contains pointers to parameters of the UserGroup.UpdateName
+type UserGroupMockUpdateNameParamPtrs struct {
+	ctx     *context.Context
+	groupID *uuid.UUID
+	name    *string
+}
+
+// UserGroupMockUpdateNameResults contains results of the UserGroup.UpdateName
+type UserGroupMockUpdateNameResults struct {
+	u1  domain.UserGroup
+	err error
+}
+
+// UserGroupMockUpdateNameOrigins contains origins of expectations of the UserGroup.UpdateName
+type UserGroupMockUpdateNameExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originGroupID string
+	originName    string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateName *mUserGroupMockUpdateName) Optional() *mUserGroupMockUpdateName {
+	mmUpdateName.optional = true
+	return mmUpdateName
+}
+
+// Expect sets up expected params for UserGroup.UpdateName
+func (mmUpdateName *mUserGroupMockUpdateName) Expect(ctx context.Context, groupID uuid.UUID, name string) *mUserGroupMockUpdateName {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("UserGroupMock.UpdateName mock is already set by Set")
+	}
+
+	if mmUpdateName.defaultExpectation == nil {
+		mmUpdateName.defaultExpectation = &UserGroupMockUpdateNameExpectation{}
+	}
+
+	if mmUpdateName.defaultExpectation.paramPtrs != nil {
+		mmUpdateName.mock.t.Fatalf("UserGroupMock.UpdateName mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateName.defaultExpectation.params = &UserGroupMockUpdateNameParams{ctx, groupID, name}
+	mmUpdateName.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateName.expectations {
+		if minimock.Equal(e.params, mmUpdateName.defaultExpectation.params) {
+			mmUpdateName.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateName.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateName
+}
+
+// ExpectCtxParam1 sets up expected param ctx for UserGroup.UpdateName
+func (mmUpdateName *mUserGroupMockUpdateName) ExpectCtxParam1(ctx context.Context) *mUserGroupMockUpdateName {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("UserGroupMock.UpdateName mock is already set by Set")
+	}
+
+	if mmUpdateName.defaultExpectation == nil {
+		mmUpdateName.defaultExpectation = &UserGroupMockUpdateNameExpectation{}
+	}
+
+	if mmUpdateName.defaultExpectation.params != nil {
+		mmUpdateName.mock.t.Fatalf("UserGroupMock.UpdateName mock is already set by Expect")
+	}
+
+	if mmUpdateName.defaultExpectation.paramPtrs == nil {
+		mmUpdateName.defaultExpectation.paramPtrs = &UserGroupMockUpdateNameParamPtrs{}
+	}
+	mmUpdateName.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateName.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateName
+}
+
+// ExpectGroupIDParam2 sets up expected param groupID for UserGroup.UpdateName
+func (mmUpdateName *mUserGroupMockUpdateName) ExpectGroupIDParam2(groupID uuid.UUID) *mUserGroupMockUpdateName {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("UserGroupMock.UpdateName mock is already set by Set")
+	}
+
+	if mmUpdateName.defaultExpectation == nil {
+		mmUpdateName.defaultExpectation = &UserGroupMockUpdateNameExpectation{}
+	}
+
+	if mmUpdateName.defaultExpectation.params != nil {
+		mmUpdateName.mock.t.Fatalf("UserGroupMock.UpdateName mock is already set by Expect")
+	}
+
+	if mmUpdateName.defaultExpectation.paramPtrs == nil {
+		mmUpdateName.defaultExpectation.paramPtrs = &UserGroupMockUpdateNameParamPtrs{}
+	}
+	mmUpdateName.defaultExpectation.paramPtrs.groupID = &groupID
+	mmUpdateName.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmUpdateName
+}
+
+// ExpectNameParam3 sets up expected param name for UserGroup.UpdateName
+func (mmUpdateName *mUserGroupMockUpdateName) ExpectNameParam3(name string) *mUserGroupMockUpdateName {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("UserGroupMock.UpdateName mock is already set by Set")
+	}
+
+	if mmUpdateName.defaultExpectation == nil {
+		mmUpdateName.defaultExpectation = &UserGroupMockUpdateNameExpectation{}
+	}
+
+	if mmUpdateName.defaultExpectation.params != nil {
+		mmUpdateName.mock.t.Fatalf("UserGroupMock.UpdateName mock is already set by Expect")
+	}
+
+	if mmUpdateName.defaultExpectation.paramPtrs == nil {
+		mmUpdateName.defaultExpectation.paramPtrs = &UserGroupMockUpdateNameParamPtrs{}
+	}
+	mmUpdateName.defaultExpectation.paramPtrs.name = &name
+	mmUpdateName.defaultExpectation.expectationOrigins.originName = minimock.CallerInfo(1)
+
+	return mmUpdateName
+}
+
+// Inspect accepts an inspector function that has same arguments as the UserGroup.UpdateName
+func (mmUpdateName *mUserGroupMockUpdateName) Inspect(f func(ctx context.Context, groupID uuid.UUID, name string)) *mUserGroupMockUpdateName {
+	if mmUpdateName.mock.inspectFuncUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("Inspect function is already set for UserGroupMock.UpdateName")
+	}
+
+	mmUpdateName.mock.inspectFuncUpdateName = f
+
+	return mmUpdateName
+}
+
+// Return sets up results that will be returned by UserGroup.UpdateName
+func (mmUpdateName *mUserGroupMockUpdateName) Return(u1 domain.UserGroup, err error) *UserGroupMock {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("UserGroupMock.UpdateName mock is already set by Set")
+	}
+
+	if mmUpdateName.defaultExpectation == nil {
+		mmUpdateName.defaultExpectation = &UserGroupMockUpdateNameExpectation{mock: mmUpdateName.mock}
+	}
+	mmUpdateName.defaultExpectation.results = &UserGroupMockUpdateNameResults{u1, err}
+	mmUpdateName.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateName.mock
+}
+
+// Set uses given function f to mock the UserGroup.UpdateName method
+func (mmUpdateName *mUserGroupMockUpdateName) Set(f func(ctx context.Context, groupID uuid.UUID, name string) (u1 domain.UserGroup, err error)) *UserGroupMock {
+	if mmUpdateName.defaultExpectation != nil {
+		mmUpdateName.mock.t.Fatalf("Default expectation is already set for the UserGroup.UpdateName method")
+	}
+
+	if len(mmUpdateName.expectations) > 0 {
+		mmUpdateName.mock.t.Fatalf("Some expectations are already set for the UserGroup.UpdateName method")
+	}
+
+	mmUpdateName.mock.funcUpdateName = f
+	mmUpdateName.mock.funcUpdateNameOrigin = minimock.CallerInfo(1)
+	return mmUpdateName.mock
+}
+
+// When sets expectation for the UserGroup.UpdateName which will trigger the result defined by the following
+// Then helper
+func (mmUpdateName *mUserGroupMockUpdateName) When(ctx context.Context, groupID uuid.UUID, name string) *UserGroupMockUpdateNameExpectation {
+	if mmUpdateName.mock.funcUpdateName != nil {
+		mmUpdateName.mock.t.Fatalf("UserGroupMock.UpdateName mock is already set by Set")
+	}
+
+	expectation := &UserGroupMockUpdateNameExpectation{
+		mock:               mmUpdateName.mock,
+		params:             &UserGroupMockUpdateNameParams{ctx, groupID, name},
+		expectationOrigins: UserGroupMockUpdateNameExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateName.expectations = append(mmUpdateName.expectations, expectation)
+	return expectation
+}
+
+// Then sets up UserGroup.UpdateName return parameters for the expectation previously defined by the When method
+func (e *UserGroupMockUpdateNameExpectation) Then(u1 domain.UserGroup, err error) *UserGroupMock {
+	e.results = &UserGroupMockUpdateNameResults{u1, err}
+	return e.mock
+}
+
+// Times sets number of times UserGroup.UpdateName should be invoked
+func (mmUpdateName *mUserGroupMockUpdateName) Times(n uint64) *mUserGroupMockUpdateName {
+	if n == 0 {
+		mmUpdateName.mock.t.Fatalf("Times of UserGroupMock.UpdateName mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateName.expectedInvocations, n)
+	mmUpdateName.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateName
+}
+
+func (mmUpdateName *mUserGroupMockUpdateName) invocationsDone() bool {
+	if len(mmUpdateName.expectations) == 0 && mmUpdateName.defaultExpectation == nil && mmUpdateName.mock.funcUpdateName == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateName.mock.afterUpdateNameCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateName.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateName implements mm_repository.UserGroup
+func (mmUpdateName *UserGroupMock) UpdateName(ctx context.Context, groupID uuid.UUID, name string) (u1 domain.UserGroup, err error) {
+	mm_atomic.AddUint64(&mmUpdateName.beforeUpdateNameCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateName.afterUpdateNameCounter, 1)
+
+	mmUpdateName.t.Helper()
+
+	if mmUpdateName.inspectFuncUpdateName != nil {
+		mmUpdateName.inspectFuncUpdateName(ctx, groupID, name)
+	}
+
+	mm_params := UserGroupMockUpdateNameParams{ctx, groupID, name}
+
+	// Record call args
+	mmUpdateName.UpdateNameMock.mutex.Lock()
+	mmUpdateName.UpdateNameMock.callArgs = append(mmUpdateName.UpdateNameMock.callArgs, &mm_params)
+	mmUpdateName.UpdateNameMock.mutex.Unlock()
+
+	for _, e := range mmUpdateName.UpdateNameMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.u1, e.results.err
+		}
+	}
+
+	if mmUpdateName.UpdateNameMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateName.UpdateNameMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateName.UpdateNameMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateName.UpdateNameMock.defaultExpectation.paramPtrs
+
+		mm_got := UserGroupMockUpdateNameParams{ctx, groupID, name}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateName.t.Errorf("UserGroupMock.UpdateName got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateName.UpdateNameMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmUpdateName.t.Errorf("UserGroupMock.UpdateName got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateName.UpdateNameMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+			if mm_want_ptrs.name != nil && !minimock.Equal(*mm_want_ptrs.name, mm_got.name) {
+				mmUpdateName.t.Errorf("UserGroupMock.UpdateName got unexpected parameter name, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateName.UpdateNameMock.defaultExpectation.expectationOrigins.originName, *mm_want_ptrs.name, mm_got.name, minimock.Diff(*mm_want_ptrs.name, mm_got.name))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateName.t.Errorf("UserGroupMock.UpdateName got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateName.UpdateNameMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateName.UpdateNameMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateName.t.Fatal("No results are set for the UserGroupMock.UpdateName")
+		}
+		return (*mm_results).u1, (*mm_results).err
+	}
+	if mmUpdateName.funcUpdateName != nil {
+		return mmUpdateName.funcUpdateName(ctx, groupID, name)
+	}
+	mmUpdateName.t.Fatalf("Unexpected call to UserGroupMock.UpdateName. %v %v %v", ctx, groupID, name)
+	return
+}
+
+// UpdateNameAfterCounter returns a count of finished UserGroupMock.UpdateName invocations
+func (mmUpdateName *UserGroupMock) UpdateNameAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateName.afterUpdateNameCounter)
+}
+
+// UpdateNameBeforeCounter returns a count of UserGroupMock.UpdateName invocations
+func (mmUpdateName *UserGroupMock) UpdateNameBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateName.beforeUpdateNameCounter)
+}
+
+// Calls returns a list of arguments used in each call to UserGroupMock.UpdateName.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateName *mUserGroupMockUpdateName) Calls() []*UserGroupMockUpdateNameParams {
+	mmUpdateName.mutex.RLock()
+
+	argCopy := make([]*UserGroupMockUpdateNameParams, len(mmUpdateName.callArgs))
+	copy(argCopy, mmUpdateName.callArgs)
+
+	mmUpdateName.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateNameDone returns true if the count of the UpdateName invocations corresponds
+// the number of defined expectations
+func (m *UserGroupMock) MinimockUpdateNameDone() bool {
+	if m.UpdateNameMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateNameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateNameMock.invocationsDone()
+}
+
+// MinimockUpdateNameInspect logs each unmet expectation
+func (m *UserGroupMock) MinimockUpdateNameInspect() {
+	for _, e := range m.UpdateNameMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to UserGroupMock.UpdateName at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateNameCounter := mm_atomic.LoadUint64(&m.afterUpdateNameCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateNameMock.defaultExpectation != nil && afterUpdateNameCounter < 1 {
+		if m.UpdateNameMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to UserGroupMock.UpdateName at\n%s", m.UpdateNameMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to UserGroupMock.UpdateName at\n%s with params: %#v", m.UpdateNameMock.defaultExpectation.expectationOrigins.origin, *m.UpdateNameMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateName != nil && afterUpdateNameCounter < 1 {
+		m.t.Errorf("Expected call to UserGroupMock.UpdateName at\n%s", m.funcUpdateNameOrigin)
+	}
+
+	if !m.UpdateNameMock.invocationsDone() && afterUpdateNameCounter > 0 {
+		m.t.Errorf("Expected %d calls to UserGroupMock.UpdateName at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateNameMock.expectedInvocations), m.UpdateNameMock.expectedInvocationsOrigin, afterUpdateNameCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *UserGroupMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
@@ -1488,6 +1872,8 @@ func (m *UserGroupMock) MinimockFinish() {
 			m.MinimockInsertInspect()
 
 			m.MinimockSelectByAccountIDInspect()
+
+			m.MinimockUpdateNameInspect()
 		}
 	})
 }
@@ -1514,5 +1900,6 @@ func (m *UserGroupMock) minimockDone() bool {
 		m.MinimockDeleteCascadeDone() &&
 		m.MinimockGetByIDDone() &&
 		m.MinimockInsertDone() &&
-		m.MinimockSelectByAccountIDDone()
+		m.MinimockSelectByAccountIDDone() &&
+		m.MinimockUpdateNameDone()
 }

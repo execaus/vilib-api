@@ -3,6 +3,7 @@ package repository_test
 import (
 	"testing"
 	"vilib-api/internal/domain"
+	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 	"vilib-api/testutil"
 
@@ -172,5 +173,58 @@ func TestRepository_UserGroupDeleteCascade_EmptyGroup_ReturnsNoIDs(t *testing.T)
 
 		_, err = r.UserGroup.GetByID(t.Context(), group.ID)
 		require.ErrorIs(t, err, repository.ErrNotFound)
+	})
+}
+
+func TestRepository_UserGroupUpdateName_Success(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		account, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		require.NoError(t, err)
+
+		group, err := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		require.NoError(t, err)
+
+		newName := f.Beer().Name()
+
+		updated, err := r.UserGroup.UpdateName(t.Context(), group.ID, newName)
+		require.NoError(t, err)
+		require.Equal(t, group.ID, updated.ID)
+		require.Equal(t, newName, updated.Name)
+		require.Equal(t, account.ID, updated.AccountID)
+
+		groups, err := r.UserGroup.GetByID(t.Context(), group.ID)
+		require.NoError(t, err)
+		require.Equal(t, newName, groups[0].Name)
+	})
+}
+
+func TestRepository_UserGroupUpdateName_NotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		_, err := r.UserGroup.UpdateName(t.Context(), uuid.New(), f.Beer().Name())
+
+		require.ErrorIs(t, err, repository.ErrNotFound)
+	})
+}
+
+func TestRepository_UserGroupUpdateName_DuplicateNameReturnsError(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		account, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		require.NoError(t, err)
+
+		existing, err := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		require.NoError(t, err)
+
+		group, err := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		require.NoError(t, err)
+
+		_, err = r.UserGroup.UpdateName(t.Context(), group.ID, existing.Name)
+
+		require.ErrorIs(t, dberrors.UserGroupErrors.ErrUniqueUserGroupsNameAccountIdKey, err)
 	})
 }
