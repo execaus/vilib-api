@@ -17,6 +17,7 @@ import (
 //go:generate minimock -i Video -o ./repository_mocks/video_mock.go
 //go:generate minimock -i VideoAsset -o ./repository_mocks/video_asset_mock.go
 //go:generate minimock -i Outbox -o ./repository_mocks/outbox_mock.go
+//go:generate minimock -i PasswordResetToken -o ./repository_mocks/password_reset_token_mock.go
 
 // UserStatus определяет фильтр по активности пользователей при выборке.
 type UserStatus string
@@ -52,6 +53,10 @@ type User interface {
 	// SelectByEmailAndAccountID выбирает строку пользователя с указанным email в указанной
 	// организации — используется переключением организации (§2.4 дизайна эпика Э2).
 	SelectByEmailAndAccountID(ctx context.Context, email string, accountID uuid.UUID) (domain.User, error)
+	// UpdatePasswordHash обновляет хеш пароля одной строки пользователя (§6 дизайна эпика Э2,
+	// поправка О-1: пароль — свойство организации, а не человека). Строка не найдена —
+	// ErrNotFound.
+	UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) (domain.User, error)
 }
 
 type AccountRole interface {
@@ -176,6 +181,24 @@ type VideoAsset interface {
 	DeleteByVideoAndKinds(ctx context.Context, videoID uuid.UUID, kinds []domain.VideoAssetKind) error
 }
 
+// PasswordResetToken — репозиторий одноразовых токенов сброса пароля (§6, §7 дизайна эпика Э2,
+// поправка О-1). В базе хранится только SHA-256 хеш токена.
+type PasswordResetToken interface {
+	// Insert создаёт токен сброса пароля для строки пользователя userID в рамках текущей
+	// транзакции саги.
+	Insert(
+		ctx context.Context,
+		userID uuid.UUID, email, tokenHash string, expiresAt time.Time,
+	) (domain.PasswordResetToken, error)
+	// SelectByHash выбирает токен по хешу — строки не существует → ErrNotFound.
+	SelectByHash(ctx context.Context, tokenHash string) (domain.PasswordResetToken, error)
+	// MarkUsed помечает токен использованным (used_at = now).
+	MarkUsed(ctx context.Context, tokenID uuid.UUID) error
+	// DeleteByEmail удаляет все токены сброса пароля указанного email — вызывается перед
+	// выдачей новых токенов и после успешного сброса пароля.
+	DeleteByEmail(ctx context.Context, email string) error
+}
+
 // Outbox — репозиторий очереди исходящих событий Kafka (transactional outbox, §7.1 эпика).
 type Outbox interface {
 	// Insert кладёт событие в очередь публикации внутри текущей транзакции.
@@ -197,18 +220,20 @@ type Repository struct {
 	Video
 	VideoAsset
 	Outbox
+	PasswordResetToken
 }
 
 func NewRepository(provider *ExecutorProvider) *Repository {
 	return &Repository{
-		Account:     NewAccountRepository(provider),
-		User:        NewUserRepository(provider),
-		AccountRole: NewAccountRoleRepository(provider),
-		UserGroup:   NewUserGroupRepository(provider),
-		GroupMember: NewGroupMemberRepository(provider),
-		GroupRole:   NewGroupRoleRepository(provider),
-		Video:       NewVideoRepository(provider),
-		VideoAsset:  NewVideoAssetRepository(provider),
-		Outbox:      NewOutboxRepository(provider),
+		Account:            NewAccountRepository(provider),
+		User:               NewUserRepository(provider),
+		AccountRole:        NewAccountRoleRepository(provider),
+		UserGroup:          NewUserGroupRepository(provider),
+		GroupMember:        NewGroupMemberRepository(provider),
+		GroupRole:          NewGroupRoleRepository(provider),
+		Video:              NewVideoRepository(provider),
+		VideoAsset:         NewVideoAssetRepository(provider),
+		Outbox:             NewOutboxRepository(provider),
+		PasswordResetToken: NewPasswordResetTokenRepository(provider),
 	}
 }

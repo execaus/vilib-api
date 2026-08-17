@@ -374,3 +374,64 @@ func TestRepository_UserUpdateProfile_NotFound(t *testing.T) {
 		require.ErrorIs(t, err, repository.ErrNotFound)
 	})
 }
+
+// TestRepository_UserUpdatePasswordHash_UpdatesOnlyTargetRow проверяет, что смена хеша пароля
+// (§6 дизайна эпика Э2, поправка О-1) затрагивает только строку targetUserID, а не другие
+// строки того же email.
+func TestRepository_UserUpdatePasswordHash_UpdatesOnlyTargetRow(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		email := f.Person().Contact().Email
+
+		account1, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		require.NoError(t, err)
+		role1, err := r.AccountRole.Insert(t.Context(), account1.ID, f.Beer().Name(), nil, 0, true, false)
+		require.NoError(t, err)
+		user1, err := r.User.Insert(
+			t.Context(),
+			f.Person().FirstName(),
+			f.Person().LastName(),
+			f.Hash().MD5(),
+			email,
+			role1.ID,
+		)
+		require.NoError(t, err)
+
+		account2, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		require.NoError(t, err)
+		role2, err := r.AccountRole.Insert(t.Context(), account2.ID, f.Beer().Name(), nil, 0, true, false)
+		require.NoError(t, err)
+		user2, err := r.User.Insert(
+			t.Context(),
+			f.Person().FirstName(),
+			f.Person().LastName(),
+			f.Hash().MD5(),
+			email,
+			role2.ID,
+		)
+		require.NoError(t, err)
+
+		newHash := f.Hash().MD5()
+
+		updated, err := r.User.UpdatePasswordHash(t.Context(), user1.ID, newHash)
+
+		require.NoError(t, err)
+		require.Equal(t, user1.ID, updated.ID)
+		require.Equal(t, newHash, updated.PasswordHash)
+
+		untouched, err := r.User.SelectByID(t.Context(), user2.ID)
+		require.NoError(t, err)
+		require.Equal(t, user2.PasswordHash, untouched[0].PasswordHash)
+	})
+}
+
+func TestRepository_UserUpdatePasswordHash_NotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		_, err := r.User.UpdatePasswordHash(t.Context(), uuid.New(), f.Hash().MD5())
+
+		require.ErrorIs(t, err, repository.ErrNotFound)
+	})
+}

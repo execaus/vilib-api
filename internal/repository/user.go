@@ -234,6 +234,29 @@ func (r *UserRepository) UpdateProfile(
 	return user, nil
 }
 
+// UpdatePasswordHash обновляет хеш пароля одной строки пользователя (§6 дизайна эпика Э2,
+// поправка О-1: пароль — свойство организации, а не человека).
+func (r *UserRepository) UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) (domain.User, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	userDB, err := schema.Users.Update(
+		(&schema.UserSetter{PasswordHash: omit.From(hash)}).UpdateMod(),
+		um.Where(schema.Users.Columns.UserID.EQ(psql.Arg(userID))),
+	).One(ctx, exec)
+	if err != nil {
+		if errors.Is(pgx.ErrNoRows, err) {
+			return domain.User{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+
+	var user domain.User
+	user.FromDB(userDB)
+
+	return user, nil
+}
+
 func (r *UserRepository) Deactivate(ctx context.Context, userID uuid.UUID) error {
 	exec := r.provider.GetExecutor(ctx)
 

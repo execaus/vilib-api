@@ -6,27 +6,29 @@ import (
 )
 
 type RepositoryMock struct {
-	Account     *mock_repository.AccountMock
-	User        *mock_repository.UserMock
-	AccountRole *mock_repository.AccountRoleMock
-	UserGroup   *mock_repository.UserGroupMock
-	GroupRole   *mock_repository.GroupRoleMock
-	Video       *mock_repository.VideoMock
-	VideoAsset  *mock_repository.VideoAssetMock
-	GroupMember *mock_repository.GroupMemberMock
-	Outbox      *mock_repository.OutboxMock
+	Account            *mock_repository.AccountMock
+	User               *mock_repository.UserMock
+	AccountRole        *mock_repository.AccountRoleMock
+	UserGroup          *mock_repository.UserGroupMock
+	GroupRole          *mock_repository.GroupRoleMock
+	Video              *mock_repository.VideoMock
+	VideoAsset         *mock_repository.VideoAssetMock
+	GroupMember        *mock_repository.GroupMemberMock
+	Outbox             *mock_repository.OutboxMock
+	PasswordResetToken *mock_repository.PasswordResetTokenMock
 }
 
 func (r *RepositoryMock) ToRepositories() *repository.Repository {
 	return &repository.Repository{
-		Account:     r.Account,
-		User:        r.User,
-		AccountRole: r.AccountRole,
-		UserGroup:   r.UserGroup,
-		GroupRole:   r.GroupRole,
-		Video:       r.Video,
-		VideoAsset:  r.VideoAsset,
-		GroupMember: r.GroupMember,
-		Outbox:      r.Outbox,
+		Account:            r.Account,
+		User:               r.User,
+		AccountRole:        r.AccountRole,
+		UserGroup:          r.UserGroup,
+		GroupRole:          r.GroupRole,
+		Video:              r.Video,
+		VideoAsset:         r.VideoAsset,
+		GroupMember:        r.GroupMember,
+		Outbox:             r.Outbox,
+		PasswordResetToken: r.PasswordResetToken,
 	}
 }

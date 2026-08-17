@@ -33,15 +33,16 @@ func TestService(
 	}
 
 	r := &RepositoryMock{
-		Account:     mock_repository.NewAccountMock(mc),
-		User:        mock_repository.NewUserMock(mc),
-		AccountRole: mock_repository.NewAccountRoleMock(mc),
-		UserGroup:   mock_repository.NewUserGroupMock(mc),
-		GroupRole:   mock_repository.NewGroupRoleMock(mc),
-		Video:       mock_repository.NewVideoMock(mc),
-		VideoAsset:  mock_repository.NewVideoAssetMock(mc),
-		GroupMember: mock_repository.NewGroupMemberMock(mc),
-		Outbox:      mock_repository.NewOutboxMock(mc),
+		Account:            mock_repository.NewAccountMock(mc),
+		User:               mock_repository.NewUserMock(mc),
+		AccountRole:        mock_repository.NewAccountRoleMock(mc),
+		UserGroup:          mock_repository.NewUserGroupMock(mc),
+		GroupRole:          mock_repository.NewGroupRoleMock(mc),
+		Video:              mock_repository.NewVideoMock(mc),
+		VideoAsset:         mock_repository.NewVideoAssetMock(mc),
+		GroupMember:        mock_repository.NewGroupMemberMock(mc),
+		Outbox:             mock_repository.NewOutboxMock(mc),
+		PasswordResetToken: mock_repository.NewPasswordResetTokenMock(mc),
 	}
 
 	setupMocks(s, r)
