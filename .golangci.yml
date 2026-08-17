@@ -442,6 +442,16 @@ linters:
     rules:
       - source: 'TODO'
         linters: [ godot ]
+      # swag-аннотации (// @Router, // @Success и т.д.) не заканчиваются точкой по формату
+      # инструмента — точка ломает разбор аннотации.
+      - source: '^\s*// @\w+'
+        linters: [ godot ]
+      # pgx.ErrNoRows — proxy-ошибка (github.com/jackc/pgx/v5): её метод Is распознаёт
+      # database/sql.ErrNoRows, которую фактически возвращает bob, только когда pgx.ErrNoRows —
+      # первый аргумент errors.Is. Канонический порядок (err, target), который предлагает
+      # staticcheck, здесь не находит совпадение.
+      - text: 'SA1032'
+        linters: [ staticcheck ]
       - text: 'should have a package comment'
         linters: [ revive ]
       - text: 'exported \S+ \S+ should have comment( \(or a comment on this block\))? or be unexported'
