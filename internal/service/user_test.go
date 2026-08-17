@@ -213,6 +213,70 @@ func TestService_User_GetByID(t *testing.T) {
 	}
 }
 
+// TestService_User_GetByIDs проверяет тонкую обёртку над батч-выборкой пользователей
+// (П-6 контракта Э2: резолв авторов видео).
+func TestService_User_GetByIDs(t *testing.T) {
+	t.Parallel()
+
+	testUserID := uuid.New()
+
+	var errSomeError = errors.New("some error")
+
+	type args struct {
+		ids []uuid.UUID
+	}
+
+	tests := []struct {
+		name       string
+		setupMocks func(*repository_mocks.UserMock)
+		args       args
+		want       []domain.User
+		wantErr    error
+	}{
+		{
+			name: "success",
+			setupMocks: func(repo *repository_mocks.UserMock) {
+				repo.SelectByIDsMock.Expect(minimock.AnyContext, []uuid.UUID{testUserID}).
+					Return([]domain.User{{ID: testUserID}}, nil)
+			},
+			args:    args{[]uuid.UUID{testUserID}},
+			want:    []domain.User{{ID: testUserID}},
+			wantErr: nil,
+		},
+		{
+			name: "repo error",
+			setupMocks: func(repo *repository_mocks.UserMock) {
+				repo.SelectByIDsMock.Expect(minimock.AnyContext, []uuid.UUID{testUserID}).
+					Return(nil, errSomeError)
+			},
+			args:    args{[]uuid.UUID{testUserID}},
+			want:    nil,
+			wantErr: errSomeError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			testutil.TestService(
+				t,
+				func(_ *testutil.ServiceMock, mockRepos *testutil.RepositoryMock) {
+					tt.setupMocks(mockRepos.User)
+				},
+				func(s *service.Service, r *repository.Repository) {
+					srv := service.NewUserService(r.User, s)
+
+					got, err := srv.GetByIDs(t.Context(), tt.args.ids)
+
+					require.Equal(t, tt.want, got)
+					require.Equal(t, tt.wantErr, err)
+				},
+			)
+		})
+	}
+}
+
 func TestService_User_Update(t *testing.T) {
 	t.Parallel()
 

@@ -76,6 +76,9 @@ type User interface {
 	GetByEmail(ctx context.Context, email string) ([]domain.User, error)
 	Update(ctx context.Context, initiatorID, accountID, targetID uuid.UUID, roleID *uuid.UUID) (domain.User, error)
 	GetByID(ctx context.Context, userID ...uuid.UUID) ([]domain.User, error)
+	// GetByIDs батчем выбирает пользователей по списку идентификаторов (П-6 контракта Э2:
+	// резолв авторов видео в списке видео). Отсутствие строки для части id — не ошибка.
+	GetByIDs(ctx context.Context, userID []uuid.UUID) ([]domain.User, error)
 	Deactivate(ctx context.Context, initiatorID, accountID, targetID uuid.UUID) error
 	Reactivate(ctx context.Context, initiatorID, accountID, targetID uuid.UUID) error
 	ListByAccount(
@@ -149,8 +152,12 @@ type Video interface {
 	// CompleteUpload подтверждает загрузку оригинала: проверяет объект в хранилище,
 	// регистрирует ассет-оригинал, переводит видео в очередь на обработку и публикует
 	// событие OriginalUploaded через outbox. Идемпотентна для видео, уже поставленных
-	// в очередь/обрабатываемых/готовых.
-	CompleteUpload(ctx context.Context, accountID, groupID, userID, videoID uuid.UUID) (domain.Video, error)
+	// в очередь/обрабатываемых/готовых. Возвращает карточку того же вида, что и элемент
+	// списка видео — профили и автор объектом (§5.1 контракта Э2, П-6).
+	CompleteUpload(
+		ctx context.Context,
+		accountID, groupID, userID, videoID uuid.UUID,
+	) (domain.VideoListItem, error)
 	// Get выбирает точку доступа к видео по статусу видео и флагу isPreferOriginal (§4.4
 	// дизайна эпика): готовое видео без предпочтения оригинала — HLS-токен на мастер-плейлист,
 	// иначе — преподписанный URL на оригинал. Возвращает ConflictError, если ни один из
@@ -171,7 +178,13 @@ type Video interface {
 	// ManageVideo (аккаунтным или групповым) — иначе остаётся nil даже у видео в статусе
 	// failed (Э1-Т17).
 	GetAll(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) ([]domain.VideoListItem, error)
-	Rename(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID, name string) (domain.Video, error)
+	// Rename переименовывает видео и возвращает карточку того же вида, что и элемент списка
+	// видео — профили и автор объектом (§5.1 контракта Э2, П-6).
+	Rename(
+		ctx context.Context,
+		accountID, groupID, initiatorID, videoID uuid.UUID,
+		name string,
+	) (domain.VideoListItem, error)
 	// Delete проверяет права ManageVideo, удаляет видео в БД и регистрирует best-effort
 	// зачистку его объектов в хранилище после коммита транзакции (Э1-Т21, §7.3 дизайна эпика).
 	Delete(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID) error

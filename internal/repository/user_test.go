@@ -160,6 +160,74 @@ func TestRepository_UserSelectByID_NilNotFound(t *testing.T) {
 	})
 }
 
+func TestRepository_UserSelectByIDs_Success(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		const userCount = 7
+
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
+
+		generatedUsersID := make([]uuid.UUID, userCount)
+		for i := range userCount {
+			user, _ := r.User.Insert(
+				t.Context(),
+				f.Person().FirstName(),
+				f.Person().LastName(),
+				f.Hash().MD5(),
+				f.Person().Contact().Email,
+				role.ID,
+			)
+			generatedUsersID[i] = user.ID
+		}
+
+		requestedIDs := generatedUsersID[:5]
+		users, err := r.User.SelectByIDs(t.Context(), requestedIDs)
+
+		require.NoError(t, err)
+		require.Len(t, users, 5)
+
+		for _, user := range users {
+			require.Contains(t, requestedIDs, user.ID)
+		}
+	})
+}
+
+// TestRepository_UserSelectByIDs_MissingIDsSkipped проверяет, что несуществующие
+// идентификаторы просто отсутствуют в результате — это не ошибка (батч-выборка авторов
+// видео, П-6 контракта Э2), в отличие от SelectByID.
+func TestRepository_UserSelectByIDs_MissingIDsSkipped(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
+
+		user, _ := r.User.Insert(
+			t.Context(), f.Person().FirstName(), f.Person().LastName(), f.Hash().MD5(),
+			f.Person().Contact().Email, role.ID,
+		)
+
+		users, err := r.User.SelectByIDs(t.Context(), []uuid.UUID{user.ID, uuid.New()})
+
+		require.NoError(t, err)
+		require.Len(t, users, 1)
+		require.Equal(t, user.ID, users[0].ID)
+	})
+}
+
+func TestRepository_UserSelectByIDs_EmptyInput(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
+		users, err := r.User.SelectByIDs(t.Context(), nil)
+
+		require.NoError(t, err)
+		require.Empty(t, users)
+	})
+}
+
 func TestRepository_UserSelectByEmailAndAccountID_Success(t *testing.T) {
 	t.Parallel()
 

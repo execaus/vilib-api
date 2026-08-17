@@ -37,6 +37,10 @@ type User interface {
 	SelectByEmail(ctx context.Context, email string) ([]domain.User, error)
 	Insert(ctx context.Context, name, surname, hash, email string, roleID uuid.UUID) (domain.User, error)
 	SelectByID(ctx context.Context, usersID ...uuid.UUID) ([]domain.User, error)
+	// SelectByIDs батчем выбирает пользователей по списку идентификаторов одним запросом
+	// (П-6 контракта Э2: резолв авторов видео в списке). Отсутствие строки для части id —
+	// не ошибка, такие идентификаторы просто не попадают в результат.
+	SelectByIDs(ctx context.Context, usersID []uuid.UUID) ([]domain.User, error)
 	UpdateRole(ctx context.Context, userID, roleID uuid.UUID) (domain.User, error)
 	Deactivate(ctx context.Context, userID uuid.UUID) error
 	Reactivate(ctx context.Context, userID uuid.UUID) error

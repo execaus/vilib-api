@@ -137,6 +137,38 @@ func (r *UserRepository) SelectByID(ctx context.Context, usersID ...uuid.UUID) (
 	return users, nil
 }
 
+// SelectByIDs батчем выбирает пользователей по списку идентификаторов одним запросом (П-6
+// контракта Э2: резолв авторов видео в списке). В отличие от SelectByID отсутствие строки для
+// части id — не ошибка: такие идентификаторы просто не попадают в результат. Пустой список не
+// порождает запроса к БД.
+func (r *UserRepository) SelectByIDs(ctx context.Context, usersID []uuid.UUID) ([]domain.User, error) {
+	if len(usersID) == 0 {
+		return nil, nil
+	}
+
+	exec := r.provider.GetExecutor(ctx)
+
+	idArgs := make([]bob.Expression, len(usersID))
+	for i, id := range usersID {
+		idArgs[i] = psql.Arg(id)
+	}
+
+	usersDB, err := schema.Users.Query(
+		sm.Where(schema.Users.Columns.UserID.In(idArgs...)),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	users := make([]domain.User, len(usersDB))
+	for i, user := range usersDB {
+		users[i].FromDB(user)
+	}
+
+	return users, nil
+}
+
 func (r *UserRepository) UpdateRole(ctx context.Context, userID, roleID uuid.UUID) (domain.User, error) {
 	exec := r.provider.GetExecutor(ctx)
 

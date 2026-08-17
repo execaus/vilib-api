@@ -118,6 +118,18 @@ func (s *UserService) GetByID(ctx context.Context, userID ...uuid.UUID) ([]domai
 	return users, nil
 }
 
+// GetByIDs батчем выбирает пользователей по списку идентификаторов (П-6 контракта Э2: резолв
+// авторов видео в списке). Отсутствие строки для части id — не ошибка.
+func (s *UserService) GetByIDs(ctx context.Context, userID []uuid.UUID) ([]domain.User, error) {
+	users, err := s.repo.SelectByIDs(ctx, userID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return users, nil
+}
+
 func (s *UserService) Deactivate(
 	ctx context.Context,
 	initiatorID, accountID, targetID uuid.UUID,
