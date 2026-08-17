@@ -1735,6 +1735,112 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/api/v1/auth/switch-account": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Выпускает новый токен с текущей организацией сессии, переключённой на\nорганизацию, где у пользователя есть активная строка (§2.4 дизайна эпика Э2)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Переключение организации",
+                "parameters": [
+                    {
+                        "description": "Организация для переключения",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.SwitchAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.SwitchAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/me": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает агрегированный контекст текущего пользователя: организацию, роль,\nпризнак владельца и членства в группах (§2.3 дизайна эпика Э2)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "profile"
+                ],
+                "summary": "Профиль текущего пользователя",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.MeResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1748,6 +1854,17 @@ const docTemplate = `{
                 "DefaultPermissionMask"
             ]
         },
+        "dto.AccountBrief": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.AccountRole": {
             "type": "object",
             "properties": {
@@ -1755,6 +1872,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "is_default": {
+                    "type": "boolean"
+                },
+                "is_system": {
+                    "description": "IsSystem — признак системной роли (например, владелец аккаунта), созданной автоматически\nи недоступной для удаления/переименования (§3.4 дизайна эпика Э2).",
                     "type": "boolean"
                 },
                 "name": {
@@ -2049,6 +2170,72 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.MeResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "$ref": "#/definitions/dto.AccountBrief"
+                },
+                "accounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AccountBrief"
+                    }
+                },
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.MyGroup"
+                    }
+                },
+                "is_owner": {
+                    "type": "boolean"
+                },
+                "role": {
+                    "$ref": "#/definitions/dto.AccountRole"
+                },
+                "user": {
+                    "$ref": "#/definitions/dto.MeUser"
+                }
+            }
+        },
+        "dto.MeUser": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "surname": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.MyGroup": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "permission_mask": {
+                    "$ref": "#/definitions/domain.PermissionMask"
+                },
+                "role_id": {
+                    "type": "string"
+                },
+                "role_name": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.RegisterRequest": {
             "type": "object",
             "required": [
@@ -2094,6 +2281,25 @@ const docTemplate = `{
             "properties": {
                 "video": {
                     "$ref": "#/definitions/dto.Video"
+                }
+            }
+        },
+        "dto.SwitchAccountRequest": {
+            "type": "object",
+            "required": [
+                "account_id"
+            ],
+            "properties": {
+                "account_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.SwitchAccountResponse": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
                 }
             }
         },

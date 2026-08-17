@@ -7,11 +7,23 @@ definitions:
     type: integer
     x-enum-varnames:
     - DefaultPermissionMask
+  dto.AccountBrief:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
   dto.AccountRole:
     properties:
       id:
         type: string
       is_default:
+        type: boolean
+      is_system:
+        description: |-
+          IsSystem — признак системной роли (например, владелец аккаунта), созданной автоматически
+          и недоступной для удаления/переименования (§3.4 дизайна эпика Э2).
         type: boolean
       name:
         type: string
@@ -204,6 +216,49 @@ definitions:
       token:
         type: string
     type: object
+  dto.MeResponse:
+    properties:
+      account:
+        $ref: '#/definitions/dto.AccountBrief'
+      accounts:
+        items:
+          $ref: '#/definitions/dto.AccountBrief'
+        type: array
+      groups:
+        items:
+          $ref: '#/definitions/dto.MyGroup'
+        type: array
+      is_owner:
+        type: boolean
+      role:
+        $ref: '#/definitions/dto.AccountRole'
+      user:
+        $ref: '#/definitions/dto.MeUser'
+    type: object
+  dto.MeUser:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      surname:
+        type: string
+    type: object
+  dto.MyGroup:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      permission_mask:
+        $ref: '#/definitions/domain.PermissionMask'
+      role_id:
+        type: string
+      role_name:
+        type: string
+    type: object
   dto.RegisterRequest:
     properties:
       email:
@@ -237,6 +292,18 @@ definitions:
     properties:
       video:
         $ref: '#/definitions/dto.Video'
+    type: object
+  dto.SwitchAccountRequest:
+    properties:
+      account_id:
+        type: string
+    required:
+    - account_id
+    type: object
+  dto.SwitchAccountResponse:
+    properties:
+      token:
+        type: string
     type: object
   dto.UpdateUserRequest:
     properties:
@@ -1503,6 +1570,77 @@ paths:
       summary: Регистрация нового пользователя
       tags:
       - auth
+  /api/v1/auth/switch-account:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Выпускает новый токен с текущей организацией сессии, переключённой на
+        организацию, где у пользователя есть активная строка (§2.4 дизайна эпика Э2)
+      parameters:
+      - description: Организация для переключения
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.SwitchAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SwitchAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
+      summary: Переключение организации
+      tags:
+      - auth
+  /api/v1/me:
+    get:
+      description: |-
+        Возвращает агрегированный контекст текущего пользователя: организацию, роль,
+        признак владельца и членства в группах (§2.3 дизайна эпика Э2)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.MeResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
+      summary: Профиль текущего пользователя
+      tags:
+      - profile
 securityDefinitions:
   BearerAuth:
     in: header
