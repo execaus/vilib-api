@@ -108,6 +108,9 @@ type UserGroup interface {
 	// GetByID выбирает группы по идентификаторам без проверки прав — батч-выборка для
 	// внутренней сборки (например, профиля пользователя, §2.3 дизайна эпика Э2).
 	GetByID(ctx context.Context, groupsID ...uuid.UUID) ([]domain.UserGroup, error)
+	// Get возвращает карточку одной группы (§3.2 дизайна эпика Э2, П-3): право — любой
+	// участник аккаунта (IsHasUser, как список групп); группа не в аккаунте — ErrNotFound.
+	Get(ctx context.Context, initiatorID, accountID, groupID uuid.UUID) (domain.UserGroup, error)
 }
 
 type GroupMember interface {
@@ -120,6 +123,17 @@ type GroupMember interface {
 	// GetByUserID выбирает все членства пользователя во всех группах без проверки прав —
 	// используется сборкой профиля пользователя (§2.3 дизайна эпика Э2).
 	GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain.GroupMember, error)
+	// ListByGroup возвращает участников группы вместе с данными пользователя и его роли в
+	// группе (§3.2 дизайна эпика Э2, П-3). Право — IsCheckGroupAction(ManageGroups,
+	// GroupPermissionManageMembers).
+	ListByGroup(ctx context.Context, accountID, initiatorID, groupID uuid.UUID) ([]domain.GroupMemberDetails, error)
+	// UpdateRole меняет роль участника группы (§3.3 дизайна эпика Э2, П-4). Право —
+	// IsCheckGroupAction(ManageGroups, GroupPermissionManageMembers); роль должна принадлежать
+	// accountID (иначе ErrNotFound); участник не найден (0 строк) — ErrNotFound.
+	UpdateRole(
+		ctx context.Context,
+		accountID, initiatorID, groupID, userID, roleID uuid.UUID,
+	) (domain.GroupMemberDetails, error)
 }
 
 type GroupRole interface {
@@ -231,6 +245,16 @@ type Access interface {
 	IsCheckAccountAction(
 		ctx context.Context,
 		accountID, initiatorID uuid.UUID, action domain.PermissionFlag,
+	) error
+	// IsCheckGroupAction реализует общую OR-логику доступа к операциям над группой (§3.1
+	// дизайна эпика Э2): группа должна принадлежать accountID (иначе ErrNotFound); право
+	// уровня аккаунта accountAction (в т.ч. владелец) разрешает без проверки членства в
+	// группе; иначе инициатор должен состоять в группе и иметь Owner/groupAction в маске
+	// своей групповой роли — отсутствие членства даёт ErrForbidden, а не 500.
+	IsCheckGroupAction(
+		ctx context.Context,
+		accountID, initiatorID, groupID uuid.UUID,
+		accountAction, groupAction domain.PermissionFlag,
 	) error
 }
 

@@ -26,6 +26,13 @@ type AccessMock struct {
 	afterIsCheckAccountActionCounter  uint64
 	beforeIsCheckAccountActionCounter uint64
 	IsCheckAccountActionMock          mAccessMockIsCheckAccountAction
+
+	funcIsCheckGroupAction          func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, accountAction domain.PermissionFlag, groupAction domain.PermissionFlag) (err error)
+	funcIsCheckGroupActionOrigin    string
+	inspectFuncIsCheckGroupAction   func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, accountAction domain.PermissionFlag, groupAction domain.PermissionFlag)
+	afterIsCheckGroupActionCounter  uint64
+	beforeIsCheckGroupActionCounter uint64
+	IsCheckGroupActionMock          mAccessMockIsCheckGroupAction
 }
 
 // NewAccessMock returns a mock for mm_service.Access
@@ -38,6 +45,9 @@ func NewAccessMock(t minimock.Tester) *AccessMock {
 
 	m.IsCheckAccountActionMock = mAccessMockIsCheckAccountAction{mock: m}
 	m.IsCheckAccountActionMock.callArgs = []*AccessMockIsCheckAccountActionParams{}
+
+	m.IsCheckGroupActionMock = mAccessMockIsCheckGroupAction{mock: m}
+	m.IsCheckGroupActionMock.callArgs = []*AccessMockIsCheckGroupActionParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -448,11 +458,479 @@ func (m *AccessMock) MinimockIsCheckAccountActionInspect() {
 	}
 }
 
+type mAccessMockIsCheckGroupAction struct {
+	optional           bool
+	mock               *AccessMock
+	defaultExpectation *AccessMockIsCheckGroupActionExpectation
+	expectations       []*AccessMockIsCheckGroupActionExpectation
+
+	callArgs []*AccessMockIsCheckGroupActionParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AccessMockIsCheckGroupActionExpectation specifies expectation struct of the Access.IsCheckGroupAction
+type AccessMockIsCheckGroupActionExpectation struct {
+	mock               *AccessMock
+	params             *AccessMockIsCheckGroupActionParams
+	paramPtrs          *AccessMockIsCheckGroupActionParamPtrs
+	expectationOrigins AccessMockIsCheckGroupActionExpectationOrigins
+	results            *AccessMockIsCheckGroupActionResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AccessMockIsCheckGroupActionParams contains parameters of the Access.IsCheckGroupAction
+type AccessMockIsCheckGroupActionParams struct {
+	ctx           context.Context
+	accountID     uuid.UUID
+	initiatorID   uuid.UUID
+	groupID       uuid.UUID
+	accountAction domain.PermissionFlag
+	groupAction   domain.PermissionFlag
+}
+
+// AccessMockIsCheckGroupActionParamPtrs contains pointers to parameters of the Access.IsCheckGroupAction
+type AccessMockIsCheckGroupActionParamPtrs struct {
+	ctx           *context.Context
+	accountID     *uuid.UUID
+	initiatorID   *uuid.UUID
+	groupID       *uuid.UUID
+	accountAction *domain.PermissionFlag
+	groupAction   *domain.PermissionFlag
+}
+
+// AccessMockIsCheckGroupActionResults contains results of the Access.IsCheckGroupAction
+type AccessMockIsCheckGroupActionResults struct {
+	err error
+}
+
+// AccessMockIsCheckGroupActionOrigins contains origins of expectations of the Access.IsCheckGroupAction
+type AccessMockIsCheckGroupActionExpectationOrigins struct {
+	origin              string
+	originCtx           string
+	originAccountID     string
+	originInitiatorID   string
+	originGroupID       string
+	originAccountAction string
+	originGroupAction   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) Optional() *mAccessMockIsCheckGroupAction {
+	mmIsCheckGroupAction.optional = true
+	return mmIsCheckGroupAction
+}
+
+// Expect sets up expected params for Access.IsCheckGroupAction
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) Expect(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, accountAction domain.PermissionFlag, groupAction domain.PermissionFlag) *mAccessMockIsCheckGroupAction {
+	if mmIsCheckGroupAction.mock.funcIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Set")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation == nil {
+		mmIsCheckGroupAction.defaultExpectation = &AccessMockIsCheckGroupActionExpectation{}
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.paramPtrs != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by ExpectParams functions")
+	}
+
+	mmIsCheckGroupAction.defaultExpectation.params = &AccessMockIsCheckGroupActionParams{ctx, accountID, initiatorID, groupID, accountAction, groupAction}
+	mmIsCheckGroupAction.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmIsCheckGroupAction.expectations {
+		if minimock.Equal(e.params, mmIsCheckGroupAction.defaultExpectation.params) {
+			mmIsCheckGroupAction.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmIsCheckGroupAction.defaultExpectation.params)
+		}
+	}
+
+	return mmIsCheckGroupAction
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Access.IsCheckGroupAction
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) ExpectCtxParam1(ctx context.Context) *mAccessMockIsCheckGroupAction {
+	if mmIsCheckGroupAction.mock.funcIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Set")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation == nil {
+		mmIsCheckGroupAction.defaultExpectation = &AccessMockIsCheckGroupActionExpectation{}
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.params != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Expect")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.paramPtrs == nil {
+		mmIsCheckGroupAction.defaultExpectation.paramPtrs = &AccessMockIsCheckGroupActionParamPtrs{}
+	}
+	mmIsCheckGroupAction.defaultExpectation.paramPtrs.ctx = &ctx
+	mmIsCheckGroupAction.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmIsCheckGroupAction
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Access.IsCheckGroupAction
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) ExpectAccountIDParam2(accountID uuid.UUID) *mAccessMockIsCheckGroupAction {
+	if mmIsCheckGroupAction.mock.funcIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Set")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation == nil {
+		mmIsCheckGroupAction.defaultExpectation = &AccessMockIsCheckGroupActionExpectation{}
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.params != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Expect")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.paramPtrs == nil {
+		mmIsCheckGroupAction.defaultExpectation.paramPtrs = &AccessMockIsCheckGroupActionParamPtrs{}
+	}
+	mmIsCheckGroupAction.defaultExpectation.paramPtrs.accountID = &accountID
+	mmIsCheckGroupAction.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmIsCheckGroupAction
+}
+
+// ExpectInitiatorIDParam3 sets up expected param initiatorID for Access.IsCheckGroupAction
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) ExpectInitiatorIDParam3(initiatorID uuid.UUID) *mAccessMockIsCheckGroupAction {
+	if mmIsCheckGroupAction.mock.funcIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Set")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation == nil {
+		mmIsCheckGroupAction.defaultExpectation = &AccessMockIsCheckGroupActionExpectation{}
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.params != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Expect")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.paramPtrs == nil {
+		mmIsCheckGroupAction.defaultExpectation.paramPtrs = &AccessMockIsCheckGroupActionParamPtrs{}
+	}
+	mmIsCheckGroupAction.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmIsCheckGroupAction.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmIsCheckGroupAction
+}
+
+// ExpectGroupIDParam4 sets up expected param groupID for Access.IsCheckGroupAction
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) ExpectGroupIDParam4(groupID uuid.UUID) *mAccessMockIsCheckGroupAction {
+	if mmIsCheckGroupAction.mock.funcIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Set")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation == nil {
+		mmIsCheckGroupAction.defaultExpectation = &AccessMockIsCheckGroupActionExpectation{}
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.params != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Expect")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.paramPtrs == nil {
+		mmIsCheckGroupAction.defaultExpectation.paramPtrs = &AccessMockIsCheckGroupActionParamPtrs{}
+	}
+	mmIsCheckGroupAction.defaultExpectation.paramPtrs.groupID = &groupID
+	mmIsCheckGroupAction.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmIsCheckGroupAction
+}
+
+// ExpectAccountActionParam5 sets up expected param accountAction for Access.IsCheckGroupAction
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) ExpectAccountActionParam5(accountAction domain.PermissionFlag) *mAccessMockIsCheckGroupAction {
+	if mmIsCheckGroupAction.mock.funcIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Set")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation == nil {
+		mmIsCheckGroupAction.defaultExpectation = &AccessMockIsCheckGroupActionExpectation{}
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.params != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Expect")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.paramPtrs == nil {
+		mmIsCheckGroupAction.defaultExpectation.paramPtrs = &AccessMockIsCheckGroupActionParamPtrs{}
+	}
+	mmIsCheckGroupAction.defaultExpectation.paramPtrs.accountAction = &accountAction
+	mmIsCheckGroupAction.defaultExpectation.expectationOrigins.originAccountAction = minimock.CallerInfo(1)
+
+	return mmIsCheckGroupAction
+}
+
+// ExpectGroupActionParam6 sets up expected param groupAction for Access.IsCheckGroupAction
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) ExpectGroupActionParam6(groupAction domain.PermissionFlag) *mAccessMockIsCheckGroupAction {
+	if mmIsCheckGroupAction.mock.funcIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Set")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation == nil {
+		mmIsCheckGroupAction.defaultExpectation = &AccessMockIsCheckGroupActionExpectation{}
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.params != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Expect")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation.paramPtrs == nil {
+		mmIsCheckGroupAction.defaultExpectation.paramPtrs = &AccessMockIsCheckGroupActionParamPtrs{}
+	}
+	mmIsCheckGroupAction.defaultExpectation.paramPtrs.groupAction = &groupAction
+	mmIsCheckGroupAction.defaultExpectation.expectationOrigins.originGroupAction = minimock.CallerInfo(1)
+
+	return mmIsCheckGroupAction
+}
+
+// Inspect accepts an inspector function that has same arguments as the Access.IsCheckGroupAction
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) Inspect(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, accountAction domain.PermissionFlag, groupAction domain.PermissionFlag)) *mAccessMockIsCheckGroupAction {
+	if mmIsCheckGroupAction.mock.inspectFuncIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("Inspect function is already set for AccessMock.IsCheckGroupAction")
+	}
+
+	mmIsCheckGroupAction.mock.inspectFuncIsCheckGroupAction = f
+
+	return mmIsCheckGroupAction
+}
+
+// Return sets up results that will be returned by Access.IsCheckGroupAction
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) Return(err error) *AccessMock {
+	if mmIsCheckGroupAction.mock.funcIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Set")
+	}
+
+	if mmIsCheckGroupAction.defaultExpectation == nil {
+		mmIsCheckGroupAction.defaultExpectation = &AccessMockIsCheckGroupActionExpectation{mock: mmIsCheckGroupAction.mock}
+	}
+	mmIsCheckGroupAction.defaultExpectation.results = &AccessMockIsCheckGroupActionResults{err}
+	mmIsCheckGroupAction.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmIsCheckGroupAction.mock
+}
+
+// Set uses given function f to mock the Access.IsCheckGroupAction method
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) Set(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, accountAction domain.PermissionFlag, groupAction domain.PermissionFlag) (err error)) *AccessMock {
+	if mmIsCheckGroupAction.defaultExpectation != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("Default expectation is already set for the Access.IsCheckGroupAction method")
+	}
+
+	if len(mmIsCheckGroupAction.expectations) > 0 {
+		mmIsCheckGroupAction.mock.t.Fatalf("Some expectations are already set for the Access.IsCheckGroupAction method")
+	}
+
+	mmIsCheckGroupAction.mock.funcIsCheckGroupAction = f
+	mmIsCheckGroupAction.mock.funcIsCheckGroupActionOrigin = minimock.CallerInfo(1)
+	return mmIsCheckGroupAction.mock
+}
+
+// When sets expectation for the Access.IsCheckGroupAction which will trigger the result defined by the following
+// Then helper
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) When(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, accountAction domain.PermissionFlag, groupAction domain.PermissionFlag) *AccessMockIsCheckGroupActionExpectation {
+	if mmIsCheckGroupAction.mock.funcIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.mock.t.Fatalf("AccessMock.IsCheckGroupAction mock is already set by Set")
+	}
+
+	expectation := &AccessMockIsCheckGroupActionExpectation{
+		mock:               mmIsCheckGroupAction.mock,
+		params:             &AccessMockIsCheckGroupActionParams{ctx, accountID, initiatorID, groupID, accountAction, groupAction},
+		expectationOrigins: AccessMockIsCheckGroupActionExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmIsCheckGroupAction.expectations = append(mmIsCheckGroupAction.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Access.IsCheckGroupAction return parameters for the expectation previously defined by the When method
+func (e *AccessMockIsCheckGroupActionExpectation) Then(err error) *AccessMock {
+	e.results = &AccessMockIsCheckGroupActionResults{err}
+	return e.mock
+}
+
+// Times sets number of times Access.IsCheckGroupAction should be invoked
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) Times(n uint64) *mAccessMockIsCheckGroupAction {
+	if n == 0 {
+		mmIsCheckGroupAction.mock.t.Fatalf("Times of AccessMock.IsCheckGroupAction mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmIsCheckGroupAction.expectedInvocations, n)
+	mmIsCheckGroupAction.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmIsCheckGroupAction
+}
+
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) invocationsDone() bool {
+	if len(mmIsCheckGroupAction.expectations) == 0 && mmIsCheckGroupAction.defaultExpectation == nil && mmIsCheckGroupAction.mock.funcIsCheckGroupAction == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmIsCheckGroupAction.mock.afterIsCheckGroupActionCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmIsCheckGroupAction.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// IsCheckGroupAction implements mm_service.Access
+func (mmIsCheckGroupAction *AccessMock) IsCheckGroupAction(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID, accountAction domain.PermissionFlag, groupAction domain.PermissionFlag) (err error) {
+	mm_atomic.AddUint64(&mmIsCheckGroupAction.beforeIsCheckGroupActionCounter, 1)
+	defer mm_atomic.AddUint64(&mmIsCheckGroupAction.afterIsCheckGroupActionCounter, 1)
+
+	mmIsCheckGroupAction.t.Helper()
+
+	if mmIsCheckGroupAction.inspectFuncIsCheckGroupAction != nil {
+		mmIsCheckGroupAction.inspectFuncIsCheckGroupAction(ctx, accountID, initiatorID, groupID, accountAction, groupAction)
+	}
+
+	mm_params := AccessMockIsCheckGroupActionParams{ctx, accountID, initiatorID, groupID, accountAction, groupAction}
+
+	// Record call args
+	mmIsCheckGroupAction.IsCheckGroupActionMock.mutex.Lock()
+	mmIsCheckGroupAction.IsCheckGroupActionMock.callArgs = append(mmIsCheckGroupAction.IsCheckGroupActionMock.callArgs, &mm_params)
+	mmIsCheckGroupAction.IsCheckGroupActionMock.mutex.Unlock()
+
+	for _, e := range mmIsCheckGroupAction.IsCheckGroupActionMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.Counter, 1)
+		mm_want := mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.params
+		mm_want_ptrs := mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.paramPtrs
+
+		mm_got := AccessMockIsCheckGroupActionParams{ctx, accountID, initiatorID, groupID, accountAction, groupAction}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmIsCheckGroupAction.t.Errorf("AccessMock.IsCheckGroupAction got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmIsCheckGroupAction.t.Errorf("AccessMock.IsCheckGroupAction got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmIsCheckGroupAction.t.Errorf("AccessMock.IsCheckGroupAction got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmIsCheckGroupAction.t.Errorf("AccessMock.IsCheckGroupAction got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+			if mm_want_ptrs.accountAction != nil && !minimock.Equal(*mm_want_ptrs.accountAction, mm_got.accountAction) {
+				mmIsCheckGroupAction.t.Errorf("AccessMock.IsCheckGroupAction got unexpected parameter accountAction, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.expectationOrigins.originAccountAction, *mm_want_ptrs.accountAction, mm_got.accountAction, minimock.Diff(*mm_want_ptrs.accountAction, mm_got.accountAction))
+			}
+
+			if mm_want_ptrs.groupAction != nil && !minimock.Equal(*mm_want_ptrs.groupAction, mm_got.groupAction) {
+				mmIsCheckGroupAction.t.Errorf("AccessMock.IsCheckGroupAction got unexpected parameter groupAction, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.expectationOrigins.originGroupAction, *mm_want_ptrs.groupAction, mm_got.groupAction, minimock.Diff(*mm_want_ptrs.groupAction, mm_got.groupAction))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmIsCheckGroupAction.t.Errorf("AccessMock.IsCheckGroupAction got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmIsCheckGroupAction.IsCheckGroupActionMock.defaultExpectation.results
+		if mm_results == nil {
+			mmIsCheckGroupAction.t.Fatal("No results are set for the AccessMock.IsCheckGroupAction")
+		}
+		return (*mm_results).err
+	}
+	if mmIsCheckGroupAction.funcIsCheckGroupAction != nil {
+		return mmIsCheckGroupAction.funcIsCheckGroupAction(ctx, accountID, initiatorID, groupID, accountAction, groupAction)
+	}
+	mmIsCheckGroupAction.t.Fatalf("Unexpected call to AccessMock.IsCheckGroupAction. %v %v %v %v %v %v", ctx, accountID, initiatorID, groupID, accountAction, groupAction)
+	return
+}
+
+// IsCheckGroupActionAfterCounter returns a count of finished AccessMock.IsCheckGroupAction invocations
+func (mmIsCheckGroupAction *AccessMock) IsCheckGroupActionAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIsCheckGroupAction.afterIsCheckGroupActionCounter)
+}
+
+// IsCheckGroupActionBeforeCounter returns a count of AccessMock.IsCheckGroupAction invocations
+func (mmIsCheckGroupAction *AccessMock) IsCheckGroupActionBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmIsCheckGroupAction.beforeIsCheckGroupActionCounter)
+}
+
+// Calls returns a list of arguments used in each call to AccessMock.IsCheckGroupAction.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmIsCheckGroupAction *mAccessMockIsCheckGroupAction) Calls() []*AccessMockIsCheckGroupActionParams {
+	mmIsCheckGroupAction.mutex.RLock()
+
+	argCopy := make([]*AccessMockIsCheckGroupActionParams, len(mmIsCheckGroupAction.callArgs))
+	copy(argCopy, mmIsCheckGroupAction.callArgs)
+
+	mmIsCheckGroupAction.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockIsCheckGroupActionDone returns true if the count of the IsCheckGroupAction invocations corresponds
+// the number of defined expectations
+func (m *AccessMock) MinimockIsCheckGroupActionDone() bool {
+	if m.IsCheckGroupActionMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.IsCheckGroupActionMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.IsCheckGroupActionMock.invocationsDone()
+}
+
+// MinimockIsCheckGroupActionInspect logs each unmet expectation
+func (m *AccessMock) MinimockIsCheckGroupActionInspect() {
+	for _, e := range m.IsCheckGroupActionMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AccessMock.IsCheckGroupAction at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterIsCheckGroupActionCounter := mm_atomic.LoadUint64(&m.afterIsCheckGroupActionCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.IsCheckGroupActionMock.defaultExpectation != nil && afterIsCheckGroupActionCounter < 1 {
+		if m.IsCheckGroupActionMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AccessMock.IsCheckGroupAction at\n%s", m.IsCheckGroupActionMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AccessMock.IsCheckGroupAction at\n%s with params: %#v", m.IsCheckGroupActionMock.defaultExpectation.expectationOrigins.origin, *m.IsCheckGroupActionMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcIsCheckGroupAction != nil && afterIsCheckGroupActionCounter < 1 {
+		m.t.Errorf("Expected call to AccessMock.IsCheckGroupAction at\n%s", m.funcIsCheckGroupActionOrigin)
+	}
+
+	if !m.IsCheckGroupActionMock.invocationsDone() && afterIsCheckGroupActionCounter > 0 {
+		m.t.Errorf("Expected %d calls to AccessMock.IsCheckGroupAction at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.IsCheckGroupActionMock.expectedInvocations), m.IsCheckGroupActionMock.expectedInvocationsOrigin, afterIsCheckGroupActionCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *AccessMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
 			m.MinimockIsCheckAccountActionInspect()
+
+			m.MinimockIsCheckGroupActionInspect()
 		}
 	})
 }
@@ -476,5 +954,6 @@ func (m *AccessMock) MinimockWait(timeout mm_time.Duration) {
 func (m *AccessMock) minimockDone() bool {
 	done := true
 	return done &&
-		m.MinimockIsCheckAccountActionDone()
+		m.MinimockIsCheckAccountActionDone() &&
+		m.MinimockIsCheckGroupActionDone()
 }
