@@ -111,6 +111,35 @@ func (s *UserGroupService) GetByID(ctx context.Context, groupsID ...uuid.UUID) (
 	return groups, nil
 }
 
+// Get возвращает карточку одной группы (§3.2 дизайна эпика Э2, П-3). Право — любой участник
+// аккаунта (IsHasUser, как список групп); группа не в аккаунте — ErrNotFound.
+func (s *UserGroupService) Get(
+	ctx context.Context,
+	initiatorID, accountID, groupID uuid.UUID,
+) (domain.UserGroup, error) {
+	// Проверка, что инициатор является участником аккаунта
+	if err := s.srv.Account.IsHasUser(ctx, accountID, initiatorID); err != nil {
+		zap.L().Error(err.Error())
+		return domain.UserGroup{}, err
+	}
+
+	groups, err := s.repo.GetByID(ctx, groupID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			zap.L().Warn(err.Error())
+			return domain.UserGroup{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.UserGroup{}, err
+	}
+
+	if groups[0].AccountID != accountID {
+		return domain.UserGroup{}, ErrNotFound
+	}
+
+	return groups[0], nil
+}
+
 func (s *UserGroupService) Delete(
 	ctx context.Context,
 	initiatorID, accountID, groupID uuid.UUID,
@@ -139,27 +168,22 @@ func (s *UserGroupService) Delete(
 	return nil
 }
 
+// isAccessAddMembers проверяет право на добавление участников общей OR-логикой
+// (Access.IsCheckGroupAction, §3.1 дизайна эпика Э2: право уровня аккаунта ManageGroups или
+// Owner/ManageMembers в самой группе), а затем — что все добавляемые пользователи состоят в
+// том же аккаунте, что и группа.
 func (s *UserGroupService) isAccessAddMembers(
 	ctx context.Context,
 	accountID, initiatorID, groupID uuid.UUID,
 	targetsID ...uuid.UUID,
 ) error {
-	// Находится ли инициатор в той же организации
-	err := s.srv.Account.IsHasUser(ctx, accountID, initiatorID)
-	if err != nil {
+	if err := s.srv.Access.IsCheckGroupAction(
+		ctx,
+		accountID, initiatorID, groupID,
+		domain.AccountPermissionManageGroups, domain.GroupPermissionManageMembers,
+	); err != nil {
 		zap.L().Error(err.Error())
 		return err
-	}
-
-	// Находится ли группа в переданном аккаунте
-	group, err := s.repo.GetByID(ctx, groupID)
-	if err != nil {
-		zap.L().Error(err.Error())
-		return err
-	}
-
-	if group[0].AccountID != accountID {
-		return fmt.Errorf("%w: group does not belong to the specified account", ErrForbidden)
 	}
 
 	// Все ли пользователи находятся в аккаунте с группой
@@ -186,41 +210,5 @@ func (s *UserGroupService) isAccessAddMembers(
 		}
 	}
 
-	// OR-логика: право уровня аккаунта ManageGroups (или владелец аккаунта) достаточно —
-	// членство инициатора в самой группе в этом случае не требуется.
-	if accessErr := s.srv.Access.IsCheckAccountAction(
-		ctx,
-		accountID,
-		initiatorID,
-		domain.AccountPermissionManageGroups,
-	); accessErr == nil {
-		return nil
-	}
-
-	// Получение роли инициатора в группе. Если инициатор не состоит в группе (в т.ч.
-	// repository.ErrNotFound/"sql: no rows") — запрещено, а не 500.
-	initiatorGroupMember, err := s.srv.GroupMember.GetByUserIDAndGroupID(ctx, initiatorID, groupID)
-	if err != nil {
-		zap.L().Warn(err.Error())
-		return ErrForbidden
-	}
-
-	// Получение group role инициатора
-	groupRoles, err := s.srv.GroupRole.GetByID(ctx, initiatorGroupMember.RoleID)
-	if err != nil {
-		zap.L().Error(err.Error())
-		return err
-	}
-
-	// Проверка: является ли владельцем группы
-	if domain.HasBit(groupRoles[0].PermissionMask, domain.GroupPermissionOwner) {
-		return nil
-	}
-
-	// Проверка: имеет ли право на добавление участников
-	if domain.HasBit(groupRoles[0].PermissionMask, domain.GroupPermissionManageMembers) {
-		return nil
-	}
-
-	return ErrForbidden
+	return nil
 }

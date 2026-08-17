@@ -137,10 +137,9 @@ func TestService_UserGroup_Create(t *testing.T) {
 	}
 }
 
-// TestService_UserGroup_AddMembers покрывает OR-логику проверки прав (В-18, §6.4 ТЗ):
-// инициатор с аккаунтным правом ManageGroups (в т.ч. владелец аккаунта) добавляет участников в
-// любую группу своего аккаунта без членства в ней; иначе действует групповая проверка
-// (Owner/ManageMembers в самой группе), а отсутствие членства даёт 403, а не 500.
+// TestService_UserGroup_AddMembers покрывает право на добавление участников через общий
+// примитив Access.IsCheckGroupAction (§3.1 дизайна эпика Э2, В-25) и отдельную проверку, что
+// все добавляемые пользователи состоят в том же аккаунте, что и группа.
 func TestService_UserGroup_AddMembers(t *testing.T) {
 	t.Parallel()
 
@@ -150,12 +149,10 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 	testTargetUserID := uuid.New()
 	testTargetRoleID := uuid.New()
 	testDefaultGroupRoleID := uuid.New()
-	testInitiatorGroupRoleID := uuid.New()
-
-	errNoRows := errors.New("sql: no rows in result set")
 
 	targetUsers := []domain.User{{ID: testTargetUserID, RoleID: testTargetRoleID}}
 	targetAccountRoles := []domain.AccountRole{{ID: testTargetRoleID, AccountID: testAccountID}}
+	foreignAccountRoles := []domain.AccountRole{{ID: testTargetRoleID, AccountID: uuid.New()}}
 	wantMembers := []domain.GroupMember{
 		{GroupID: testGroupID, UserID: testTargetUserID, RoleID: testDefaultGroupRoleID},
 	}
@@ -170,7 +167,6 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 	tests := []struct {
 		name       string
 		setupMocks func(
-			*service_mocks.AccountMock,
 			*repository_mocks.UserGroupMock,
 			*service_mocks.UserMock,
 			*service_mocks.AccountRoleMock,
@@ -183,9 +179,8 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "user not in account",
+			name: "no access is forbidden",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
 				repo *repository_mocks.UserGroupMock,
 				user *service_mocks.UserMock,
 				accRole *service_mocks.AccountRoleMock,
@@ -193,8 +188,12 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				groupMember *service_mocks.GroupMemberMock,
 				groupRole *service_mocks.GroupRoleMock,
 			) {
-				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
-					Return(service.ErrForbidden)
+				access.IsCheckGroupActionMock.
+					Expect(
+						minimock.AnyContext,
+						testAccountID, testInitiatorID, testGroupID,
+						domain.AccountPermissionManageGroups, domain.GroupPermissionManageMembers,
+					).Return(service.ErrForbidden)
 			},
 			args:    args{testAccountID, testInitiatorID, testGroupID, []uuid.UUID{testTargetUserID}},
 			want:    nil,
@@ -203,7 +202,6 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 		{
 			name: "account owner adds members without group membership",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
 				repo *repository_mocks.UserGroupMock,
 				user *service_mocks.UserMock,
 				accRole *service_mocks.AccountRoleMock,
@@ -211,17 +209,16 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				groupMember *service_mocks.GroupMemberMock,
 				groupRole *service_mocks.GroupRoleMock,
 			) {
-				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
-					Return(nil)
-				repo.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
-					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID}}, nil)
+				access.IsCheckGroupActionMock.
+					Expect(
+						minimock.AnyContext,
+						testAccountID, testInitiatorID, testGroupID,
+						domain.AccountPermissionManageGroups, domain.GroupPermissionManageMembers,
+					).Return(nil)
 				user.GetByIDMock.Expect(minimock.AnyContext, testTargetUserID).
 					Return(targetUsers, nil)
 				accRole.GetByIDMock.Expect(minimock.AnyContext, testTargetRoleID).
 					Return(targetAccountRoles, nil)
-				access.IsCheckAccountActionMock.
-					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageGroups).
-					Return(nil)
 				groupRole.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).
 					Return(domain.GroupRole{ID: testDefaultGroupRoleID}, nil)
 				groupMember.CreateMock.
@@ -233,9 +230,8 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "user without account permission and without group membership is forbidden, not 500",
+			name: "target user from another account is forbidden",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
 				repo *repository_mocks.UserGroupMock,
 				user *service_mocks.UserMock,
 				accRole *service_mocks.AccountRoleMock,
@@ -243,20 +239,16 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				groupMember *service_mocks.GroupMemberMock,
 				groupRole *service_mocks.GroupRoleMock,
 			) {
-				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
-					Return(nil)
-				repo.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
-					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID}}, nil)
+				access.IsCheckGroupActionMock.
+					Expect(
+						minimock.AnyContext,
+						testAccountID, testInitiatorID, testGroupID,
+						domain.AccountPermissionManageGroups, domain.GroupPermissionManageMembers,
+					).Return(nil)
 				user.GetByIDMock.Expect(minimock.AnyContext, testTargetUserID).
 					Return(targetUsers, nil)
 				accRole.GetByIDMock.Expect(minimock.AnyContext, testTargetRoleID).
-					Return(targetAccountRoles, nil)
-				access.IsCheckAccountActionMock.
-					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageGroups).
-					Return(service.ErrForbidden)
-				groupMember.GetByUserIDAndGroupIDMock.
-					Expect(minimock.AnyContext, testInitiatorID, testGroupID).
-					Return(domain.GroupMember{}, errNoRows)
+					Return(foreignAccountRoles, nil)
 			},
 			args:    args{testAccountID, testInitiatorID, testGroupID, []uuid.UUID{testTargetUserID}},
 			want:    nil,
@@ -265,7 +257,6 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 		{
 			name: "group member with ManageMembers adds members",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
 				repo *repository_mocks.UserGroupMock,
 				user *service_mocks.UserMock,
 				accRole *service_mocks.AccountRoleMock,
@@ -273,25 +264,16 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				groupMember *service_mocks.GroupMemberMock,
 				groupRole *service_mocks.GroupRoleMock,
 			) {
-				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
-					Return(nil)
-				repo.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
-					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID}}, nil)
+				access.IsCheckGroupActionMock.
+					Expect(
+						minimock.AnyContext,
+						testAccountID, testInitiatorID, testGroupID,
+						domain.AccountPermissionManageGroups, domain.GroupPermissionManageMembers,
+					).Return(nil)
 				user.GetByIDMock.Expect(minimock.AnyContext, testTargetUserID).
 					Return(targetUsers, nil)
 				accRole.GetByIDMock.Expect(minimock.AnyContext, testTargetRoleID).
 					Return(targetAccountRoles, nil)
-				access.IsCheckAccountActionMock.
-					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageGroups).
-					Return(service.ErrForbidden)
-				groupMember.GetByUserIDAndGroupIDMock.
-					Expect(minimock.AnyContext, testInitiatorID, testGroupID).
-					Return(domain.GroupMember{RoleID: testInitiatorGroupRoleID}, nil)
-				groupRole.GetByIDMock.Expect(minimock.AnyContext, testInitiatorGroupRoleID).
-					Return([]domain.GroupRole{{
-						ID:             testInitiatorGroupRoleID,
-						PermissionMask: domain.SetBits(0, domain.GroupPermissionManageMembers),
-					}}, nil)
 				groupRole.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).
 					Return(domain.GroupRole{ID: testDefaultGroupRoleID}, nil)
 				groupMember.CreateMock.
@@ -312,7 +294,6 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				t,
 				func(mockServices *testutil.ServiceMock, mockRepos *testutil.RepositoryMock) {
 					tt.setupMocks(
-						mockServices.Account,
 						mockRepos.UserGroup,
 						mockServices.User,
 						mockServices.AccountRole,
@@ -332,7 +313,11 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 						tt.args.targetsID...)
 
 					require.Equal(t, tt.want, got)
-					require.Equal(t, tt.wantErr, err)
+					if tt.wantErr == nil {
+						require.NoError(t, err)
+					} else {
+						require.ErrorIs(t, err, tt.wantErr)
+					}
 				},
 			)
 		})
@@ -440,4 +425,100 @@ func TestService_UserGroup_Delete(t *testing.T) {
 			"videos/" + videoID2.String() + "/": {},
 		}, cleanedPrefixes)
 	})
+}
+
+// TestService_UserGroup_Get покрывает карточку группы (§3.2 дизайна эпика Э2, П-3): право —
+// любой участник аккаунта (IsHasUser, как список групп); группа не в аккаунте — ErrNotFound.
+func TestService_UserGroup_Get(t *testing.T) {
+	t.Parallel()
+
+	testAccountID := uuid.New()
+	testInitiatorID := uuid.New()
+	testGroupID := uuid.New()
+
+	type args struct {
+		initiatorID uuid.UUID
+		accountID   uuid.UUID
+		groupID     uuid.UUID
+	}
+
+	tests := []struct {
+		name       string
+		setupMocks func(*service_mocks.AccountMock, *repository_mocks.UserGroupMock)
+		args       args
+		want       domain.UserGroup
+		wantErr    error
+	}{
+		{
+			name: "initiator not in account is forbidden",
+			setupMocks: func(acc *service_mocks.AccountMock, _ *repository_mocks.UserGroupMock) {
+				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
+					Return(service.ErrForbidden)
+			},
+			args:    args{testInitiatorID, testAccountID, testGroupID},
+			want:    domain.UserGroup{},
+			wantErr: service.ErrForbidden,
+		},
+		{
+			name: "group not found",
+			setupMocks: func(acc *service_mocks.AccountMock, repo *repository_mocks.UserGroupMock) {
+				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
+					Return(nil)
+				repo.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return(nil, repository.ErrNotFound)
+			},
+			args:    args{testInitiatorID, testAccountID, testGroupID},
+			want:    domain.UserGroup{},
+			wantErr: service.ErrNotFound,
+		},
+		{
+			name: "group from another account is not found",
+			setupMocks: func(acc *service_mocks.AccountMock, repo *repository_mocks.UserGroupMock) {
+				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
+					Return(nil)
+				repo.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: uuid.New()}}, nil)
+			},
+			args:    args{testInitiatorID, testAccountID, testGroupID},
+			want:    domain.UserGroup{},
+			wantErr: service.ErrNotFound,
+		},
+		{
+			name: "success",
+			setupMocks: func(acc *service_mocks.AccountMock, repo *repository_mocks.UserGroupMock) {
+				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
+					Return(nil)
+				repo.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID, Name: "test"}}, nil)
+			},
+			args:    args{testInitiatorID, testAccountID, testGroupID},
+			want:    domain.UserGroup{ID: testGroupID, AccountID: testAccountID, Name: "test"},
+			wantErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			testutil.TestService(
+				t,
+				func(mockServices *testutil.ServiceMock, mockRepos *testutil.RepositoryMock) {
+					tt.setupMocks(mockServices.Account, mockRepos.UserGroup)
+				},
+				func(s *service.Service, r *repository.Repository) {
+					srv := service.NewUserGroupService(r.UserGroup, s)
+
+					got, err := srv.Get(t.Context(), tt.args.initiatorID, tt.args.accountID, tt.args.groupID)
+
+					require.Equal(t, tt.want, got)
+					if tt.wantErr == nil {
+						require.NoError(t, err)
+					} else {
+						require.ErrorIs(t, err, tt.wantErr)
+					}
+				},
+			)
+		})
+	}
 }

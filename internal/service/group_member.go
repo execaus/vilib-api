@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/repository"
 
@@ -64,7 +63,14 @@ func (s *GroupMemberService) RemoveMember(
 	ctx context.Context,
 	accountID, initiatorID, groupID, targetID uuid.UUID,
 ) error {
-	if err := s.isAccessRemoveMember(ctx, accountID, initiatorID, groupID); err != nil {
+	// Проверка прав по общей OR-логике: право уровня аккаунта ManageGroups либо владение/
+	// ManageMembers в группе (В-18, §3.1 дизайна эпика Э2).
+	if err := s.srv.Access.IsCheckGroupAction(
+		ctx,
+		accountID, initiatorID, groupID,
+		domain.AccountPermissionManageGroups, domain.GroupPermissionManageMembers,
+	); err != nil {
+		zap.L().Error(err.Error())
 		return err
 	}
 
@@ -77,66 +83,134 @@ func (s *GroupMemberService) RemoveMember(
 	return nil
 }
 
-// isAccessRemoveMember реализует OR-логику проверки прав на удаление участника (В-18, §6.4
-// ТЗ): право уровня аккаунта ManageGroups (или владелец аккаунта) достаточно — членство
-// инициатора в самой группе не требуется, но группа должна принадлежать переданному аккаунту;
-// иначе действует групповая проверка (Owner/ManageMembers в самой группе).
-func (s *GroupMemberService) isAccessRemoveMember(
+// ListByGroup возвращает участников группы вместе с данными пользователя и его роли в группе
+// (§3.2 дизайна эпика Э2, П-3): членства → батч пользователей → роли группы аккаунта → сборка.
+// Право — IsCheckGroupAction(ManageGroups, GroupPermissionManageMembers): рядовому сотруднику
+// список участников не нужен, доступ имеет тот же круг, что и на управление ими.
+func (s *GroupMemberService) ListByGroup(
 	ctx context.Context,
 	accountID, initiatorID, groupID uuid.UUID,
-) error {
-	if err := s.srv.Access.IsCheckAccountAction(
-		ctx, accountID, initiatorID, domain.AccountPermissionManageGroups,
-	); err == nil {
-		return s.isGroupInAccount(ctx, initiatorID, accountID, groupID)
+) ([]domain.GroupMemberDetails, error) {
+	if err := s.srv.Access.IsCheckGroupAction(
+		ctx,
+		accountID, initiatorID, groupID,
+		domain.AccountPermissionManageGroups, domain.GroupPermissionManageMembers,
+	); err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
 	}
 
-	return s.isGroupMemberAllowedToRemove(ctx, initiatorID, groupID)
-}
-
-// isGroupInAccount проверяет, что группа принадлежит переданному аккаунту — исключает
-// использование accountID от другого аккаунта для обхода групповой проверки.
-func (s *GroupMemberService) isGroupInAccount(
-	ctx context.Context,
-	initiatorID, accountID, groupID uuid.UUID,
-) error {
-	groups, err := s.srv.UserGroup.GetAll(ctx, initiatorID, accountID)
+	members, err := s.repo.SelectByGroupID(ctx, groupID)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return err
+		return nil, err
 	}
 
-	for _, group := range groups {
-		if group.ID == groupID {
-			return nil
+	if len(members) == 0 {
+		return []domain.GroupMemberDetails{}, nil
+	}
+
+	usersID := make([]uuid.UUID, len(members))
+	for i, member := range members {
+		usersID[i] = member.UserID
+	}
+
+	users, err := s.srv.User.GetByIDs(ctx, usersID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+	userByID := make(map[uuid.UUID]domain.User, len(users))
+	for _, user := range users {
+		userByID[user.ID] = user
+	}
+
+	groupRoles, err := s.srv.GroupRole.GetByAccountID(ctx, accountID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+	groupRoleByID := make(map[uuid.UUID]domain.GroupRole, len(groupRoles))
+	for _, role := range groupRoles {
+		groupRoleByID[role.ID] = role
+	}
+
+	details := make([]domain.GroupMemberDetails, 0, len(members))
+	for _, member := range members {
+		user, ok := userByID[member.UserID]
+		if !ok {
+			zap.L().Warn("user not found for group member")
+			continue
 		}
+
+		role, ok := groupRoleByID[member.RoleID]
+		if !ok {
+			zap.L().Warn("group role not found for group member")
+			continue
+		}
+
+		details = append(details, domain.GroupMemberDetails{
+			UserID:         user.ID,
+			Name:           user.Name,
+			Surname:        user.Surname,
+			Email:          user.Email,
+			RoleID:         role.ID,
+			RoleName:       role.Name,
+			PermissionMask: role.PermissionMask,
+			JoinedAt:       member.JoinedAt,
+		})
 	}
 
-	return fmt.Errorf("%w: group does not belong to the specified account", ErrForbidden)
+	return details, nil
 }
 
-// isGroupMemberAllowedToRemove проверяет, состоит ли инициатор в группе и имеет ли право
-// Owner/ManageMembers. Если инициатор не состоит в группе (в т.ч. repository.ErrNotFound/
-// "sql: no rows") — запрещено, а не 500.
-func (s *GroupMemberService) isGroupMemberAllowedToRemove(
+// UpdateRole меняет роль участника группы (§3.3 дизайна эпика Э2, П-4). Право —
+// IsCheckGroupAction(ManageGroups, GroupPermissionManageMembers); роль должна принадлежать
+// accountID — иначе ErrNotFound (не раскрываем чужие роли); участник не найден (0 строк
+// UpdateRole) — тоже ErrNotFound.
+func (s *GroupMemberService) UpdateRole(
 	ctx context.Context,
-	initiatorID, groupID uuid.UUID,
-) error {
-	member, err := s.repo.SelectByUserIDAndGroupID(ctx, initiatorID, groupID)
+	accountID, initiatorID, groupID, userID, roleID uuid.UUID,
+) (domain.GroupMemberDetails, error) {
+	if err := s.srv.Access.IsCheckGroupAction(
+		ctx,
+		accountID, initiatorID, groupID,
+		domain.AccountPermissionManageGroups, domain.GroupPermissionManageMembers,
+	); err != nil {
+		zap.L().Error(err.Error())
+		return domain.GroupMemberDetails{}, err
+	}
+
+	roles, err := s.srv.GroupRole.GetByID(ctx, roleID)
 	if err != nil {
-		zap.L().Warn(err.Error())
-		return ErrForbidden
+		zap.L().Error(err.Error())
+		return domain.GroupMemberDetails{}, err
+	}
+	if roles[0].AccountID != accountID {
+		return domain.GroupMemberDetails{}, ErrNotFound
 	}
 
-	roles, err := s.srv.GroupRole.GetByID(ctx, member.RoleID)
-	if err != nil || len(roles) == 0 {
-		return ErrForbidden
+	member, err := s.repo.UpdateRole(ctx, groupID, userID, roleID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.GroupMemberDetails{}, err
 	}
 
-	if domain.HasBit(roles[0].PermissionMask, domain.GroupPermissionOwner) ||
-		domain.HasBit(roles[0].PermissionMask, domain.GroupPermissionManageMembers) {
-		return nil
+	users, err := s.srv.User.GetByID(ctx, userID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.GroupMemberDetails{}, err
 	}
+	user := users[0]
 
-	return ErrForbidden
+	return domain.GroupMemberDetails{
+		UserID:         user.ID,
+		Name:           user.Name,
+		Surname:        user.Surname,
+		Email:          user.Email,
+		RoleID:         roles[0].ID,
+		RoleName:       roles[0].Name,
+		PermissionMask: roles[0].PermissionMask,
+		JoinedAt:       member.JoinedAt,
+	}, nil
 }
