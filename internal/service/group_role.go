@@ -27,15 +27,23 @@ func (s *GroupRoleService) Create(
 	permission domain.PermissionMask,
 	isDefault bool,
 ) (domain.GroupRole, error) {
-	// Проверка прав доступа на создание роли группы
+	// Проверка прав доступа на создание роли группы — ManageGroups (§3.5 дизайна эпика Э2,
+	// П-14): роли групп — часть управления группами, ManageRoles остаётся про роли аккаунта.
 	if err := s.srv.Access.IsCheckAccountAction(
 		ctx,
 		accountID,
 		initiatorID,
-		domain.AccountPermissionManageRoles,
+		domain.AccountPermissionManageGroups,
 	); err != nil {
 		zap.L().Error(err.Error())
 		return domain.GroupRole{}, err
+	}
+
+	if isDefault {
+		if err := s.repo.ClearDefault(ctx, accountID); err != nil {
+			zap.L().Error(err.Error())
+			return domain.GroupRole{}, err
+		}
 	}
 
 	// Создание роли группы
@@ -50,6 +58,65 @@ func (s *GroupRoleService) Create(
 	}
 
 	return role, nil
+}
+
+// Update редактирует роль группы — полная замена всех редактируемых полей (§4 дизайна эпика
+// Э2, П-10). Право — ManageGroups; роль должна принадлежать accountID (иначе ErrNotFound — не
+// раскрываем чужие роли); в отличие от ролей аккаунта бит GroupPermissionOwner в маске
+// разрешён; назначение is_default=true снимает флаг у остальных ролей групп аккаунта в той же
+// транзакции (ClearDefault); снятие is_default у текущей единственной дефолтной роли запрещено
+// (ErrDefaultRoleRequired); дубль имени — ErrGroupRoleNameExists.
+func (s *GroupRoleService) Update(
+	ctx context.Context,
+	initiatorID, accountID, roleID uuid.UUID,
+	name string,
+	mask domain.PermissionMask,
+	isDefault bool,
+) (domain.GroupRole, error) {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageGroups,
+	); err != nil {
+		zap.L().Error(err.Error())
+		return domain.GroupRole{}, err
+	}
+
+	roles, err := s.repo.SelectByID(ctx, roleID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return domain.GroupRole{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.GroupRole{}, err
+	}
+	if roles[0].AccountID != accountID {
+		return domain.GroupRole{}, ErrNotFound
+	}
+
+	if !isDefault && roles[0].IsDefault {
+		return domain.GroupRole{}, ErrDefaultRoleRequired
+	}
+
+	if isDefault {
+		if clearErr := s.repo.ClearDefault(ctx, accountID); clearErr != nil {
+			zap.L().Error(clearErr.Error())
+			return domain.GroupRole{}, clearErr
+		}
+	}
+
+	updated, err := s.repo.Update(ctx, roleID, name, mask, isDefault)
+	if err != nil {
+		if errors.Is(dberrors.GroupRoleErrors.ErrUniqueGroupRolesAccountIdNameKey, err) {
+			zap.L().Warn(err.Error())
+			return domain.GroupRole{}, ErrGroupRoleNameExists
+		}
+		zap.L().Error(err.Error())
+		return domain.GroupRole{}, err
+	}
+
+	return updated, nil
 }
 
 func (s *GroupRoleService) GetByID(ctx context.Context, roleID uuid.UUID) ([]domain.GroupRole, error) {
@@ -78,17 +145,15 @@ func (s *GroupRoleService) GetDefault(ctx context.Context, accountID uuid.UUID) 
 	return role, nil
 }
 
+// GetAll возвращает список ролей групп аккаунта. Право — любой участник аккаунта (послабление
+// §3.4 дизайна эпика Э2, П-7): менеджер группы (GroupPermissionManageMembers, без аккаунтных
+// прав) должен выбрать role_id для смены роли участника (П-4); создание/удаление/правка
+// по-прежнему требуют ManageGroups.
 func (s *GroupRoleService) GetAll(
 	ctx context.Context,
 	initiatorID, accountID uuid.UUID,
 ) ([]domain.GroupRole, error) {
-	// Проверка прав на управление группами
-	if err := s.srv.Access.IsCheckAccountAction(
-		ctx,
-		accountID,
-		initiatorID,
-		domain.AccountPermissionManageGroups,
-	); err != nil {
+	if err := s.srv.Account.IsHasUser(ctx, accountID, initiatorID); err != nil {
 		zap.L().Error(err.Error())
 		return nil, err
 	}

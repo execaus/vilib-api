@@ -15,6 +15,13 @@ var (
 	ErrIsOwner           = NewConflictErrorCode("conflict.account_owner", "cannot deactivate account owner")
 	ErrRoleInUse         = NewConflictErrorCode("conflict.role_in_use", "role is assigned to active users")
 	ErrGroupRoleInUse    = NewConflictErrorCode("conflict.group_role_in_use", "role is assigned to group members")
+	// ErrDefaultRoleRequired — попытка снять флаг is_default с роли (аккаунта или группы),
+	// являющейся сейчас единственной ролью по умолчанию (HTTP 409 conflict.default_role_required):
+	// аккаунт/группа не могут остаться без роли по умолчанию (§4 дизайна эпика Э2).
+	ErrDefaultRoleRequired = NewConflictErrorCode(
+		"conflict.default_role_required",
+		"cannot unset default flag from the only default role",
+	)
 )
 
 var (

@@ -15,3 +15,11 @@ var (
 var (
 	ErrDefaultRolesMany = errors.New("multiple default roles found")
 )
+
+// ErrPermissionOwnerForbidden — попытка выставить бит AccountPermissionOwner в маске роли
+// аккаунта через Create/Update (HTTP 400 validation.permission_owner). Владелец назначается
+// только системной ролью, создаваемой при регистрации аккаунта (§4 дизайна эпика Э2).
+var ErrPermissionOwnerForbidden = NewValidationErrorCode(
+	"validation.permission_owner",
+	"owner permission bit cannot be assigned to a role",
+)

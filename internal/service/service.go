@@ -69,6 +69,16 @@ type AccountRole interface {
 	GetByID(ctx context.Context, rolesID ...uuid.UUID) ([]domain.AccountRole, error)
 	GetAll(ctx context.Context, initiatorID, accountID uuid.UUID) ([]domain.AccountRole, error)
 	Delete(ctx context.Context, initiatorID, accountID, roleID uuid.UUID) error
+	// Update — полная замена редактируемых полей роли аккаунта (§4 дизайна эпика Э2). Право
+	// ManageRoles; системная роль — ErrIsSystemRole; бит AccountPermissionOwner в mask —
+	// ErrPermissionOwnerForbidden; is_default=true снимает флаг у остальных ролей аккаунта
+	// (ClearDefault) в той же транзакции; is_default=false у текущей дефолтной роли —
+	// ErrDefaultRoleRequired; дубль имени — ErrAccountRoleNameExists.
+	Update(
+		ctx context.Context,
+		initiatorID, accountID, roleID uuid.UUID,
+		name string, parentID *uuid.UUID, mask domain.PermissionMask, isDefault bool,
+	) (domain.AccountRole, error)
 }
 
 type User interface {
@@ -152,6 +162,16 @@ type GroupRole interface {
 	// сборки профиля пользователя (§2.3 дизайна эпика Э2): роль в собственных группах видна
 	// пользователю без права ManageGroups, требуемого GetAll.
 	GetByAccountID(ctx context.Context, accountID uuid.UUID) ([]domain.GroupRole, error)
+	// Update — полная замена редактируемых полей роли группы (§4 дизайна эпика Э2). Право
+	// ManageGroups; бит GroupPermissionOwner в mask разрешён (в отличие от ролей аккаунта);
+	// is_default=true снимает флаг у остальных ролей групп аккаунта (ClearDefault) в той же
+	// транзакции; is_default=false у текущей дефолтной роли — ErrDefaultRoleRequired; дубль
+	// имени — ErrGroupRoleNameExists.
+	Update(
+		ctx context.Context,
+		initiatorID, accountID, roleID uuid.UUID,
+		name string, mask domain.PermissionMask, isDefault bool,
+	) (domain.GroupRole, error)
 }
 
 type Video interface {
