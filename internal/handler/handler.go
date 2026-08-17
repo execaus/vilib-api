@@ -143,6 +143,11 @@ func (h *Handler) GetRouter() *gin.Engine {
 		h.RequireAuthMiddleware,
 		h.GetUserGroup,
 	)
+	v1.PUT(
+		DeleteUserGroupURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
+		h.RequireAuthMiddleware,
+		h.UpdateUserGroup,
+	)
 	v1.DELETE(
 		DeleteUserGroupURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
 		h.RequireAuthMiddleware,

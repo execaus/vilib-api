@@ -17,8 +17,14 @@ type CreateUserResponse struct {
 	User User `json:"user"`
 }
 
+// UpdateUserRequest — тело PUT accounts/{accountId}/users/{userId}: частичное обновление
+// (§4 дизайна эпика Э2, «Блок C — редактирование»). Nil-поле оставляет значение без изменений;
+// все поля nil — 200 без изменений. Смена роли (RoleID) и правка чужого профиля требуют права
+// ManageUsers; инициатор, правящий собственное ФИО без смены роли, — исключение без прав.
 type UpdateUserRequest struct {
-	RoleID *uuid.UUID `json:"role_id"`
+	Name    *string    `json:"name"    binding:"omitempty,min=2,max=64"`
+	Surname *string    `json:"surname" binding:"omitempty,min=2,max=64"`
+	RoleID  *uuid.UUID `json:"role_id"`
 }
 
 type UpdateUserResponse struct {

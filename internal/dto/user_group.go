@@ -105,3 +105,14 @@ type GetAllUserGroupsResponse struct {
 type GetUserGroupResponse struct {
 	Group UserGroup `json:"group"`
 }
+
+// UpdateUserGroupRequest — тело PUT accounts/{accountId}/user-groups/{groupId}: переименование
+// группы (§4 дизайна эпика Э2, «Блок C — редактирование»).
+type UpdateUserGroupRequest struct {
+	Name string `json:"name" binding:"required,max=64"`
+}
+
+// UpdateUserGroupResponse — тело ответа переименования группы.
+type UpdateUserGroupResponse struct {
+	Group UserGroup `json:"group"`
+}

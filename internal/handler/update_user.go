@@ -12,7 +12,9 @@ import (
 
 // UpdateUser godoc
 // @Summary Обновление пользователя
-// @Description Обновляет данные пользователя (например, роль)
+// @Description Частично обновляет ФИО и/или роль пользователя. Смена роли и правка чужого
+// @Description профиля требуют права ManageUsers; правка своего ФИО без смены роли разрешена
+// @Description без прав. Все поля пустые — 200 без изменений.
 // @Tags users
 // @Accept json
 // @Produce json
@@ -21,9 +23,10 @@ import (
 // @Param request body dto.UpdateUserRequest true "Тело запроса для обновления пользователя"
 // @Success 200 {object} dto.UpdateUserResponse
 // @Failure 400 {object} dto.ErrorMessage
+// @Failure 401
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 404 {object} dto.ErrorMessage
-// @Failure 500 {object} dto.ErrorMessage
+// @Failure 500
 // @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/users/{userId} [put]
 func (h *Handler) UpdateUser(c *gin.Context) {
@@ -56,7 +59,12 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 			return claimsErr
 		}
 
-		user, err = services.User.Update(ctx, claims.UserID, accountID, targetUserID, req.RoleID)
+		patch := domain.UserPatch{
+			Name:    req.Name,
+			Surname: req.Surname,
+			RoleID:  req.RoleID,
+		}
+		user, err = services.User.Update(ctx, claims.UserID, accountID, targetUserID, patch)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err
