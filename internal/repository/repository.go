@@ -78,7 +78,13 @@ type GroupMember interface {
 	// SelectByUserID выбирает все членства пользователя во всех группах (агрегация профиля
 	// GET /me, §2.3 дизайна эпика Э2). Отсутствие членств — пустой срез, не ошибка.
 	SelectByUserID(ctx context.Context, userID uuid.UUID) ([]domain.GroupMember, error)
+	// SelectByGroupID выбирает всех участников группы (§3.2 дизайна эпика Э2, П-3). Отсутствие
+	// участников — пустой срез, не ошибка.
+	SelectByGroupID(ctx context.Context, groupID uuid.UUID) ([]domain.GroupMember, error)
 	Delete(ctx context.Context, groupID, userID uuid.UUID) error
+	// UpdateRole меняет роль участника группы (§3.3 дизайна эпика Э2, П-4). Участник не
+	// найден (0 строк) — ErrNotFound.
+	UpdateRole(ctx context.Context, groupID, userID, roleID uuid.UUID) (domain.GroupMember, error)
 }
 
 type GroupRole interface {
