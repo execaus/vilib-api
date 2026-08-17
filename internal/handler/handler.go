@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"vilib-api/internal/dto"
 	"vilib-api/internal/saga"
 	"vilib-api/internal/service"
 
@@ -33,6 +34,7 @@ var (
 	LoginURL               = "auth/login"
 	SwitchAccountURL       = "auth/switch-account"
 	MeURL                  = "me"
+	ConfigURL              = "config"
 	CreateUserURL          = NewURLSupplier("accounts/%s/users")
 	CreateAccountRoleURL   = NewURLSupplier("accounts/%s/roles")
 	UpdateUserURL          = NewURLSupplier("accounts/%s/users/%s")
@@ -58,9 +60,11 @@ var (
 )
 
 // Deps — внешние зависимости handler'а, нужные вне саги (§1 дизайна эпика). Auth используется
-// RequireAuthMiddleware для разбора JWT до открытия транзакции.
+// RequireAuthMiddleware для разбора JWT до открытия транзакции. PublicConfig — статический
+// ответ ручки GET /config (§5.2 контракта Э2, П-8), собирается из config.Config в cmd/main.go.
 type Deps struct {
-	Auth service.Auth
+	Auth         service.Auth
+	PublicConfig dto.ConfigResponse
 }
 
 type Handler struct {
@@ -101,6 +105,8 @@ func (h *Handler) GetRouter() *gin.Engine {
 	v1.POST(LoginURL, h.Login)
 	v1.POST(SwitchAccountURL, h.RequireAuthMiddleware, h.SwitchAccount)
 	v1.GET(MeURL, h.RequireAuthMiddleware, h.GetMe)
+	// Публичный конфиг фронтенда — без авторизации (§5.2 контракта Э2, П-8).
+	v1.GET(ConfigURL, h.GetConfig)
 
 	// Users
 	v1.POST(CreateUserURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateUser)

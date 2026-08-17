@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"vilib-api/internal/dto"
 	"vilib-api/internal/handler"
 	"vilib-api/internal/saga"
 	"vilib-api/internal/saga/saga_mocks"
@@ -10,6 +11,29 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gojuno/minimock/v3"
 )
+
+const (
+	testPublicConfigMaxUploadSizeBytes  = 4 << 30
+	testPublicConfigUploadURLTTLSeconds = 3600
+	testPublicConfigHLSURLTTLSeconds    = 3600
+	testPublicConfigTokenTTLSeconds     = 86400
+	testPublicConfigPasswordMinLength   = 8
+)
+
+// TestPublicConfig — фиксированный публичный конфиг для тестов handler'ов, не проверяющих
+// сам GetConfig (§5.2 контракта Э2, П-8): нужен только затем, чтобы Deps.PublicConfig не был
+// нулевым в роутерах, собранных тестовыми хелперами.
+//
+//nolint:gochecknoglobals // тестовая фикстура — принятая конвенция testutil (см. Faker).
+var TestPublicConfig = dto.ConfigResponse{
+	MaxUploadSizeBytes:  testPublicConfigMaxUploadSizeBytes,
+	AllowedContentTypes: []string{"video/*"},
+	UploadURLTTLSeconds: testPublicConfigUploadURLTTLSeconds,
+	HLSURLTTLSeconds:    testPublicConfigHLSURLTTLSeconds,
+	Profiles:            []string{"360p", "720p", "1080p"},
+	TokenTTLSeconds:     testPublicConfigTokenTTLSeconds,
+	PasswordMinLength:   testPublicConfigPasswordMinLength,
+}
 
 type HandlerTestServiceMock struct {
 	Auth        *service_mocks.AuthMock
@@ -77,7 +101,10 @@ func SetupTestRouterWithMocks(
 	tx.CommitMock.Expect(minimock.AnyContext).Return(nil)
 	repo.WithTxMock.Expect(minimock.AnyContext).Return(tx, nil)
 
-	h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
+	h := handler.NewHandler(
+		saga.NewSagaRunner(svcMock.ToService(), repo),
+		handler.Deps{Auth: svcMock.Auth, PublicConfig: TestPublicConfig},
+	)
 	return h.GetRouter()
 }
 
@@ -90,6 +117,9 @@ func SetupTestRouterWithoutTx(mc *minimock.Controller, svcMock *HandlerTestServi
 	repo.WithTxMock.When(minimock.AnyContext).Then(tx, nil)
 	repo.WithTxMock.Optional()
 
-	h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
+	h := handler.NewHandler(
+		saga.NewSagaRunner(svcMock.ToService(), repo),
+		handler.Deps{Auth: svcMock.Auth, PublicConfig: TestPublicConfig},
+	)
 	return h.GetRouter()
 }

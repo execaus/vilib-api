@@ -94,7 +94,7 @@ func run() error {
 	consumerCtx, stopConsumer := context.WithCancel(context.Background())
 	consumerDone := runConsumer(consumerCtx, consumer, eh)
 
-	h := handler.NewHandler(sagaRunner, handler.Deps{Auth: svc.Auth})
+	h := handler.NewHandler(sagaRunner, handler.Deps{Auth: svc.Auth, PublicConfig: handler.BuildPublicConfig(cfg)})
 	srv := &http.Server{
 		Addr:    ":" + cfg.Server.Port,
 		Handler: h.GetRouter(),

@@ -19,8 +19,11 @@ import (
 
 const (
 	DefaultJWTExpireDuration = time.Hour * 24
-	passwordLength           = 16
-	chars                    = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	// PasswordMinLength — минимальная длина пароля пользователя, отдаётся публичным конфигом
+	// (§5.2 контракта Э2, П-8) для валидации формы на фронте до запроса к API.
+	PasswordMinLength = 8
+	passwordLength    = 16
+	chars             = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	// bearerPrefix — префикс значения заголовка Authorization; GetClaimsFromToken принимает
 	// значение как с ним, так и без (§1 дизайна эпика).
 	bearerPrefix = "Bearer "

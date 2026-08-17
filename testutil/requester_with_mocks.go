@@ -99,7 +99,10 @@ func (r *RequesterWithMocks) Run(response any) (status int) {
 	tx.CommitMock.Expect(minimock.AnyContext).Return(nil)
 	repo.WithTxMock.Expect(minimock.AnyContext).Return(tx, nil)
 
-	h := handler.NewHandler(saga.NewSagaRunner(s.ToServices(), repo), handler.Deps{Auth: s.Auth})
+	h := handler.NewHandler(
+		saga.NewSagaRunner(s.ToServices(), repo),
+		handler.Deps{Auth: s.Auth, PublicConfig: TestPublicConfig},
+	)
 	router := h.GetRouter()
 
 	recorder := httptest.NewRecorder()
