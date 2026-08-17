@@ -124,6 +124,11 @@ func (h *Handler) GetRouter() *gin.Engine {
 	// Account roles
 	v1.POST(CreateAccountRoleURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateAccountRole)
 	v1.GET(ListAccountRolesURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllAccountRoles)
+	v1.PUT(
+		DeleteAccountRoleURL.WithPathParams(pathKeyAccountID, pathKeyRoleID),
+		h.RequireAuthMiddleware,
+		h.UpdateAccountRole,
+	)
 	v1.DELETE(
 		DeleteAccountRoleURL.WithPathParams(pathKeyAccountID, pathKeyRoleID),
 		h.RequireAuthMiddleware,
@@ -169,6 +174,11 @@ func (h *Handler) GetRouter() *gin.Engine {
 	// Group roles
 	v1.POST(CreateGroupRoleURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateGroupRole)
 	v1.GET(ListGroupRolesURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllGroupRoles)
+	v1.PUT(
+		DeleteGroupRoleURL.WithPathParams(pathKeyAccountID, pathKeyGroupRoleID),
+		h.RequireAuthMiddleware,
+		h.UpdateGroupRole,
+	)
 	v1.DELETE(
 		DeleteGroupRoleURL.WithPathParams(pathKeyAccountID, pathKeyGroupRoleID),
 		h.RequireAuthMiddleware,

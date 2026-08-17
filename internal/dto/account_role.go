@@ -17,6 +17,20 @@ type CreateAccountRoleResponse struct {
 	AccountRole AccountRole `json:"account_role"`
 }
 
+// UpdateAccountRoleRequest — тело PUT accounts/{accountId}/roles/{roleId}: полная замена всех
+// редактируемых полей роли аккаунта (§4 дизайна эпика Э2), в отличие от частичного
+// UpdateUserRequest.
+type UpdateAccountRoleRequest struct {
+	Name       string                `json:"name"       binding:"required,max=64"`
+	Permission domain.PermissionMask `json:"permission"`
+	ParentID   *uuid.UUID            `json:"parent_id"`
+	IsDefault  bool                  `json:"is_default"`
+}
+
+type UpdateAccountRoleResponse struct {
+	AccountRole AccountRole `json:"account_role"`
+}
+
 type AccountRole struct {
 	ID         uuid.UUID             `json:"id"`
 	Name       string                `json:"name"`
