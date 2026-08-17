@@ -106,3 +106,52 @@ func TestRepository_GroupMemberSelectByUserIDAndGroupID_NotFound(t *testing.T) {
 		require.Equal(t, domain.GroupMember{}, member)
 	})
 }
+
+func TestRepository_GroupMemberSelectByUserID_Success(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		accountRole, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
+		user, _ := r.User.Insert(
+			t.Context(),
+			f.Person().FirstName(),
+			f.Person().LastName(),
+			f.Hash().MD5(),
+			f.Person().Contact().Email,
+			accountRole.ID,
+		)
+
+		groupOne, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		groupTwo, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		groupRole, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 4, true)
+
+		_, err := r.GroupMember.Insert(t.Context(), groupOne.ID, groupRole.ID, user.ID)
+		require.NoError(t, err)
+		_, err = r.GroupMember.Insert(t.Context(), groupTwo.ID, groupRole.ID, user.ID)
+		require.NoError(t, err)
+
+		members, err := r.GroupMember.SelectByUserID(t.Context(), user.ID)
+
+		require.NoError(t, err)
+		require.Len(t, members, 2)
+
+		expectedGroupIDs := []uuid.UUID{groupOne.ID, groupTwo.ID}
+		for _, member := range members {
+			require.Equal(t, user.ID, member.UserID)
+			require.Contains(t, expectedGroupIDs, member.GroupID)
+		}
+	})
+}
+
+func TestRepository_GroupMemberSelectByUserID_EmptyNotNil(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
+		members, err := r.GroupMember.SelectByUserID(t.Context(), uuid.New())
+
+		require.NoError(t, err)
+		require.NotNil(t, members)
+		require.Empty(t, members)
+	})
+}

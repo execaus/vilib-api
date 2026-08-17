@@ -67,6 +67,28 @@ func (r *GroupMemberRepository) SelectByUserIDAndGroupID(
 	return dm, nil
 }
 
+// SelectByUserID выбирает все членства пользователя во всех группах (для агрегации профиля
+// GET /me, §2.3 дизайна эпика). Отсутствие членств — не ошибка, возвращается пустой срез.
+func (r *GroupMemberRepository) SelectByUserID(ctx context.Context, userID uuid.UUID) ([]domain.GroupMember, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	membersDB, err := schema.GroupMembers.Query(
+		sm.Where(schema.GroupMembers.Columns.UserID.EQ(psql.Arg(userID))),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	members := make([]domain.GroupMember, len(membersDB))
+	for i, m := range membersDB {
+		members[i] = domain.GroupMember{}
+		members[i].FromDB(m)
+	}
+
+	return members, nil
+}
+
 func (r *GroupMemberRepository) Delete(ctx context.Context, groupID, userID uuid.UUID) error {
 	exec := r.provider.GetExecutor(ctx)
 

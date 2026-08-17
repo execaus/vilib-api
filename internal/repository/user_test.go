@@ -159,3 +159,52 @@ func TestRepository_UserSelectByID_NilNotFound(t *testing.T) {
 		require.ErrorIs(t, repository.ErrNotFound, err)
 	})
 }
+
+func TestRepository_UserSelectByEmailAndAccountID_Success(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		email := f.Person().Contact().Email
+
+		accountOne, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		roleOne, _ := r.AccountRole.Insert(t.Context(), accountOne.ID, f.Beer().Name(), nil, 4, true, false)
+		userOne, err := r.User.Insert(
+			t.Context(),
+			f.Person().FirstName(),
+			f.Person().LastName(),
+			f.Hash().MD5(),
+			email,
+			roleOne.ID,
+		)
+		require.NoError(t, err)
+
+		accountTwo, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		roleTwo, _ := r.AccountRole.Insert(t.Context(), accountTwo.ID, f.Beer().Name(), nil, 4, true, false)
+		_, err = r.User.Insert(
+			t.Context(),
+			f.Person().FirstName(),
+			f.Person().LastName(),
+			f.Hash().MD5(),
+			email,
+			roleTwo.ID,
+		)
+		require.NoError(t, err)
+
+		user, err := r.User.SelectByEmailAndAccountID(t.Context(), email, accountOne.ID)
+
+		require.NoError(t, err)
+		require.Equal(t, userOne.ID, user.ID)
+		require.Equal(t, email, user.Email)
+	})
+}
+
+func TestRepository_UserSelectByEmailAndAccountID_NotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		user, err := r.User.SelectByEmailAndAccountID(t.Context(), f.Person().Contact().Email, uuid.New())
+
+		require.ErrorIs(t, err, repository.ErrNotFound)
+		require.Equal(t, domain.User{}, user)
+	})
+}

@@ -52,6 +52,40 @@ func (r *UserRepository) SelectByEmail(ctx context.Context, email string) ([]dom
 	return users, nil
 }
 
+// SelectByEmailAndAccountID выбирает строку пользователя с указанным email в указанной
+// организации (join по account_roles.account_id) — используется переключением организации
+// (§2.4 дизайна эпика). Строки не существует → ErrNotFound.
+func (r *UserRepository) SelectByEmailAndAccountID(
+	ctx context.Context,
+	email string,
+	accountID uuid.UUID,
+) (domain.User, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	userDB, err := schema.Users.Query(
+		sm.InnerJoin(schema.AccountRoles.Name()).OnEQ(
+			schema.AccountRoles.Columns.AccountRoleID,
+			schema.Users.Columns.RoleID,
+		),
+		sm.Where(schema.Users.Columns.Email.EQ(psql.S(email))),
+		sm.Where(schema.AccountRoles.Columns.AccountID.EQ(psql.Arg(accountID))),
+	).One(ctx, exec)
+	if err != nil {
+		// pgx.ErrNoRows — proxy-ошибка (bob фактически возвращает database/sql.ErrNoRows,
+		// pgx.ErrNoRows.Is распознаёт его только в этом порядке аргументов, см. .golangci.yml).
+		if errors.Is(pgx.ErrNoRows, err) {
+			return domain.User{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+
+	var user domain.User
+	user.FromDB(userDB)
+
+	return user, nil
+}
+
 func (r *UserRepository) Insert(
 	ctx context.Context,
 	name, surname, hash, email string,

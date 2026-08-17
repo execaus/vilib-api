@@ -41,6 +41,9 @@ type User interface {
 	Deactivate(ctx context.Context, userID uuid.UUID) error
 	Reactivate(ctx context.Context, userID uuid.UUID) error
 	SelectByAccountID(ctx context.Context, accountID uuid.UUID, status UserStatus) ([]domain.User, error)
+	// SelectByEmailAndAccountID выбирает строку пользователя с указанным email в указанной
+	// организации — используется переключением организации (§2.4 дизайна эпика Э2).
+	SelectByEmailAndAccountID(ctx context.Context, email string, accountID uuid.UUID) (domain.User, error)
 }
 
 type AccountRole interface {
@@ -68,6 +71,9 @@ type UserGroup interface {
 type GroupMember interface {
 	Insert(ctx context.Context, groupID, roleID uuid.UUID, usersID ...uuid.UUID) ([]domain.GroupMember, error)
 	SelectByUserIDAndGroupID(ctx context.Context, userID, groupID uuid.UUID) (domain.GroupMember, error)
+	// SelectByUserID выбирает все членства пользователя во всех группах (агрегация профиля
+	// GET /me, §2.3 дизайна эпика Э2). Отсутствие членств — пустой срез, не ошибка.
+	SelectByUserID(ctx context.Context, userID uuid.UUID) ([]domain.GroupMember, error)
 	Delete(ctx context.Context, groupID, userID uuid.UUID) error
 }
 
