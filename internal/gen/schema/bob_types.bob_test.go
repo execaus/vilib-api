@@ -34,6 +34,9 @@ var _ bob.HookableType = &GroupRole{}
 // Make sure the type OutboxEvent runs hooks after queries
 var _ bob.HookableType = &OutboxEvent{}
 
+// Make sure the type PasswordResetToken runs hooks after queries
+var _ bob.HookableType = &PasswordResetToken{}
+
 // Make sure the type UserGroupVideo runs hooks after queries
 var _ bob.HookableType = &UserGroupVideo{}
 

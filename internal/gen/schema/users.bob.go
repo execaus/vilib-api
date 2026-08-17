@@ -55,9 +55,10 @@ type UsersQuery = *psql.ViewQuery[*User, UserSlice]
 
 // userR is where relationships are stored.
 type userR struct {
-	GroupMembers           GroupMemberSlice    // group_members.fk_group_members_user_id
-	AuthorUserGroupVideos  UserGroupVideoSlice // user_group_videos.user_group_videos_author_fkey
-	AccountRoleAccountRole *AccountRole        // users.fk_role
+	GroupMembers           GroupMemberSlice        // group_members.fk_group_members_user_id
+	PasswordResetTokens    PasswordResetTokenSlice // password_reset_tokens.fk_password_reset_tokens_user_id
+	AuthorUserGroupVideos  UserGroupVideoSlice     // user_group_videos.user_group_videos_author_fkey
+	AccountRoleAccountRole *AccountRole            // users.fk_role
 }
 
 func buildUserColumns(alias string) userColumns {
@@ -540,6 +541,30 @@ func (os UserSlice) GroupMembers(mods ...bob.Mod[*dialect.SelectQuery]) GroupMem
 	)...)
 }
 
+// PasswordResetTokens starts a query for related objects on password_reset_tokens
+func (o *User) PasswordResetTokens(mods ...bob.Mod[*dialect.SelectQuery]) PasswordResetTokensQuery {
+	return PasswordResetTokens.Query(append(mods,
+		sm.Where(PasswordResetTokens.Columns.UserID.EQ(psql.Arg(o.UserID))),
+	)...)
+}
+
+func (os UserSlice) PasswordResetTokens(mods ...bob.Mod[*dialect.SelectQuery]) PasswordResetTokensQuery {
+	pkUserID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkUserID = append(pkUserID, o.UserID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkUserID), "uuid[]")),
+	))
+
+	return PasswordResetTokens.Query(append(mods,
+		sm.Where(psql.Group(PasswordResetTokens.Columns.UserID).OP("IN", PKArgExpr)),
+	)...)
+}
+
 // AuthorUserGroupVideos starts a query for related objects on user_group_videos
 func (o *User) AuthorUserGroupVideos(mods ...bob.Mod[*dialect.SelectQuery]) UserGroupVideosQuery {
 	return UserGroupVideos.Query(append(mods,
@@ -648,6 +673,74 @@ func (user0 *User) AttachGroupMembers(ctx context.Context, exec bob.Executor, re
 	}
 
 	user0.R.GroupMembers = append(user0.R.GroupMembers, groupMembers1...)
+
+	for _, rel := range related {
+		rel.R.User = user0
+	}
+
+	return nil
+}
+
+func insertUserPasswordResetTokens0(ctx context.Context, exec bob.Executor, passwordResetTokens1 []*PasswordResetTokenSetter, user0 *User) (PasswordResetTokenSlice, error) {
+	for i := range passwordResetTokens1 {
+		passwordResetTokens1[i].UserID = omit.From(user0.UserID)
+	}
+
+	ret, err := PasswordResetTokens.Insert(bob.ToMods(passwordResetTokens1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserPasswordResetTokens0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserPasswordResetTokens0(ctx context.Context, exec bob.Executor, count int, passwordResetTokens1 PasswordResetTokenSlice, user0 *User) (PasswordResetTokenSlice, error) {
+	setter := &PasswordResetTokenSetter{
+		UserID: omit.From(user0.UserID),
+	}
+
+	err := passwordResetTokens1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserPasswordResetTokens0: %w", err)
+	}
+
+	return passwordResetTokens1, nil
+}
+
+func (user0 *User) InsertPasswordResetTokens(ctx context.Context, exec bob.Executor, related ...*PasswordResetTokenSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	passwordResetTokens1, err := insertUserPasswordResetTokens0(ctx, exec, related, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.PasswordResetTokens = append(user0.R.PasswordResetTokens, passwordResetTokens1...)
+
+	for _, rel := range passwordResetTokens1 {
+		rel.R.User = user0
+	}
+	return nil
+}
+
+func (user0 *User) AttachPasswordResetTokens(ctx context.Context, exec bob.Executor, related ...*PasswordResetToken) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	passwordResetTokens1 := PasswordResetTokenSlice(related)
+
+	_, err = attachUserPasswordResetTokens0(ctx, exec, len(related), passwordResetTokens1, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.PasswordResetTokens = append(user0.R.PasswordResetTokens, passwordResetTokens1...)
 
 	for _, rel := range related {
 		rel.R.User = user0
