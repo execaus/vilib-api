@@ -23,6 +23,7 @@ type HandlerTestServiceMock struct {
 	Video       *service_mocks.VideoMock
 	VideoAsset  *service_mocks.VideoAssetMock
 	Access      *service_mocks.AccessMock
+	Profile     *service_mocks.ProfileMock
 }
 
 func NewHandlerTestServiceMock(mc *minimock.Controller) *HandlerTestServiceMock {
@@ -38,6 +39,7 @@ func NewHandlerTestServiceMock(mc *minimock.Controller) *HandlerTestServiceMock 
 		Video:       service_mocks.NewVideoMock(mc),
 		VideoAsset:  service_mocks.NewVideoAssetMock(mc),
 		Access:      service_mocks.NewAccessMock(mc),
+		Profile:     service_mocks.NewProfileMock(mc),
 	}
 }
 
@@ -54,6 +56,7 @@ func (s *HandlerTestServiceMock) ToService() *service.Service {
 		Video:       s.Video,
 		VideoAsset:  s.VideoAsset,
 		Access:      s.Access,
+		Profile:     s.Profile,
 	}
 }
 

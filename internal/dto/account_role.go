@@ -23,6 +23,9 @@ type AccountRole struct {
 	Permission domain.PermissionMask `json:"permission"`
 	ParentID   *uuid.UUID            `json:"parent_id"`
 	IsDefault  bool                  `json:"is_default"`
+	// IsSystem — признак системной роли (например, владелец аккаунта), созданной автоматически
+	// и недоступной для удаления/переименования (§3.4 дизайна эпика Э2).
+	IsSystem bool `json:"is_system"`
 }
 
 func (r *AccountRole) FromDomain(role domain.AccountRole) {
@@ -31,4 +34,5 @@ func (r *AccountRole) FromDomain(role domain.AccountRole) {
 	r.Permission = role.PermissionMask
 	r.ParentID = role.ParentID
 	r.IsDefault = role.IsDefault
+	r.IsSystem = role.IsSystem
 }

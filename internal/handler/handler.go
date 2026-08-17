@@ -26,10 +26,13 @@ const (
 	pathKeyProfile
 )
 
+//nolint:gochecknoglobals // URL-константы — принятая конвенция проекта (rules/CODESTYLE_GOLANG_API.md).
 var (
 	APIVersion1            = "v1"
 	RegisterURL            = "auth/register"
 	LoginURL               = "auth/login"
+	SwitchAccountURL       = "auth/switch-account"
+	MeURL                  = "me"
 	CreateUserURL          = NewURLSupplier("accounts/%s/users")
 	CreateAccountRoleURL   = NewURLSupplier("accounts/%s/roles")
 	UpdateUserURL          = NewURLSupplier("accounts/%s/users/%s")
@@ -96,6 +99,8 @@ func (h *Handler) GetRouter() *gin.Engine {
 
 	v1.POST(RegisterURL, h.Register)
 	v1.POST(LoginURL, h.Login)
+	v1.POST(SwitchAccountURL, h.RequireAuthMiddleware, h.SwitchAccount)
+	v1.GET(MeURL, h.RequireAuthMiddleware, h.GetMe)
 
 	// Users
 	v1.POST(CreateUserURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateUser)
