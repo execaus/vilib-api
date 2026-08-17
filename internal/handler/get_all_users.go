@@ -21,6 +21,7 @@ import (
 // @Failure 400 {object} dto.ErrorMessage
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/users [get]
 func (h *Handler) GetAllUsers(c *gin.Context) {
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
@@ -42,16 +43,21 @@ func (h *Handler) GetAllUsers(c *gin.Context) {
 
 	var users []dto.User
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
-		domainUsers, err := services.User.ListByAccount(ctx, claims.UserID, accountID, repository.UserStatus(req.Status))
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		domainUsers, usersErr := services.User.ListByAccount(
+			ctx,
+			claims.UserID,
+			accountID,
+			repository.UserStatus(req.Status),
+		)
+		if usersErr != nil {
+			zap.L().Error(usersErr.Error())
+			return usersErr
 		}
 
 		users = make([]dto.User, len(domainUsers))

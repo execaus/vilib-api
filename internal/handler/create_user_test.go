@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"vilib-api/internal/domain"
 	"vilib-api/testutil"
 
 	"github.com/gojuno/minimock/v3"
@@ -24,6 +25,10 @@ func TestHandler_CreateUser(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/invalid-uuid/users"
@@ -41,6 +46,10 @@ func TestHandler_CreateUser(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/users"

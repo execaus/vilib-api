@@ -55,7 +55,7 @@ func TestHandler_DeleteAccountRole(t *testing.T) {
 		svcMock.AccountRole.DeleteMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testRoleID).
 			Then(nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/roles/" + testRoleID.String()
@@ -82,7 +82,7 @@ func TestHandler_DeleteAccountRole(t *testing.T) {
 		svcMock.AccountRole.DeleteMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testRoleID).
 			Then(service.ErrRoleInUse)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/roles/" + testRoleID.String()
@@ -109,7 +109,7 @@ func TestHandler_DeleteAccountRole(t *testing.T) {
 		svcMock.AccountRole.DeleteMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testRoleID).
 			Then(service.ErrIsSystemRole)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/roles/" + testRoleID.String()
@@ -136,7 +136,7 @@ func TestHandler_DeleteAccountRole(t *testing.T) {
 		svcMock.AccountRole.DeleteMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testRoleID).
 			Then(service.ErrForbidden)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/roles/" + testRoleID.String()
@@ -154,6 +154,10 @@ func TestHandler_DeleteAccountRole(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/invalid-uuid/roles/" + testRoleID.String()
@@ -171,6 +175,10 @@ func TestHandler_DeleteAccountRole(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/roles/invalid-uuid"

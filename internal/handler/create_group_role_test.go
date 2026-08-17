@@ -50,9 +50,10 @@ func TestHandler_CreateGroupRole(t *testing.T) {
 			UserID:           testInitiatorID,
 			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.GroupRole.CreateMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID, testName, testPermission, false).Return(testRole, nil)
+		svcMock.GroupRole.CreateMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID, testName, testPermission, false).
+			Return(testRole, nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/roles"
@@ -76,6 +77,10 @@ func TestHandler_CreateGroupRole(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/invalid-uuid/user-groups/roles"
@@ -93,6 +98,10 @@ func TestHandler_CreateGroupRole(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/roles"
@@ -122,9 +131,10 @@ func TestHandler_CreateGroupRole(t *testing.T) {
 			UserID:           testInitiatorID,
 			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.GroupRole.CreateMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID, testName, testPermission, false).Return(domain.GroupRole{}, errors.New("test error"))
+		svcMock.GroupRole.CreateMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID, testName, testPermission, false).
+			Return(domain.GroupRole{}, errors.New("test error"))
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/roles"

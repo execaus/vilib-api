@@ -21,6 +21,7 @@ import (
 // @Success 201 {object} dto.CreateAccountRoleResponse
 // @Failure 400 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/roles [post]
 func (h *Handler) CreateAccountRole(c *gin.Context) {
 	var req dto.CreateAccountRoleRequest
@@ -40,10 +41,10 @@ func (h *Handler) CreateAccountRole(c *gin.Context) {
 		accountRole domain.AccountRole
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services.Auth)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
 		accountRole, err = services.AccountRole.Create(

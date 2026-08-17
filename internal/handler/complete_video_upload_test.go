@@ -63,7 +63,7 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
 			Then(testVideo, nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodPost, url, nil)
@@ -95,7 +95,7 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
 			Then(domain.Video{}, service.ErrNotFound)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodPost, url, nil)
@@ -122,7 +122,7 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
 			Then(domain.Video{}, service.NewConflictError("object not found in storage"))
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodPost, url, nil)
@@ -149,7 +149,7 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
 			Then(domain.Video{}, service.ErrForbidden)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodPost, url, nil)
@@ -181,6 +181,10 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		invalidURL := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() +

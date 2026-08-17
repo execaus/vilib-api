@@ -48,9 +48,10 @@ func TestHandler_UpdateUser(t *testing.T) {
 			UserID:           testInitiatorID,
 			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.User.UpdateMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testUserID, &testRoleID).Then(testUser, nil)
+		svcMock.User.UpdateMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testUserID, &testRoleID).
+			Then(testUser, nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/users/" + testUserID.String()
@@ -72,6 +73,10 @@ func TestHandler_UpdateUser(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/invalid-uuid/users/" + testUserID.String()
@@ -89,6 +94,10 @@ func TestHandler_UpdateUser(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/users/invalid-uuid"
@@ -106,6 +115,10 @@ func TestHandler_UpdateUser(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/users/" + testUserID.String()

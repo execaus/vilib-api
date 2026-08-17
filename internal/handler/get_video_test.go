@@ -71,7 +71,7 @@ func TestHandler_GetVideo(t *testing.T) {
 				Profiles:  []string{"360p", "720p"},
 			}, nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodGet, url, nil)
@@ -118,7 +118,7 @@ func TestHandler_GetVideo(t *testing.T) {
 				Video:     domain.Video{ID: testVideoID, Status: domain.VideoStatusCompressing},
 			}, nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodGet, url+"?is_prefer_original=true", nil)
@@ -152,7 +152,7 @@ func TestHandler_GetVideo(t *testing.T) {
 			When(minimock.AnyContext, testAccountID, testGroupID, testUserID, testVideoID, false).
 			Then(domain.VideoAccess{}, service.NewConflictError("video is not available"))
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodGet, url, nil)
@@ -179,7 +179,7 @@ func TestHandler_GetVideo(t *testing.T) {
 			When(minimock.AnyContext, testAccountID, testGroupID, testUserID, testVideoID, false).
 			Then(domain.VideoAccess{}, service.ErrForbidden)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodGet, url, nil)
@@ -211,6 +211,10 @@ func TestHandler_GetVideo(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		invalidURL := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() +

@@ -31,7 +31,8 @@ func TestHandler_Register(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
-		svcMock.Account.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail).Return(domain.Account{}, nil)
+		svcMock.Account.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail).
+			Return(domain.Account{}, nil)
 
 		router := testutil.SetupTestRouterWithMocks(mc, svcMock, nil)
 
@@ -71,7 +72,8 @@ func TestHandler_Register(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
-		svcMock.Account.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail).Return(domain.Account{}, errors.New("test error"))
+		svcMock.Account.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail).
+			Return(domain.Account{}, errors.New("test error"))
 
 		tx := saga_mocks.NewBobTransactionMock(mc)
 		tx.RollbackMock.Expect(minimock.AnyContext).Return(nil)
@@ -79,7 +81,7 @@ func TestHandler_Register(t *testing.T) {
 		repo := saga_mocks.NewTransactableMock(mc)
 		repo.WithTxMock.Expect(minimock.AnyContext).Return(tx, nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		body, _ := json.Marshal(dto.RegisterRequest{

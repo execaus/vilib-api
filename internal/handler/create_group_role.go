@@ -21,6 +21,7 @@ import (
 // @Success 201 {object} dto.CreateGroupRoleResponse
 // @Failure 400 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/user-groups/roles [post]
 func (h *Handler) CreateGroupRole(c *gin.Context) {
 	var req dto.CreateGroupRoleRequest
@@ -40,10 +41,10 @@ func (h *Handler) CreateGroupRole(c *gin.Context) {
 		role domain.GroupRole
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services.Auth)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
 		role, err = services.GroupRole.Create(

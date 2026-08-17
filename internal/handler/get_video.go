@@ -31,6 +31,7 @@ import (
 // @Failure 404 {object} dto.ErrorMessage
 // @Failure 409 {object} dto.ErrorMessage
 // @Failure 500
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId} [get]
 func (h *Handler) GetVideo(c *gin.Context) {
 	var query dto.GetVideoQuery
@@ -60,10 +61,10 @@ func (h *Handler) GetVideo(c *gin.Context) {
 
 	var access domain.VideoAccess
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services.Auth)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
 		access, err = services.Video.Get(ctx, accountID, groupID, claims.UserID, videoID, query.IsPreferOriginal)

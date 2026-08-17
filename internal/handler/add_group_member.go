@@ -23,6 +23,7 @@ import (
 // @Failure 400 {object} dto.ErrorMessage
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/user-groups/{groupId}/members [post]
 func (h *Handler) AddGroupMember(c *gin.Context) {
 	var req dto.AddGroupMemberRequest
@@ -48,10 +49,10 @@ func (h *Handler) AddGroupMember(c *gin.Context) {
 		members []domain.GroupMember
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services.Auth)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
 		members, err = services.UserGroup.AddMembers(ctx, accountID, claims.UserID, groupID, req.Users...)

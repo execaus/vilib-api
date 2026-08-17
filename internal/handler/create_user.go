@@ -21,6 +21,7 @@ import (
 // @Success 201 {object} dto.CreateUserResponse
 // @Failure 400 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/users [post]
 func (h *Handler) CreateUser(c *gin.Context) {
 	var req dto.CreateUserRequest
@@ -40,10 +41,10 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		user domain.User
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services.Auth)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
 		user, err = services.Account.CreateUser(ctx, accountID, claims.UserID, req.Name, req.Surname, req.Email)

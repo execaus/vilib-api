@@ -12,6 +12,7 @@ import (
 	"vilib-api/testutil"
 
 	"github.com/gojuno/minimock/v3"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -76,6 +77,80 @@ func TestService_Auth_IssueAndParseHLSToken(t *testing.T) {
 	})
 }
 
+// TestService_Auth_GetClaimsFromToken проверяет разбор значения заголовка Authorization
+// (§2.1 дизайна эпика): оба формата "Bearer <jwt>" и голый "<jwt>", просроченный токен
+// (ErrTokenExpired, а не nil, nil) и битый/неподписанный токен (ErrTokenInvalid).
+func TestService_Auth_GetClaimsFromToken(t *testing.T) {
+	t.Parallel()
+
+	authSvc := service.NewAuthService(config.AuthConfig{Key: "test-secret-key"}, nil)
+	testUserID := uuid.New()
+	testAccountID := uuid.New()
+
+	t.Run("bearer prefixed token is parsed", func(t *testing.T) {
+		t.Parallel()
+
+		token, err := authSvc.GenerateToken(testUserID, []uuid.UUID{testAccountID}, testAccountID)
+		require.NoError(t, err)
+
+		claims, err := authSvc.GetClaimsFromToken("Bearer " + token)
+		require.NoError(t, err)
+		require.Equal(t, testUserID, claims.UserID)
+	})
+
+	t.Run("bare token without bearer prefix is parsed", func(t *testing.T) {
+		t.Parallel()
+
+		token, err := authSvc.GenerateToken(testUserID, []uuid.UUID{testAccountID}, testAccountID)
+		require.NoError(t, err)
+
+		claims, err := authSvc.GetClaimsFromToken(token)
+		require.NoError(t, err)
+		require.Equal(t, testUserID, claims.UserID)
+	})
+
+	t.Run("expired token returns ErrTokenExpired, not nil claims and nil error", func(t *testing.T) {
+		t.Parallel()
+
+		expiredClaims := domain.AuthClaims{
+			UserID:           testUserID,
+			CurrentAccountID: testAccountID,
+			Accounts:         []uuid.UUID{testAccountID},
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(-time.Hour)),
+				IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
+			},
+		}
+		expiredToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, expiredClaims).
+			SignedString([]byte("test-secret-key"))
+		require.NoError(t, err)
+
+		claims, err := authSvc.GetClaimsFromToken(expiredToken)
+		require.Nil(t, claims)
+		require.ErrorIs(t, err, service.ErrTokenExpired)
+	})
+
+	t.Run("malformed token returns ErrTokenInvalid", func(t *testing.T) {
+		t.Parallel()
+
+		claims, err := authSvc.GetClaimsFromToken("Bearer not-a-jwt")
+		require.Nil(t, claims)
+		require.ErrorIs(t, err, service.ErrTokenInvalid)
+	})
+
+	t.Run("token signed with different key returns ErrTokenInvalid", func(t *testing.T) {
+		t.Parallel()
+
+		otherSvc := service.NewAuthService(config.AuthConfig{Key: "other-secret-key"}, nil)
+		token, err := otherSvc.GenerateToken(testUserID, []uuid.UUID{testAccountID}, testAccountID)
+		require.NoError(t, err)
+
+		claims, err := authSvc.GetClaimsFromToken(token)
+		require.Nil(t, claims)
+		require.ErrorIs(t, err, service.ErrTokenInvalid)
+	})
+}
+
 func TestService_Auth_Login(t *testing.T) {
 	t.Parallel()
 
@@ -123,7 +198,7 @@ func TestService_Auth_Login(t *testing.T) {
 			},
 			args:    args{testEmail, testPassword},
 			want:    "",
-			wantErr: service.ErrNotFound,
+			wantErr: service.ErrInvalidCredentials,
 		},
 		{
 			name: "deactivated user",

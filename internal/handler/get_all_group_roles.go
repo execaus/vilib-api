@@ -19,6 +19,7 @@ import (
 // @Failure 400 {object} dto.ErrorMessage
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/user-groups/roles [get]
 func (h *Handler) GetAllGroupRoles(c *gin.Context) {
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
@@ -29,16 +30,16 @@ func (h *Handler) GetAllGroupRoles(c *gin.Context) {
 
 	var roles []dto.GroupRole
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
-		domainRoles, err := services.GroupRole.GetAll(ctx, claims.UserID, accountID)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		domainRoles, rolesErr := services.GroupRole.GetAll(ctx, claims.UserID, accountID)
+		if rolesErr != nil {
+			zap.L().Error(rolesErr.Error())
+			return rolesErr
 		}
 
 		roles = make([]dto.GroupRole, len(domainRoles))

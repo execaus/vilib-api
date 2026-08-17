@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"math/big"
+	"strings"
 	"time"
 	"vilib-api/config"
 	"vilib-api/internal/domain"
@@ -19,6 +20,9 @@ const (
 	DefaultJWTExpireDuration = time.Hour * 24
 	passwordLength           = 16
 	chars                    = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	// bearerPrefix — префикс значения заголовка Authorization; GetClaimsFromToken принимает
+	// значение как с ним, так и без (§1 дизайна эпика).
+	bearerPrefix = "Bearer "
 )
 
 type AuthService struct {
@@ -51,8 +55,8 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 		}
 	}
 	if !isValid {
-		zap.L().Warn(ErrNotFound.Error())
-		return "", ErrNotFound
+		zap.L().Warn(ErrInvalidCredentials.Error())
+		return "", ErrInvalidCredentials
 	}
 
 	// Проверка, что пользователь активен
@@ -88,10 +92,17 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	return token, nil
 }
 
-func (s *AuthService) GetClaimsFromToken(tokenString string) (*domain.AuthClaims, error) {
+// GetClaimsFromToken разбирает и проверяет JWT. Параметр token — значение заголовка
+// Authorization целиком: принимается как "Bearer <jwt>", так и голый "<jwt>" (обратная
+// совместимость с e2e-скриптами, §1 дизайна эпика). Никогда не возвращает nil, nil:
+// просроченный токен — ErrTokenExpired, любая другая проблема (битая подпись, неверный
+// формат, token.Valid == false) — ErrTokenInvalid.
+func (s *AuthService) GetClaimsFromToken(token string) (*domain.AuthClaims, error) {
+	tokenString := strings.TrimSpace(strings.TrimPrefix(token, bearerPrefix))
+
 	// Парсинг токена и извлечение claims
-	token, err := jwt.ParseWithClaims(tokenString, &domain.AuthClaims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+	parsedToken, err := jwt.ParseWithClaims(tokenString, &domain.AuthClaims{}, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			zap.L().Error(jwt.ErrTokenSignatureInvalid.Error())
 			return nil, jwt.ErrTokenSignatureInvalid
 		}
@@ -100,19 +111,20 @@ func (s *AuthService) GetClaimsFromToken(tokenString string) (*domain.AuthClaims
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			zap.L().Warn(err.Error())
-			return nil, nil
+			return nil, ErrTokenExpired
 		}
-		zap.L().Error(err.Error())
-		return nil, err
+		zap.L().Warn(err.Error())
+		return nil, ErrTokenInvalid
 	}
 
 	// Проверка валидности токена
-	if claims, ok := token.Claims.(*domain.AuthClaims); ok && token.Valid {
-		return claims, nil
+	claims, ok := parsedToken.Claims.(*domain.AuthClaims)
+	if !ok || !parsedToken.Valid {
+		zap.L().Error(ErrTokenInvalid.Error())
+		return nil, ErrTokenInvalid
 	}
 
-	zap.L().Error(ErrTokenInvalid.Error())
-	return nil, ErrTokenInvalid
+	return claims, nil
 }
 
 func (s *AuthService) GenerateToken(

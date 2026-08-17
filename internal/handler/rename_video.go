@@ -26,6 +26,7 @@ import (
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 404 {object} dto.ErrorMessage
 // @Failure 500
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId} [put]
 func (h *Handler) RenameVideo(c *gin.Context) {
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
@@ -54,10 +55,10 @@ func (h *Handler) RenameVideo(c *gin.Context) {
 
 	var video domain.Video
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
 		video, err = services.Video.Rename(ctx, accountID, groupID, claims.UserID, videoID, req.Name)

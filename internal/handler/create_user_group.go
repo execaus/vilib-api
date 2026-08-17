@@ -23,6 +23,7 @@ import (
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 409 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/user-groups [post]
 func (h *Handler) CreateUserGroup(c *gin.Context) {
 	var req dto.CreateUserGroupRequest
@@ -43,10 +44,10 @@ func (h *Handler) CreateUserGroup(c *gin.Context) {
 		members []domain.GroupMember
 	)
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
 		group, err = services.UserGroup.Create(ctx, accountID, claims.UserID, req.Name)

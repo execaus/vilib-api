@@ -55,7 +55,7 @@ func TestHandler_DeactivateUser(t *testing.T) {
 		svcMock.User.DeactivateMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testUserID).
 			Then(nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/users/" + testUserID.String()
@@ -82,7 +82,7 @@ func TestHandler_DeactivateUser(t *testing.T) {
 		svcMock.User.DeactivateMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testUserID).
 			Then(service.ErrIsOwner)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/users/" + testUserID.String()
@@ -109,7 +109,7 @@ func TestHandler_DeactivateUser(t *testing.T) {
 		svcMock.User.DeactivateMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testUserID).
 			Then(service.ErrUserDeactivated)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/users/" + testUserID.String()
@@ -136,7 +136,7 @@ func TestHandler_DeactivateUser(t *testing.T) {
 		svcMock.User.DeactivateMock.When(minimock.AnyContext, testInitiatorID, testAccountID, testUserID).
 			Then(service.ErrForbidden)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/users/" + testUserID.String()
@@ -154,6 +154,10 @@ func TestHandler_DeactivateUser(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/invalid-uuid/users/" + testUserID.String()
@@ -171,6 +175,10 @@ func TestHandler_DeactivateUser(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/users/invalid-uuid"

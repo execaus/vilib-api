@@ -27,6 +27,7 @@ import (
 // @Failure 404 {object} dto.ErrorMessage
 // @Failure 409 {object} dto.ErrorMessage
 // @Failure 500
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}/complete [post]
 func (h *Handler) CompleteVideoUpload(c *gin.Context) {
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
@@ -49,10 +50,10 @@ func (h *Handler) CompleteVideoUpload(c *gin.Context) {
 
 	var video domain.Video
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services.Auth)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
 		video, err = services.Video.CompleteUpload(ctx, accountID, groupID, claims.UserID, videoID)

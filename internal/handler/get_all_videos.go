@@ -23,6 +23,7 @@ import (
 // @Failure 401
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 500
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/user-groups/{userGroupId}/videos [get]
 func (h *Handler) GetAllVideos(c *gin.Context) {
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
@@ -39,16 +40,16 @@ func (h *Handler) GetAllVideos(c *gin.Context) {
 
 	var videos []dto.Video
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
-		items, err := services.Video.GetAll(ctx, accountID, groupID, claims.UserID)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		items, videosErr := services.Video.GetAll(ctx, accountID, groupID, claims.UserID)
+		if videosErr != nil {
+			zap.L().Error(videosErr.Error())
+			return videosErr
 		}
 
 		videos = make([]dto.Video, len(items))

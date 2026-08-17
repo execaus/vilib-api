@@ -56,7 +56,7 @@ func TestHandler_DeleteGroupMember(t *testing.T) {
 		svcMock.GroupMember.RemoveMemberMock.When(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID, testMemberID).
 			Then(nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() + "/members/" + testMemberID.String()
@@ -83,7 +83,7 @@ func TestHandler_DeleteGroupMember(t *testing.T) {
 		svcMock.GroupMember.RemoveMemberMock.When(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID, testMemberID).
 			Then(service.ErrNotFound)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() + "/members/" + testMemberID.String()
@@ -110,7 +110,7 @@ func TestHandler_DeleteGroupMember(t *testing.T) {
 		svcMock.GroupMember.RemoveMemberMock.When(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID, testMemberID).
 			Then(service.ErrForbidden)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() + "/members/" + testMemberID.String()
@@ -128,6 +128,10 @@ func TestHandler_DeleteGroupMember(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/invalid-uuid/user-groups/" + testGroupID.String() + "/members/" + testMemberID.String()

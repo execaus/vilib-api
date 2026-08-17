@@ -20,6 +20,7 @@ import (
 // @Failure 403 {object} dto.ErrorMessage
 // @Failure 404 {object} dto.ErrorMessage
 // @Failure 500 {object} dto.ErrorMessage
+// @Security BearerAuth
 // @Router /api/v1/accounts/{accountId}/user-groups/{userGroupId} [delete]
 func (h *Handler) DeleteUserGroup(c *gin.Context) {
 	accountID, err := h.GetPathUUIDValue(c, pathKeyAccountID)
@@ -35,10 +36,10 @@ func (h *Handler) DeleteUserGroup(c *gin.Context) {
 	}
 
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
-		claims, err := h.getClaims(c, services)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		claims, claimsErr := h.claims(c)
+		if claimsErr != nil {
+			zap.L().Error(claimsErr.Error())
+			return claimsErr
 		}
 
 		if err = services.UserGroup.Delete(ctx, claims.UserID, accountID, groupID); err != nil {

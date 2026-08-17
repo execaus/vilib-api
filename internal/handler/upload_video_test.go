@@ -74,7 +74,7 @@ func TestHandler_UploadVideo(t *testing.T) {
 			).
 			Then(domain.VideoUpload{VideoID: testVideoID, UploadURL: testUploadURL, ExpiresAt: testExpiresAt}, nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		body, _ := json.Marshal(testRequest)
@@ -116,7 +116,7 @@ func TestHandler_UploadVideo(t *testing.T) {
 			).
 			Then(domain.VideoUpload{}, service.ErrForbidden)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		body, _ := json.Marshal(testRequest)
@@ -153,7 +153,7 @@ func TestHandler_UploadVideo(t *testing.T) {
 			).
 			Then(domain.VideoUpload{}, service.NewConflictError("video name already exists"))
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		body, _ := json.Marshal(testRequest)
@@ -172,6 +172,10 @@ func TestHandler_UploadVideo(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		body, _ := json.Marshal(dto.UploadVideoRequest{Name: "", ContentType: "video/mp4", SizeBytes: 1024})

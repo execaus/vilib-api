@@ -48,9 +48,10 @@ func TestHandler_AddGroupMember(t *testing.T) {
 			UserID:           testInitiatorID,
 			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.UserGroup.AddMembersMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID, testUserID).Return(testMembers, nil)
+		svcMock.UserGroup.AddMembersMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID, testUserID).
+			Return(testMembers, nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() + "/members"
@@ -72,6 +73,10 @@ func TestHandler_AddGroupMember(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/invalid-uuid/user-groups/" + testGroupID.String() + "/members"
@@ -89,6 +94,10 @@ func TestHandler_AddGroupMember(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/invalid-uuid/members"
@@ -106,6 +115,10 @@ func TestHandler_AddGroupMember(t *testing.T) {
 		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		svcMock.Auth.GetClaimsFromTokenMock.Return(
+			&domain.AuthClaims{UserID: uuid.New(), CurrentAccountID: uuid.New()},
+			nil,
+		)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() + "/members"
@@ -135,9 +148,10 @@ func TestHandler_AddGroupMember(t *testing.T) {
 			UserID:           testInitiatorID,
 			CurrentAccountID: testAccountID,
 		}, nil)
-		svcMock.UserGroup.AddMembersMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID, testUserID).Return([]domain.GroupMember{}, errors.New("test error"))
+		svcMock.UserGroup.AddMembersMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID, testUserID).
+			Return([]domain.GroupMember{}, errors.New("test error"))
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		url := "/api/v1/accounts/" + testAccountID.String() + "/user-groups/" + testGroupID.String() + "/members"

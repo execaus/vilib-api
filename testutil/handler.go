@@ -74,7 +74,7 @@ func SetupTestRouterWithMocks(
 	tx.CommitMock.Expect(minimock.AnyContext).Return(nil)
 	repo.WithTxMock.Expect(minimock.AnyContext).Return(tx, nil)
 
-	h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+	h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 	return h.GetRouter()
 }
 
@@ -87,6 +87,6 @@ func SetupTestRouterWithoutTx(mc *minimock.Controller, svcMock *HandlerTestServi
 	repo.WithTxMock.When(minimock.AnyContext).Then(tx, nil)
 	repo.WithTxMock.Optional()
 
-	h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+	h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 	return h.GetRouter()
 }

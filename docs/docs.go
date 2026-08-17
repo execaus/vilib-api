@@ -37,6 +37,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/roles": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Возвращает список всех ролей аккаунта",
                 "produces": [
                     "application/json"
@@ -85,6 +90,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Создаёт новую роль для аккаунта с указанными правами",
                 "consumes": [
                     "application/json"
@@ -138,6 +148,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/roles/{roleId}": {
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Удаляет роль аккаунта. Нельзя удалить системную роль или роль, назначенную активным пользователям.",
                 "produces": [
                     "application/json"
@@ -195,6 +210,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Возвращает список групп пользователей аккаунта",
                 "produces": [
                     "application/json"
@@ -240,6 +260,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Создаёт новую группу пользователей и добавляет указанных пользователей в неё",
                 "consumes": [
                     "application/json"
@@ -305,6 +330,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/roles": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Возвращает список всех ролей групп для аккаунта",
                 "produces": [
                     "application/json"
@@ -353,6 +383,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Создаёт новую роль для группы пользователей с указанными правами",
                 "consumes": [
                     "application/json"
@@ -406,6 +441,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/roles/{groupRoleId}": {
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Удаляет роль группы. Нельзя удалить роль, назначенную участникам.",
                 "produces": [
                     "application/json"
@@ -463,6 +503,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/{groupId}/members": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Добавляет указанных пользователей в существующую группу",
                 "consumes": [
                     "application/json"
@@ -529,6 +574,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/{groupId}/video": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Создаёт запись видео в статусе загрузки и возвращает преподписанный URL для загрузки оригинала в S3",
                 "consumes": [
                     "application/json"
@@ -601,6 +651,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Возвращает точку доступа к видео по статусу (§4.4 дизайна эпика): для готового\nвидео без is_prefer_original — URL мастер-плейлиста HLS с HLS-токеном в query,\nиначе — преподписанный URL на оригинал. Возвращает 409, если видео недоступно\n(ещё загружается или обработка завершилась ошибкой без сохранённого оригинала).",
                 "consumes": [
                     "application/json"
@@ -683,6 +738,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/{groupId}/video/{videoId}/complete": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Подтверждает, что оригинал видео загружен в хранилище: проверяет объект,\nрегистрирует ассет-оригинал и переводит видео в очередь на обработку.\nПовторный вызов для видео, уже поставленного в очередь, обрабатываемого или готового, идемпотентен.",
                 "produces": [
                     "application/json"
@@ -923,6 +983,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/{userGroupId}": {
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Каскадно удаляет группу вместе со всеми видео, участниками и ассетами",
                 "produces": [
                     "application/json"
@@ -980,6 +1045,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/members/{memberId}": {
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Удаляет пользователя из группы",
                 "produces": [
                     "application/json"
@@ -1044,6 +1114,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Переименовывает видео в группе",
                 "consumes": [
                     "application/json"
@@ -1121,6 +1196,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Удаляет видео из группы",
                 "produces": [
                     "application/json"
@@ -1185,6 +1265,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/videos": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Возвращает список видео в группе пользователей: статус, профили HLS и признак\nналичия обработанной версии — из ассетов видео. Причина сбоя (failure) видна\nтолько инициатору с правом ManageVideo, иначе поле — null (Э1-Т17).",
                 "produces": [
                     "application/json"
@@ -1239,6 +1324,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/users": {
             "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Возвращает список пользователей, привязанных к аккаунту, с опциональной фильтрацией по статусу",
                 "produces": [
                     "application/json"
@@ -1290,6 +1380,11 @@ const docTemplate = `{
                 }
             },
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Создает нового пользователя с указанными данными, привязывает его к аккаунту и отправляет email с паролем",
                 "consumes": [
                     "application/json"
@@ -1343,6 +1438,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/users/{userId}": {
             "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Обновляет данные пользователя (например, роль)",
                 "consumes": [
                     "application/json"
@@ -1413,6 +1513,11 @@ const docTemplate = `{
                 }
             },
             "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Деактивирует пользователя в аккаунте (мягкое удаление)",
                 "produces": [
                     "application/json"
@@ -1470,6 +1575,11 @@ const docTemplate = `{
         },
         "/api/v1/accounts/{accountId}/users/{userId}/reactivate": {
             "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
                 "description": "Реактивирует ранее деактивированного пользователя в аккаунте",
                 "produces": [
                     "application/json"
@@ -1805,6 +1915,9 @@ const docTemplate = `{
         "dto.ErrorMessage": {
             "type": "object",
             "properties": {
+                "code": {
+                    "type": "string"
+                },
                 "message": {
                     "type": "string"
                 }
@@ -2144,6 +2257,13 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        }
+    },
+    "securityDefinitions": {
+        "BearerAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }`

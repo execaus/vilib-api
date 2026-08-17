@@ -54,13 +54,21 @@ var (
 	ListVideosURL        = NewURLSupplier("accounts/%s/user-groups/%s/videos")
 )
 
-type Handler struct {
-	saga saga.Runner[*service.Service]
+// Deps — внешние зависимости handler'а, нужные вне саги (§1 дизайна эпика). Auth используется
+// RequireAuthMiddleware для разбора JWT до открытия транзакции.
+type Deps struct {
+	Auth service.Auth
 }
 
-func NewHandler(saga saga.Runner[*service.Service]) *Handler {
+type Handler struct {
+	saga saga.Runner[*service.Service]
+	deps Deps
+}
+
+func NewHandler(saga saga.Runner[*service.Service], deps Deps) *Handler {
 	h := &Handler{
 		saga: saga,
+		deps: deps,
 	}
 
 	return h
@@ -71,6 +79,9 @@ func NewHandler(saga saga.Runner[*service.Service]) *Handler {
 // @description API для управления внутренней видео документацией Vilib.
 // @host localhost:8080
 // @BasePath /api/v1
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func (h *Handler) GetRouter() *gin.Engine {
 	engine := gin.Default()
 
@@ -91,17 +102,29 @@ func (h *Handler) GetRouter() *gin.Engine {
 	v1.GET(ListUsersURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllUsers)
 	v1.PUT(UpdateUserURL.WithPathParams(pathKeyAccountID, pathKeyUserID), h.RequireAuthMiddleware, h.UpdateUser)
 	v1.DELETE(UpdateUserURL.WithPathParams(pathKeyAccountID, pathKeyUserID), h.RequireAuthMiddleware, h.DeactivateUser)
-	v1.POST(ReactivateUserURL.WithPathParams(pathKeyAccountID, pathKeyUserID), h.RequireAuthMiddleware, h.ReactivateUser)
+	v1.POST(
+		ReactivateUserURL.WithPathParams(pathKeyAccountID, pathKeyUserID),
+		h.RequireAuthMiddleware,
+		h.ReactivateUser,
+	)
 
 	// Account roles
 	v1.POST(CreateAccountRoleURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateAccountRole)
 	v1.GET(ListAccountRolesURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllAccountRoles)
-	v1.DELETE(DeleteAccountRoleURL.WithPathParams(pathKeyAccountID, pathKeyRoleID), h.RequireAuthMiddleware, h.DeleteAccountRole)
+	v1.DELETE(
+		DeleteAccountRoleURL.WithPathParams(pathKeyAccountID, pathKeyRoleID),
+		h.RequireAuthMiddleware,
+		h.DeleteAccountRole,
+	)
 
 	// User groups
 	v1.POST(CreateUserGroupURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateUserGroup)
 	v1.GET(ListUserGroupsURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllUserGroups)
-	v1.DELETE(DeleteUserGroupURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID), h.RequireAuthMiddleware, h.DeleteUserGroup)
+	v1.DELETE(
+		DeleteUserGroupURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
+		h.RequireAuthMiddleware,
+		h.DeleteUserGroup,
+	)
 
 	// Group members
 	v1.POST(
@@ -118,7 +141,11 @@ func (h *Handler) GetRouter() *gin.Engine {
 	// Group roles
 	v1.POST(CreateGroupRoleURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateGroupRole)
 	v1.GET(ListGroupRolesURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllGroupRoles)
-	v1.DELETE(DeleteGroupRoleURL.WithPathParams(pathKeyAccountID, pathKeyGroupRoleID), h.RequireAuthMiddleware, h.DeleteGroupRole)
+	v1.DELETE(
+		DeleteGroupRoleURL.WithPathParams(pathKeyAccountID, pathKeyGroupRoleID),
+		h.RequireAuthMiddleware,
+		h.DeleteGroupRole,
+	)
 
 	// Videos
 	v1.POST(

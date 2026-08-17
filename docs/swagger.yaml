@@ -117,6 +117,8 @@ definitions:
     type: object
   dto.ErrorMessage:
     properties:
+      code:
+        type: string
       message:
         type: string
     type: object
@@ -402,6 +404,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Список ролей аккаунта
       tags:
       - account_roles
@@ -436,6 +440,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Создание роли аккаунта
       tags:
       - account_roles
@@ -475,6 +481,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Удаление роли аккаунта
       tags:
       - account_roles
@@ -506,6 +514,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Список групп пользователей
       tags:
       - user_groups
@@ -549,6 +559,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Создание группы пользователей
       tags:
       - user_groups
@@ -593,6 +605,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Добавление участников в группу
       tags:
       - user_groups
@@ -642,6 +656,8 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
         "500":
           description: Internal Server Error
+      security:
+      - BearerAuth: []
       summary: Создание загрузки видео
       tags:
       - videos
@@ -701,6 +717,8 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
         "500":
           description: Internal Server Error
+      security:
+      - BearerAuth: []
       summary: Получение точки доступа к видео
       tags:
       - videos
@@ -753,6 +771,8 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
         "500":
           description: Internal Server Error
+      security:
+      - BearerAuth: []
       summary: Подтверждение загрузки видео
       tags:
       - videos
@@ -910,6 +930,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Удаление группы пользователей
       tags:
       - user_groups
@@ -953,6 +975,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Удаление участника группы
       tags:
       - group_members
@@ -996,6 +1020,8 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
         "500":
           description: Internal Server Error
+      security:
+      - BearerAuth: []
       summary: Удаление видео
       tags:
       - videos
@@ -1048,6 +1074,8 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
         "500":
           description: Internal Server Error
+      security:
+      - BearerAuth: []
       summary: Переименование видео
       tags:
       - videos
@@ -1087,6 +1115,8 @@ paths:
             $ref: '#/definitions/dto.ErrorMessage'
         "500":
           description: Internal Server Error
+      security:
+      - BearerAuth: []
       summary: Список видео группы
       tags:
       - videos
@@ -1120,6 +1150,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Список ролей групп
       tags:
       - group_roles
@@ -1154,6 +1186,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Создание роли группы
       tags:
       - group_roles
@@ -1192,6 +1226,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Удаление роли группы
       tags:
       - group_roles
@@ -1228,6 +1264,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Список пользователей аккаунта
       tags:
       - users
@@ -1263,6 +1301,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Создание пользователя
       tags:
       - users
@@ -1301,6 +1341,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Деактивация пользователя
       tags:
       - users
@@ -1348,6 +1390,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Обновление пользователя
       tags:
       - users
@@ -1388,6 +1432,8 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
       summary: Реактивация пользователя
       tags:
       - users
@@ -1457,4 +1503,9 @@ paths:
       summary: Регистрация нового пользователя
       tags:
       - auth
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

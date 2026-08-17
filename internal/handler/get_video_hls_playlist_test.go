@@ -57,7 +57,7 @@ func TestHandler_GetVideoHLSPlaylist(t *testing.T) {
 			When(minimock.AnyContext, testVideoID, testProfile, testToken).
 			Then(testBody, nil)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodGet, url+"?token="+testToken, nil)
@@ -95,7 +95,7 @@ func TestHandler_GetVideoHLSPlaylist(t *testing.T) {
 			When(minimock.AnyContext, testVideoID, testProfile, testToken).
 			Then(nil, service.ErrUnauthorized)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodGet, url+"?token="+testToken, nil)
@@ -116,7 +116,7 @@ func TestHandler_GetVideoHLSPlaylist(t *testing.T) {
 			When(minimock.AnyContext, testVideoID, testProfile, testToken).
 			Then(nil, service.ErrNotFound)
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodGet, url+"?token="+testToken, nil)
@@ -137,7 +137,7 @@ func TestHandler_GetVideoHLSPlaylist(t *testing.T) {
 			When(minimock.AnyContext, testVideoID, testProfile, testToken).
 			Then(nil, service.NewConflictError("video is not available"))
 
-		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo))
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
 
 		req := httptest.NewRequest(http.MethodGet, url+"?token="+testToken, nil)
