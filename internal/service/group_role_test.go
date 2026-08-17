@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 	"vilib-api/internal/domain"
+	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 	"vilib-api/internal/repository/repository_mocks"
 	"vilib-api/internal/service"
@@ -93,6 +94,23 @@ func TestService_GroupRole_Create(t *testing.T) {
 			want:    domain.GroupRole{},
 			wantErr: errSomeError,
 		},
+		{
+			name: "duplicate role name returns conflict",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.GroupRoleMock) {
+				access.IsCheckAccountActionMock.
+					Expect(
+						minimock.AnyContext,
+						testAccountID,
+						testInitiatorID,
+						domain.AccountPermissionManageRoles,
+					).Return(nil)
+				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testName, testPermission, false).
+					Return(domain.GroupRole{}, dberrors.GroupRoleErrors.ErrUniqueGroupRolesAccountIdNameKey)
+			},
+			args:    args{testAccountID, testInitiatorID, testName, testPermission, false},
+			want:    domain.GroupRole{},
+			wantErr: service.ErrGroupRoleNameExists,
+		},
 	}
 
 	for _, tt := range tests {
@@ -107,7 +125,82 @@ func TestService_GroupRole_Create(t *testing.T) {
 				func(s *service.Service, r *repository.Repository) {
 					srv := service.NewGroupRoleService(r.GroupRole, s)
 
-					got, err := srv.Create(t.Context(), tt.args.accountID, tt.args.initiatorID, tt.args.name, tt.args.permission, tt.args.isDefault)
+					got, err := srv.Create(
+						t.Context(),
+						tt.args.accountID,
+						tt.args.initiatorID,
+						tt.args.name,
+						tt.args.permission,
+						tt.args.isDefault,
+					)
+
+					require.Equal(t, tt.want, got)
+					require.Equal(t, tt.wantErr, err)
+				},
+			)
+		})
+	}
+}
+
+// TestService_GroupRole_GetDefault проверяет, что отсутствие роли группы по умолчанию
+// превращается в ErrDefaultGroupRoleNotFound (HTTP 409 conflict.default_group_role_missing),
+// а не остаётся repository.ErrNotFound (HTTP 404) — §2.2 дизайна эпика.
+func TestService_GroupRole_GetDefault(t *testing.T) {
+	t.Parallel()
+
+	testAccountID := uuid.New()
+	testRoleID := uuid.New()
+
+	var errSomeError = errors.New("some error")
+
+	tests := []struct {
+		name       string
+		setupMocks func(*repository_mocks.GroupRoleMock)
+		want       domain.GroupRole
+		wantErr    error
+	}{
+		{
+			name: "success",
+			setupMocks: func(repo *repository_mocks.GroupRoleMock) {
+				repo.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).
+					Return(domain.GroupRole{ID: testRoleID}, nil)
+			},
+			want:    domain.GroupRole{ID: testRoleID},
+			wantErr: nil,
+		},
+		{
+			name: "no default role returns conflict",
+			setupMocks: func(repo *repository_mocks.GroupRoleMock) {
+				repo.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).
+					Return(domain.GroupRole{}, repository.ErrNotFound)
+			},
+			want:    domain.GroupRole{},
+			wantErr: service.ErrDefaultGroupRoleNotFound,
+		},
+		{
+			name: "select error propagates",
+			setupMocks: func(repo *repository_mocks.GroupRoleMock) {
+				repo.GetDefaultMock.Expect(minimock.AnyContext, testAccountID).
+					Return(domain.GroupRole{}, errSomeError)
+			},
+			want:    domain.GroupRole{},
+			wantErr: errSomeError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			testutil.TestService(
+				t,
+				func(_ *testutil.ServiceMock, mockRepos *testutil.RepositoryMock) {
+					tt.setupMocks(mockRepos.GroupRole)
+				},
+				func(s *service.Service, r *repository.Repository) {
+					srv := service.NewGroupRoleService(r.GroupRole, s)
+
+					got, err := srv.GetDefault(t.Context(), testAccountID)
 
 					require.Equal(t, tt.want, got)
 					require.Equal(t, tt.wantErr, err)

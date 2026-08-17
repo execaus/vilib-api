@@ -147,7 +147,7 @@ func (s *VideoService) Get(
 		return s.originalVideoAccess(ctx, *video, original)
 	}
 
-	return domain.VideoAccess{}, NewConflictError("video is not available")
+	return domain.VideoAccess{}, ErrVideoNotAvailable
 }
 
 // hlsVideoAccess собирает точку доступа "hls": выпускает HLS-токен на мастер-плейлист и
@@ -290,7 +290,7 @@ func (s *VideoService) hlsRequestAssets(
 	}
 
 	if video.Status != domain.VideoStatusReady {
-		return nil, NewConflictError("video is not available")
+		return nil, ErrVideoNotAvailable
 	}
 
 	assets, err := s.srv.VideoAsset.Get(ctx, videoID)
@@ -378,10 +378,16 @@ func (s *VideoService) CreateUpload(
 
 	// Валидация MIME-типа и размера файла
 	if !strings.HasPrefix(contentType, videoContentTypePrefix) {
-		return domain.VideoUpload{}, NewValidationError("content_type must start with " + videoContentTypePrefix)
+		return domain.VideoUpload{}, NewValidationErrorCode(
+			codeValidationContentType,
+			"content_type must start with "+videoContentTypePrefix,
+		)
 	}
 	if size <= 0 || size > s.cfg.Video.MaxUploadSizeBytes {
-		return domain.VideoUpload{}, NewValidationError("size_bytes must be between 1 and max upload size")
+		return domain.VideoUpload{}, NewValidationErrorCode(
+			codeValidationSizeBytes,
+			"size_bytes must be between 1 and max upload size",
+		)
 	}
 
 	// Создание записи о видео в статусе загрузки
@@ -389,7 +395,7 @@ func (s *VideoService) CreateUpload(
 	if err != nil {
 		if errors.Is(dberrors.UserGroupVideoErrors.ErrUniqueUserGroupVideosUserGroupIdNameKey, err) {
 			zap.L().Warn(err.Error())
-			return domain.VideoUpload{}, NewConflictError("video name already exists")
+			return domain.VideoUpload{}, ErrVideoNameExists
 		}
 		zap.L().Error(err.Error())
 		return domain.VideoUpload{}, err
@@ -451,7 +457,7 @@ func (s *VideoService) CompleteUpload(
 		if video.FailureReason != nil {
 			reason = *video.FailureReason
 		}
-		return domain.Video{}, NewConflictError("upload failed: " + reason)
+		return domain.Video{}, NewConflictErrorCode(codeConflictUploadFailed, "upload failed: "+reason)
 	case domain.VideoStatusUploading:
 		// Продолжение обработки ниже.
 	}
@@ -468,14 +474,14 @@ func (s *VideoService) completeUploadingVideo(ctx context.Context, videoID uuid.
 	info, err := s.s3.HeadObject(ctx, s.cfg.Bucket, key)
 	if err != nil {
 		if errors.Is(err, s3.ErrObjectNotFound) {
-			return domain.Video{}, NewConflictError("object not found in storage")
+			return domain.Video{}, ErrObjectNotFoundInStorage
 		}
 		zap.L().Error(err.Error())
 		return domain.Video{}, err
 	}
 
 	if info.Size == 0 {
-		return domain.Video{}, NewConflictError("object is empty")
+		return domain.Video{}, ErrObjectEmpty
 	}
 
 	if _, createErr := s.srv.VideoAsset.Create(

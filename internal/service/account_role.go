@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"vilib-api/internal/domain"
+	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 
 	"github.com/google/uuid"
@@ -81,6 +83,10 @@ func (s *AccountRoleService) Create(
 	}
 
 	if _, err := s.repo.Insert(ctx, accountID, name, parentID, permission, isDefault, false); err != nil {
+		if errors.Is(dberrors.AccountRoleErrors.ErrUniqueUniqueAccountRole, err) {
+			zap.L().Warn(err.Error())
+			return domain.AccountRole{}, ErrAccountRoleNameExists
+		}
 		zap.L().Error(err.Error())
 		return domain.AccountRole{}, err
 	}
@@ -98,7 +104,12 @@ func (s *AccountRoleService) GetAll(
 	ctx context.Context,
 	initiatorID, accountID uuid.UUID,
 ) ([]domain.AccountRole, error) {
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageRoles); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageRoles,
+	); err != nil {
 		return nil, err
 	}
 
@@ -115,7 +126,12 @@ func (s *AccountRoleService) Delete(
 	ctx context.Context,
 	initiatorID, accountID, roleID uuid.UUID,
 ) error {
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageRoles); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageRoles,
+	); err != nil {
 		return err
 	}
 

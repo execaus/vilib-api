@@ -42,7 +42,7 @@ func (s *UserGroupService) Create(
 	if err != nil {
 		if errors.Is(dberrors.UserGroupErrors.ErrUniqueUserGroupsNameAccountIdKey, err) {
 			zap.L().Warn(err.Error())
-			return domain.UserGroup{}, NewConflictError("group name already exists")
+			return domain.UserGroup{}, NewConflictErrorCode("conflict.group_name", "group name already exists")
 		}
 		zap.L().Error(err.Error())
 		return domain.UserGroup{}, err
@@ -104,7 +104,12 @@ func (s *UserGroupService) Delete(
 	initiatorID, accountID, groupID uuid.UUID,
 ) error {
 	// Проверка прав на управление группами
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageGroups); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageGroups,
+	); err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}

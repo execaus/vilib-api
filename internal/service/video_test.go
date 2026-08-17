@@ -188,7 +188,7 @@ func TestService_Video_CreateUpload(t *testing.T) {
 					Expect(minimock.AnyContext, testName, testGroupID, testUserID, domain.VideoStatusUploading).
 					Return(domain.Video{}, dberrors.UserGroupVideoErrors.ErrUniqueUserGroupVideosUserGroupIdNameKey)
 			},
-			wantErr: service.NewConflictError("video name already exists"),
+			wantErr: service.NewConflictErrorCode("conflict.video_name", "video name already exists"),
 		},
 	}
 
@@ -355,7 +355,7 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 					Expect(minimock.AnyContext, testBucket, testKey).
 					Return(s3.ObjectInfo{}, s3.ErrObjectNotFound)
 			},
-			wantErr: service.NewConflictError("object not found in storage"),
+			wantErr: service.NewConflictErrorCode("conflict.object_not_found", "object not found in storage"),
 		},
 		{
 			name: "object is empty",
@@ -368,7 +368,7 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 					Expect(minimock.AnyContext, testBucket, testKey).
 					Return(s3.ObjectInfo{Size: 0, ContentType: "video/mp4"}, nil)
 			},
-			wantErr: service.NewConflictError("object is empty"),
+			wantErr: service.NewConflictErrorCode("conflict.object_empty", "object is empty"),
 		},
 		{
 			// Д-5 ревью эпика: два одновременных complete для одного видео. Оба проходят
@@ -463,7 +463,7 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 					Return(nil)
 				m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(&failedVideo, nil)
 			},
-			wantErr: service.NewConflictError("upload failed: timeout"),
+			wantErr: service.NewConflictErrorCode("conflict.upload_failed", "upload failed: timeout"),
 		},
 		{
 			name: "video belongs to another group",
@@ -1400,14 +1400,14 @@ func TestService_Video_Get(t *testing.T) {
 			assets:        nil,
 			failureReason: &testFailure,
 			setupMocks:    func(_ videoGetMocks) {},
-			wantErr:       service.NewConflictError("video is not available"),
+			wantErr:       service.NewConflictErrorCode("conflict.video_not_available", "video is not available"),
 		},
 		{
 			name:       "uploading returns conflict",
 			status:     domain.VideoStatusUploading,
 			assets:     nil,
 			setupMocks: func(_ videoGetMocks) {},
-			wantErr:    service.NewConflictError("video is not available"),
+			wantErr:    service.NewConflictErrorCode("conflict.video_not_available", "video is not available"),
 		},
 	}
 
@@ -1832,7 +1832,7 @@ func TestService_Video_GetHLSMaster(t *testing.T) {
 
 		_, err := videoSvc.GetHLSMaster(minimock.AnyContext, testVideoID, testToken)
 
-		require.Equal(t, service.NewConflictError("video is not available"), err)
+		require.Equal(t, service.NewConflictErrorCode("conflict.video_not_available", "video is not available"), err)
 	})
 
 	t.Run("missing master asset returns not found", func(t *testing.T) {
@@ -1973,7 +1973,7 @@ func TestService_Video_GetHLSPlaylist(t *testing.T) {
 
 		_, err := videoSvc.GetHLSPlaylist(minimock.AnyContext, testVideoID, testProfile, testToken)
 
-		require.Equal(t, service.NewConflictError("video is not available"), err)
+		require.Equal(t, service.NewConflictErrorCode("conflict.video_not_available", "video is not available"), err)
 	})
 }
 

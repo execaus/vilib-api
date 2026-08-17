@@ -2,11 +2,16 @@ package handler
 
 import "errors"
 
+// Машинные коды и тексты ошибок транспортного уровня (§6.8 ТЗ).
 const (
-	ErrCodeUserDeactivated = "user deactivated"
-	ErrCodeNotFound        = "not found"
+	codeNotFound           = "not_found"
+	codeValidation         = "validation"
+	codeUnauthorized       = "unauthorized"
+	codeUserDeactivated    = "user_deactivated"
+	messageNotFound        = "not found"
+	messageUserDeactivated = "user deactivated"
 )
 
-var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
-)
+// ErrClaimsContextEmpty — claims отсутствуют в контексте запроса: программная ошибка,
+// обработчик защищён RequireAuthMiddleware, но был вызван для маршрута без него.
+var ErrClaimsContextEmpty = errors.New("claims context empty")

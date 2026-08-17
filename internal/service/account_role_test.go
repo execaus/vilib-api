@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 	"vilib-api/internal/domain"
+	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 	"vilib-api/internal/repository/repository_mocks"
 	"vilib-api/internal/service"
@@ -316,6 +317,23 @@ func TestService_AccountRole_Create(t *testing.T) {
 			args:    args{testAccountID, testInitiatorID, testName, &testParentID, testPermission, false},
 			want:    domain.AccountRole{},
 			wantErr: errSomeError,
+		},
+		{
+			name: "duplicate role name returns conflict",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.
+					Expect(
+						minimock.AnyContext,
+						testAccountID,
+						testInitiatorID,
+						domain.AccountPermissionManageRoles,
+					).Return(nil)
+				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testName, &testParentID, testPermission, false, false).
+					Return(domain.AccountRole{}, dberrors.AccountRoleErrors.ErrUniqueUniqueAccountRole)
+			},
+			args:    args{testAccountID, testInitiatorID, testName, &testParentID, testPermission, false},
+			want:    domain.AccountRole{},
+			wantErr: service.ErrAccountRoleNameExists,
 		},
 	}
 

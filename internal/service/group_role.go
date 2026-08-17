@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"vilib-api/internal/domain"
+	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 
 	"github.com/google/uuid"
@@ -39,6 +41,10 @@ func (s *GroupRoleService) Create(
 	// Создание роли группы
 	role, err := s.repo.Insert(ctx, accountID, name, permission, isDefault)
 	if err != nil {
+		if errors.Is(dberrors.GroupRoleErrors.ErrUniqueGroupRolesAccountIdNameKey, err) {
+			zap.L().Warn(err.Error())
+			return domain.GroupRole{}, ErrGroupRoleNameExists
+		}
 		zap.L().Error(err.Error())
 		return domain.GroupRole{}, err
 	}
@@ -61,6 +67,10 @@ func (s *GroupRoleService) GetDefault(ctx context.Context, accountID uuid.UUID) 
 	// Получение дефолтной роли группы для аккаунта
 	role, err := s.repo.GetDefault(ctx, accountID)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			zap.L().Warn(ErrDefaultGroupRoleNotFound.Error())
+			return domain.GroupRole{}, ErrDefaultGroupRoleNotFound
+		}
 		zap.L().Error(err.Error())
 		return domain.GroupRole{}, err
 	}
@@ -73,7 +83,12 @@ func (s *GroupRoleService) GetAll(
 	initiatorID, accountID uuid.UUID,
 ) ([]domain.GroupRole, error) {
 	// Проверка прав на управление группами
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageGroups); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageGroups,
+	); err != nil {
 		zap.L().Error(err.Error())
 		return nil, err
 	}
@@ -93,7 +108,12 @@ func (s *GroupRoleService) Delete(
 	initiatorID, accountID, roleID uuid.UUID,
 ) error {
 	// Проверка прав на управление группами
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageGroups); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageGroups,
+	); err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}

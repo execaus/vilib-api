@@ -111,7 +111,7 @@ func TestService_UserGroup_Create(t *testing.T) {
 			},
 			args:    args{testAccountID, testInitiatorID, testGroupName},
 			want:    domain.UserGroup{},
-			wantErr: service.NewConflictError("group name already exists"),
+			wantErr: service.NewConflictErrorCode("conflict.group_name", "group name already exists"),
 		},
 	}
 
@@ -156,7 +156,9 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 
 	targetUsers := []domain.User{{ID: testTargetUserID, RoleID: testTargetRoleID}}
 	targetAccountRoles := []domain.AccountRole{{ID: testTargetRoleID, AccountID: testAccountID}}
-	wantMembers := []domain.GroupMember{{GroupID: testGroupID, UserID: testTargetUserID, RoleID: testDefaultGroupRoleID}}
+	wantMembers := []domain.GroupMember{
+		{GroupID: testGroupID, UserID: testTargetUserID, RoleID: testDefaultGroupRoleID},
+	}
 
 	type args struct {
 		accountID   uuid.UUID
