@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
@@ -28,6 +29,8 @@ type GroupMember struct {
 	GroupID uuid.UUID `db:"group_id,pk" `
 	// Идентификатор роли пользователя в группе
 	RoleID uuid.UUID `db:"role_id" `
+	// Время добавления участника в группу
+	JoinedAt time.Time `db:"joined_at" `
 
 	R groupMemberR `db:"-" `
 }
@@ -52,12 +55,13 @@ type groupMemberR struct {
 func buildGroupMemberColumns(alias string) groupMemberColumns {
 	return groupMemberColumns{
 		ColumnsExpr: expr.NewColumnsExpr(
-			"user_id", "group_id", "role_id",
+			"user_id", "group_id", "role_id", "joined_at",
 		).WithParent("group_members"),
 		tableAlias: alias,
 		UserID:     psql.Quote(alias, "user_id"),
 		GroupID:    psql.Quote(alias, "group_id"),
 		RoleID:     psql.Quote(alias, "role_id"),
+		JoinedAt:   psql.Quote(alias, "joined_at"),
 	}
 }
 
@@ -67,6 +71,7 @@ type groupMemberColumns struct {
 	UserID     psql.Expression
 	GroupID    psql.Expression
 	RoleID     psql.Expression
+	JoinedAt   psql.Expression
 }
 
 func (c groupMemberColumns) Alias() string {
@@ -81,13 +86,14 @@ func (groupMemberColumns) AliasedAs(alias string) groupMemberColumns {
 // All values are optional, and do not have to be set
 // Generated columns are not included
 type GroupMemberSetter struct {
-	UserID  omit.Val[uuid.UUID] `db:"user_id,pk" `
-	GroupID omit.Val[uuid.UUID] `db:"group_id,pk" `
-	RoleID  omit.Val[uuid.UUID] `db:"role_id" `
+	UserID   omit.Val[uuid.UUID] `db:"user_id,pk" `
+	GroupID  omit.Val[uuid.UUID] `db:"group_id,pk" `
+	RoleID   omit.Val[uuid.UUID] `db:"role_id" `
+	JoinedAt omit.Val[time.Time] `db:"joined_at" `
 }
 
 func (s GroupMemberSetter) SetColumns() []string {
-	vals := make([]string, 0, 3)
+	vals := make([]string, 0, 4)
 	if s.UserID.IsValue() {
 		vals = append(vals, "user_id")
 	}
@@ -96,6 +102,9 @@ func (s GroupMemberSetter) SetColumns() []string {
 	}
 	if s.RoleID.IsValue() {
 		vals = append(vals, "role_id")
+	}
+	if s.JoinedAt.IsValue() {
+		vals = append(vals, "joined_at")
 	}
 	return vals
 }
@@ -110,6 +119,9 @@ func (s GroupMemberSetter) Overwrite(t *GroupMember) {
 	if s.RoleID.IsValue() {
 		t.RoleID = s.RoleID.MustGet()
 	}
+	if s.JoinedAt.IsValue() {
+		t.JoinedAt = s.JoinedAt.MustGet()
+	}
 }
 
 func (s *GroupMemberSetter) Apply(q *dialect.InsertQuery) {
@@ -118,7 +130,7 @@ func (s *GroupMemberSetter) Apply(q *dialect.InsertQuery) {
 	})
 
 	q.AppendValues(bob.ExpressionFunc(func(ctx context.Context, w io.StringWriter, d bob.Dialect, start int) ([]any, error) {
-		vals := make([]bob.Expression, 3)
+		vals := make([]bob.Expression, 4)
 		if s.UserID.IsValue() {
 			vals[0] = psql.Arg(s.UserID.MustGet())
 		} else {
@@ -137,6 +149,12 @@ func (s *GroupMemberSetter) Apply(q *dialect.InsertQuery) {
 			vals[2] = psql.Raw("DEFAULT")
 		}
 
+		if s.JoinedAt.IsValue() {
+			vals[3] = psql.Arg(s.JoinedAt.MustGet())
+		} else {
+			vals[3] = psql.Raw("DEFAULT")
+		}
+
 		return bob.ExpressSlice(ctx, w, d, start, vals, "", ", ", "")
 	}))
 }
@@ -146,7 +164,7 @@ func (s GroupMemberSetter) UpdateMod() bob.Mod[*dialect.UpdateQuery] {
 }
 
 func (s GroupMemberSetter) Expressions(prefix ...string) []bob.Expression {
-	exprs := make([]bob.Expression, 0, 3)
+	exprs := make([]bob.Expression, 0, 4)
 
 	if s.UserID.IsValue() {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
@@ -166,6 +184,13 @@ func (s GroupMemberSetter) Expressions(prefix ...string) []bob.Expression {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
 			psql.Quote(append(prefix, "role_id")...),
 			psql.Arg(s.RoleID),
+		}})
+	}
+
+	if s.JoinedAt.IsValue() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "joined_at")...),
+			psql.Arg(s.JoinedAt),
 		}})
 	}
 
