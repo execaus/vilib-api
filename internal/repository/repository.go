@@ -60,6 +60,15 @@ type AccountRole interface {
 	Delete(ctx context.Context, roleID uuid.UUID) error
 	SelectActiveUsersByRole(ctx context.Context, roleID uuid.UUID) ([]domain.User, error)
 	ResetRoleToDefault(ctx context.Context, oldRoleID, defaultRoleID uuid.UUID) error
+	// Update заменяет все редактируемые поля роли аккаунта (полная замена, §4 дизайна эпика
+	// Э2). isSystem и accountID не меняются.
+	Update(
+		ctx context.Context,
+		roleID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool,
+	) (domain.AccountRole, error)
+	// ClearDefault снимает флаг is_default со всех ролей аккаунта — вызывается перед Update/
+	// Insert с isDefault=true, чтобы в аккаунте всегда была не больше одной роли по умолчанию.
+	ClearDefault(ctx context.Context, accountID uuid.UUID) error
 }
 
 type UserGroup interface {
@@ -100,6 +109,15 @@ type GroupRole interface {
 	GetDefault(ctx context.Context, groupID uuid.UUID) (domain.GroupRole, error)
 	SelectMembersByRole(ctx context.Context, roleID uuid.UUID) ([]domain.GroupMember, error)
 	Delete(ctx context.Context, roleID uuid.UUID) error
+	// Update заменяет все редактируемые поля роли группы (полная замена, §4 дизайна эпика Э2).
+	// accountID не меняется.
+	Update(
+		ctx context.Context,
+		roleID uuid.UUID, name string, permission domain.PermissionMask, isDefault bool,
+	) (domain.GroupRole, error)
+	// ClearDefault снимает флаг is_default со всех ролей групп аккаунта — вызывается перед
+	// Update/Insert с isDefault=true.
+	ClearDefault(ctx context.Context, accountID uuid.UUID) error
 }
 
 type Video interface {

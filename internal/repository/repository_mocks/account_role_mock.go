@@ -20,6 +20,13 @@ type AccountRoleMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
+	funcClearDefault          func(ctx context.Context, accountID uuid.UUID) (err error)
+	funcClearDefaultOrigin    string
+	inspectFuncClearDefault   func(ctx context.Context, accountID uuid.UUID)
+	afterClearDefaultCounter  uint64
+	beforeClearDefaultCounter uint64
+	ClearDefaultMock          mAccountRoleMockClearDefault
+
 	funcDelete          func(ctx context.Context, roleID uuid.UUID) (err error)
 	funcDeleteOrigin    string
 	inspectFuncDelete   func(ctx context.Context, roleID uuid.UUID)
@@ -61,6 +68,13 @@ type AccountRoleMock struct {
 	afterSelectByIDCounter  uint64
 	beforeSelectByIDCounter uint64
 	SelectByIDMock          mAccountRoleMockSelectByID
+
+	funcUpdate          func(ctx context.Context, roleID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool) (a1 domain.AccountRole, err error)
+	funcUpdateOrigin    string
+	inspectFuncUpdate   func(ctx context.Context, roleID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool)
+	afterUpdateCounter  uint64
+	beforeUpdateCounter uint64
+	UpdateMock          mAccountRoleMockUpdate
 }
 
 // NewAccountRoleMock returns a mock for mm_repository.AccountRole
@@ -70,6 +84,9 @@ func NewAccountRoleMock(t minimock.Tester) *AccountRoleMock {
 	if controller, ok := t.(minimock.MockController); ok {
 		controller.RegisterMocker(m)
 	}
+
+	m.ClearDefaultMock = mAccountRoleMockClearDefault{mock: m}
+	m.ClearDefaultMock.callArgs = []*AccountRoleMockClearDefaultParams{}
 
 	m.DeleteMock = mAccountRoleMockDelete{mock: m}
 	m.DeleteMock.callArgs = []*AccountRoleMockDeleteParams{}
@@ -89,9 +106,354 @@ func NewAccountRoleMock(t minimock.Tester) *AccountRoleMock {
 	m.SelectByIDMock = mAccountRoleMockSelectByID{mock: m}
 	m.SelectByIDMock.callArgs = []*AccountRoleMockSelectByIDParams{}
 
+	m.UpdateMock = mAccountRoleMockUpdate{mock: m}
+	m.UpdateMock.callArgs = []*AccountRoleMockUpdateParams{}
+
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mAccountRoleMockClearDefault struct {
+	optional           bool
+	mock               *AccountRoleMock
+	defaultExpectation *AccountRoleMockClearDefaultExpectation
+	expectations       []*AccountRoleMockClearDefaultExpectation
+
+	callArgs []*AccountRoleMockClearDefaultParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AccountRoleMockClearDefaultExpectation specifies expectation struct of the AccountRole.ClearDefault
+type AccountRoleMockClearDefaultExpectation struct {
+	mock               *AccountRoleMock
+	params             *AccountRoleMockClearDefaultParams
+	paramPtrs          *AccountRoleMockClearDefaultParamPtrs
+	expectationOrigins AccountRoleMockClearDefaultExpectationOrigins
+	results            *AccountRoleMockClearDefaultResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AccountRoleMockClearDefaultParams contains parameters of the AccountRole.ClearDefault
+type AccountRoleMockClearDefaultParams struct {
+	ctx       context.Context
+	accountID uuid.UUID
+}
+
+// AccountRoleMockClearDefaultParamPtrs contains pointers to parameters of the AccountRole.ClearDefault
+type AccountRoleMockClearDefaultParamPtrs struct {
+	ctx       *context.Context
+	accountID *uuid.UUID
+}
+
+// AccountRoleMockClearDefaultResults contains results of the AccountRole.ClearDefault
+type AccountRoleMockClearDefaultResults struct {
+	err error
+}
+
+// AccountRoleMockClearDefaultOrigins contains origins of expectations of the AccountRole.ClearDefault
+type AccountRoleMockClearDefaultExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originAccountID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmClearDefault *mAccountRoleMockClearDefault) Optional() *mAccountRoleMockClearDefault {
+	mmClearDefault.optional = true
+	return mmClearDefault
+}
+
+// Expect sets up expected params for AccountRole.ClearDefault
+func (mmClearDefault *mAccountRoleMockClearDefault) Expect(ctx context.Context, accountID uuid.UUID) *mAccountRoleMockClearDefault {
+	if mmClearDefault.mock.funcClearDefault != nil {
+		mmClearDefault.mock.t.Fatalf("AccountRoleMock.ClearDefault mock is already set by Set")
+	}
+
+	if mmClearDefault.defaultExpectation == nil {
+		mmClearDefault.defaultExpectation = &AccountRoleMockClearDefaultExpectation{}
+	}
+
+	if mmClearDefault.defaultExpectation.paramPtrs != nil {
+		mmClearDefault.mock.t.Fatalf("AccountRoleMock.ClearDefault mock is already set by ExpectParams functions")
+	}
+
+	mmClearDefault.defaultExpectation.params = &AccountRoleMockClearDefaultParams{ctx, accountID}
+	mmClearDefault.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmClearDefault.expectations {
+		if minimock.Equal(e.params, mmClearDefault.defaultExpectation.params) {
+			mmClearDefault.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmClearDefault.defaultExpectation.params)
+		}
+	}
+
+	return mmClearDefault
+}
+
+// ExpectCtxParam1 sets up expected param ctx for AccountRole.ClearDefault
+func (mmClearDefault *mAccountRoleMockClearDefault) ExpectCtxParam1(ctx context.Context) *mAccountRoleMockClearDefault {
+	if mmClearDefault.mock.funcClearDefault != nil {
+		mmClearDefault.mock.t.Fatalf("AccountRoleMock.ClearDefault mock is already set by Set")
+	}
+
+	if mmClearDefault.defaultExpectation == nil {
+		mmClearDefault.defaultExpectation = &AccountRoleMockClearDefaultExpectation{}
+	}
+
+	if mmClearDefault.defaultExpectation.params != nil {
+		mmClearDefault.mock.t.Fatalf("AccountRoleMock.ClearDefault mock is already set by Expect")
+	}
+
+	if mmClearDefault.defaultExpectation.paramPtrs == nil {
+		mmClearDefault.defaultExpectation.paramPtrs = &AccountRoleMockClearDefaultParamPtrs{}
+	}
+	mmClearDefault.defaultExpectation.paramPtrs.ctx = &ctx
+	mmClearDefault.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmClearDefault
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for AccountRole.ClearDefault
+func (mmClearDefault *mAccountRoleMockClearDefault) ExpectAccountIDParam2(accountID uuid.UUID) *mAccountRoleMockClearDefault {
+	if mmClearDefault.mock.funcClearDefault != nil {
+		mmClearDefault.mock.t.Fatalf("AccountRoleMock.ClearDefault mock is already set by Set")
+	}
+
+	if mmClearDefault.defaultExpectation == nil {
+		mmClearDefault.defaultExpectation = &AccountRoleMockClearDefaultExpectation{}
+	}
+
+	if mmClearDefault.defaultExpectation.params != nil {
+		mmClearDefault.mock.t.Fatalf("AccountRoleMock.ClearDefault mock is already set by Expect")
+	}
+
+	if mmClearDefault.defaultExpectation.paramPtrs == nil {
+		mmClearDefault.defaultExpectation.paramPtrs = &AccountRoleMockClearDefaultParamPtrs{}
+	}
+	mmClearDefault.defaultExpectation.paramPtrs.accountID = &accountID
+	mmClearDefault.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmClearDefault
+}
+
+// Inspect accepts an inspector function that has same arguments as the AccountRole.ClearDefault
+func (mmClearDefault *mAccountRoleMockClearDefault) Inspect(f func(ctx context.Context, accountID uuid.UUID)) *mAccountRoleMockClearDefault {
+	if mmClearDefault.mock.inspectFuncClearDefault != nil {
+		mmClearDefault.mock.t.Fatalf("Inspect function is already set for AccountRoleMock.ClearDefault")
+	}
+
+	mmClearDefault.mock.inspectFuncClearDefault = f
+
+	return mmClearDefault
+}
+
+// Return sets up results that will be returned by AccountRole.ClearDefault
+func (mmClearDefault *mAccountRoleMockClearDefault) Return(err error) *AccountRoleMock {
+	if mmClearDefault.mock.funcClearDefault != nil {
+		mmClearDefault.mock.t.Fatalf("AccountRoleMock.ClearDefault mock is already set by Set")
+	}
+
+	if mmClearDefault.defaultExpectation == nil {
+		mmClearDefault.defaultExpectation = &AccountRoleMockClearDefaultExpectation{mock: mmClearDefault.mock}
+	}
+	mmClearDefault.defaultExpectation.results = &AccountRoleMockClearDefaultResults{err}
+	mmClearDefault.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmClearDefault.mock
+}
+
+// Set uses given function f to mock the AccountRole.ClearDefault method
+func (mmClearDefault *mAccountRoleMockClearDefault) Set(f func(ctx context.Context, accountID uuid.UUID) (err error)) *AccountRoleMock {
+	if mmClearDefault.defaultExpectation != nil {
+		mmClearDefault.mock.t.Fatalf("Default expectation is already set for the AccountRole.ClearDefault method")
+	}
+
+	if len(mmClearDefault.expectations) > 0 {
+		mmClearDefault.mock.t.Fatalf("Some expectations are already set for the AccountRole.ClearDefault method")
+	}
+
+	mmClearDefault.mock.funcClearDefault = f
+	mmClearDefault.mock.funcClearDefaultOrigin = minimock.CallerInfo(1)
+	return mmClearDefault.mock
+}
+
+// When sets expectation for the AccountRole.ClearDefault which will trigger the result defined by the following
+// Then helper
+func (mmClearDefault *mAccountRoleMockClearDefault) When(ctx context.Context, accountID uuid.UUID) *AccountRoleMockClearDefaultExpectation {
+	if mmClearDefault.mock.funcClearDefault != nil {
+		mmClearDefault.mock.t.Fatalf("AccountRoleMock.ClearDefault mock is already set by Set")
+	}
+
+	expectation := &AccountRoleMockClearDefaultExpectation{
+		mock:               mmClearDefault.mock,
+		params:             &AccountRoleMockClearDefaultParams{ctx, accountID},
+		expectationOrigins: AccountRoleMockClearDefaultExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmClearDefault.expectations = append(mmClearDefault.expectations, expectation)
+	return expectation
+}
+
+// Then sets up AccountRole.ClearDefault return parameters for the expectation previously defined by the When method
+func (e *AccountRoleMockClearDefaultExpectation) Then(err error) *AccountRoleMock {
+	e.results = &AccountRoleMockClearDefaultResults{err}
+	return e.mock
+}
+
+// Times sets number of times AccountRole.ClearDefault should be invoked
+func (mmClearDefault *mAccountRoleMockClearDefault) Times(n uint64) *mAccountRoleMockClearDefault {
+	if n == 0 {
+		mmClearDefault.mock.t.Fatalf("Times of AccountRoleMock.ClearDefault mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmClearDefault.expectedInvocations, n)
+	mmClearDefault.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmClearDefault
+}
+
+func (mmClearDefault *mAccountRoleMockClearDefault) invocationsDone() bool {
+	if len(mmClearDefault.expectations) == 0 && mmClearDefault.defaultExpectation == nil && mmClearDefault.mock.funcClearDefault == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmClearDefault.mock.afterClearDefaultCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmClearDefault.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ClearDefault implements mm_repository.AccountRole
+func (mmClearDefault *AccountRoleMock) ClearDefault(ctx context.Context, accountID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmClearDefault.beforeClearDefaultCounter, 1)
+	defer mm_atomic.AddUint64(&mmClearDefault.afterClearDefaultCounter, 1)
+
+	mmClearDefault.t.Helper()
+
+	if mmClearDefault.inspectFuncClearDefault != nil {
+		mmClearDefault.inspectFuncClearDefault(ctx, accountID)
+	}
+
+	mm_params := AccountRoleMockClearDefaultParams{ctx, accountID}
+
+	// Record call args
+	mmClearDefault.ClearDefaultMock.mutex.Lock()
+	mmClearDefault.ClearDefaultMock.callArgs = append(mmClearDefault.ClearDefaultMock.callArgs, &mm_params)
+	mmClearDefault.ClearDefaultMock.mutex.Unlock()
+
+	for _, e := range mmClearDefault.ClearDefaultMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmClearDefault.ClearDefaultMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmClearDefault.ClearDefaultMock.defaultExpectation.Counter, 1)
+		mm_want := mmClearDefault.ClearDefaultMock.defaultExpectation.params
+		mm_want_ptrs := mmClearDefault.ClearDefaultMock.defaultExpectation.paramPtrs
+
+		mm_got := AccountRoleMockClearDefaultParams{ctx, accountID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmClearDefault.t.Errorf("AccountRoleMock.ClearDefault got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmClearDefault.ClearDefaultMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmClearDefault.t.Errorf("AccountRoleMock.ClearDefault got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmClearDefault.ClearDefaultMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmClearDefault.t.Errorf("AccountRoleMock.ClearDefault got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmClearDefault.ClearDefaultMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmClearDefault.ClearDefaultMock.defaultExpectation.results
+		if mm_results == nil {
+			mmClearDefault.t.Fatal("No results are set for the AccountRoleMock.ClearDefault")
+		}
+		return (*mm_results).err
+	}
+	if mmClearDefault.funcClearDefault != nil {
+		return mmClearDefault.funcClearDefault(ctx, accountID)
+	}
+	mmClearDefault.t.Fatalf("Unexpected call to AccountRoleMock.ClearDefault. %v %v", ctx, accountID)
+	return
+}
+
+// ClearDefaultAfterCounter returns a count of finished AccountRoleMock.ClearDefault invocations
+func (mmClearDefault *AccountRoleMock) ClearDefaultAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmClearDefault.afterClearDefaultCounter)
+}
+
+// ClearDefaultBeforeCounter returns a count of AccountRoleMock.ClearDefault invocations
+func (mmClearDefault *AccountRoleMock) ClearDefaultBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmClearDefault.beforeClearDefaultCounter)
+}
+
+// Calls returns a list of arguments used in each call to AccountRoleMock.ClearDefault.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmClearDefault *mAccountRoleMockClearDefault) Calls() []*AccountRoleMockClearDefaultParams {
+	mmClearDefault.mutex.RLock()
+
+	argCopy := make([]*AccountRoleMockClearDefaultParams, len(mmClearDefault.callArgs))
+	copy(argCopy, mmClearDefault.callArgs)
+
+	mmClearDefault.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockClearDefaultDone returns true if the count of the ClearDefault invocations corresponds
+// the number of defined expectations
+func (m *AccountRoleMock) MinimockClearDefaultDone() bool {
+	if m.ClearDefaultMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ClearDefaultMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ClearDefaultMock.invocationsDone()
+}
+
+// MinimockClearDefaultInspect logs each unmet expectation
+func (m *AccountRoleMock) MinimockClearDefaultInspect() {
+	for _, e := range m.ClearDefaultMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AccountRoleMock.ClearDefault at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterClearDefaultCounter := mm_atomic.LoadUint64(&m.afterClearDefaultCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ClearDefaultMock.defaultExpectation != nil && afterClearDefaultCounter < 1 {
+		if m.ClearDefaultMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AccountRoleMock.ClearDefault at\n%s", m.ClearDefaultMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AccountRoleMock.ClearDefault at\n%s with params: %#v", m.ClearDefaultMock.defaultExpectation.expectationOrigins.origin, *m.ClearDefaultMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcClearDefault != nil && afterClearDefaultCounter < 1 {
+		m.t.Errorf("Expected call to AccountRoleMock.ClearDefault at\n%s", m.funcClearDefaultOrigin)
+	}
+
+	if !m.ClearDefaultMock.invocationsDone() && afterClearDefaultCounter > 0 {
+		m.t.Errorf("Expected %d calls to AccountRoleMock.ClearDefault at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ClearDefaultMock.expectedInvocations), m.ClearDefaultMock.expectedInvocationsOrigin, afterClearDefaultCounter)
+	}
 }
 
 type mAccountRoleMockDelete struct {
@@ -2336,10 +2698,479 @@ func (m *AccountRoleMock) MinimockSelectByIDInspect() {
 	}
 }
 
+type mAccountRoleMockUpdate struct {
+	optional           bool
+	mock               *AccountRoleMock
+	defaultExpectation *AccountRoleMockUpdateExpectation
+	expectations       []*AccountRoleMockUpdateExpectation
+
+	callArgs []*AccountRoleMockUpdateParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AccountRoleMockUpdateExpectation specifies expectation struct of the AccountRole.Update
+type AccountRoleMockUpdateExpectation struct {
+	mock               *AccountRoleMock
+	params             *AccountRoleMockUpdateParams
+	paramPtrs          *AccountRoleMockUpdateParamPtrs
+	expectationOrigins AccountRoleMockUpdateExpectationOrigins
+	results            *AccountRoleMockUpdateResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AccountRoleMockUpdateParams contains parameters of the AccountRole.Update
+type AccountRoleMockUpdateParams struct {
+	ctx        context.Context
+	roleID     uuid.UUID
+	name       string
+	parentID   *uuid.UUID
+	permission domain.PermissionMask
+	isDefault  bool
+}
+
+// AccountRoleMockUpdateParamPtrs contains pointers to parameters of the AccountRole.Update
+type AccountRoleMockUpdateParamPtrs struct {
+	ctx        *context.Context
+	roleID     *uuid.UUID
+	name       *string
+	parentID   **uuid.UUID
+	permission *domain.PermissionMask
+	isDefault  *bool
+}
+
+// AccountRoleMockUpdateResults contains results of the AccountRole.Update
+type AccountRoleMockUpdateResults struct {
+	a1  domain.AccountRole
+	err error
+}
+
+// AccountRoleMockUpdateOrigins contains origins of expectations of the AccountRole.Update
+type AccountRoleMockUpdateExpectationOrigins struct {
+	origin           string
+	originCtx        string
+	originRoleID     string
+	originName       string
+	originParentID   string
+	originPermission string
+	originIsDefault  string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdate *mAccountRoleMockUpdate) Optional() *mAccountRoleMockUpdate {
+	mmUpdate.optional = true
+	return mmUpdate
+}
+
+// Expect sets up expected params for AccountRole.Update
+func (mmUpdate *mAccountRoleMockUpdate) Expect(ctx context.Context, roleID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool) *mAccountRoleMockUpdate {
+	if mmUpdate.mock.funcUpdate != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Set")
+	}
+
+	if mmUpdate.defaultExpectation == nil {
+		mmUpdate.defaultExpectation = &AccountRoleMockUpdateExpectation{}
+	}
+
+	if mmUpdate.defaultExpectation.paramPtrs != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by ExpectParams functions")
+	}
+
+	mmUpdate.defaultExpectation.params = &AccountRoleMockUpdateParams{ctx, roleID, name, parentID, permission, isDefault}
+	mmUpdate.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdate.expectations {
+		if minimock.Equal(e.params, mmUpdate.defaultExpectation.params) {
+			mmUpdate.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdate.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdate
+}
+
+// ExpectCtxParam1 sets up expected param ctx for AccountRole.Update
+func (mmUpdate *mAccountRoleMockUpdate) ExpectCtxParam1(ctx context.Context) *mAccountRoleMockUpdate {
+	if mmUpdate.mock.funcUpdate != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Set")
+	}
+
+	if mmUpdate.defaultExpectation == nil {
+		mmUpdate.defaultExpectation = &AccountRoleMockUpdateExpectation{}
+	}
+
+	if mmUpdate.defaultExpectation.params != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Expect")
+	}
+
+	if mmUpdate.defaultExpectation.paramPtrs == nil {
+		mmUpdate.defaultExpectation.paramPtrs = &AccountRoleMockUpdateParamPtrs{}
+	}
+	mmUpdate.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdate.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdate
+}
+
+// ExpectRoleIDParam2 sets up expected param roleID for AccountRole.Update
+func (mmUpdate *mAccountRoleMockUpdate) ExpectRoleIDParam2(roleID uuid.UUID) *mAccountRoleMockUpdate {
+	if mmUpdate.mock.funcUpdate != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Set")
+	}
+
+	if mmUpdate.defaultExpectation == nil {
+		mmUpdate.defaultExpectation = &AccountRoleMockUpdateExpectation{}
+	}
+
+	if mmUpdate.defaultExpectation.params != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Expect")
+	}
+
+	if mmUpdate.defaultExpectation.paramPtrs == nil {
+		mmUpdate.defaultExpectation.paramPtrs = &AccountRoleMockUpdateParamPtrs{}
+	}
+	mmUpdate.defaultExpectation.paramPtrs.roleID = &roleID
+	mmUpdate.defaultExpectation.expectationOrigins.originRoleID = minimock.CallerInfo(1)
+
+	return mmUpdate
+}
+
+// ExpectNameParam3 sets up expected param name for AccountRole.Update
+func (mmUpdate *mAccountRoleMockUpdate) ExpectNameParam3(name string) *mAccountRoleMockUpdate {
+	if mmUpdate.mock.funcUpdate != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Set")
+	}
+
+	if mmUpdate.defaultExpectation == nil {
+		mmUpdate.defaultExpectation = &AccountRoleMockUpdateExpectation{}
+	}
+
+	if mmUpdate.defaultExpectation.params != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Expect")
+	}
+
+	if mmUpdate.defaultExpectation.paramPtrs == nil {
+		mmUpdate.defaultExpectation.paramPtrs = &AccountRoleMockUpdateParamPtrs{}
+	}
+	mmUpdate.defaultExpectation.paramPtrs.name = &name
+	mmUpdate.defaultExpectation.expectationOrigins.originName = minimock.CallerInfo(1)
+
+	return mmUpdate
+}
+
+// ExpectParentIDParam4 sets up expected param parentID for AccountRole.Update
+func (mmUpdate *mAccountRoleMockUpdate) ExpectParentIDParam4(parentID *uuid.UUID) *mAccountRoleMockUpdate {
+	if mmUpdate.mock.funcUpdate != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Set")
+	}
+
+	if mmUpdate.defaultExpectation == nil {
+		mmUpdate.defaultExpectation = &AccountRoleMockUpdateExpectation{}
+	}
+
+	if mmUpdate.defaultExpectation.params != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Expect")
+	}
+
+	if mmUpdate.defaultExpectation.paramPtrs == nil {
+		mmUpdate.defaultExpectation.paramPtrs = &AccountRoleMockUpdateParamPtrs{}
+	}
+	mmUpdate.defaultExpectation.paramPtrs.parentID = &parentID
+	mmUpdate.defaultExpectation.expectationOrigins.originParentID = minimock.CallerInfo(1)
+
+	return mmUpdate
+}
+
+// ExpectPermissionParam5 sets up expected param permission for AccountRole.Update
+func (mmUpdate *mAccountRoleMockUpdate) ExpectPermissionParam5(permission domain.PermissionMask) *mAccountRoleMockUpdate {
+	if mmUpdate.mock.funcUpdate != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Set")
+	}
+
+	if mmUpdate.defaultExpectation == nil {
+		mmUpdate.defaultExpectation = &AccountRoleMockUpdateExpectation{}
+	}
+
+	if mmUpdate.defaultExpectation.params != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Expect")
+	}
+
+	if mmUpdate.defaultExpectation.paramPtrs == nil {
+		mmUpdate.defaultExpectation.paramPtrs = &AccountRoleMockUpdateParamPtrs{}
+	}
+	mmUpdate.defaultExpectation.paramPtrs.permission = &permission
+	mmUpdate.defaultExpectation.expectationOrigins.originPermission = minimock.CallerInfo(1)
+
+	return mmUpdate
+}
+
+// ExpectIsDefaultParam6 sets up expected param isDefault for AccountRole.Update
+func (mmUpdate *mAccountRoleMockUpdate) ExpectIsDefaultParam6(isDefault bool) *mAccountRoleMockUpdate {
+	if mmUpdate.mock.funcUpdate != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Set")
+	}
+
+	if mmUpdate.defaultExpectation == nil {
+		mmUpdate.defaultExpectation = &AccountRoleMockUpdateExpectation{}
+	}
+
+	if mmUpdate.defaultExpectation.params != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Expect")
+	}
+
+	if mmUpdate.defaultExpectation.paramPtrs == nil {
+		mmUpdate.defaultExpectation.paramPtrs = &AccountRoleMockUpdateParamPtrs{}
+	}
+	mmUpdate.defaultExpectation.paramPtrs.isDefault = &isDefault
+	mmUpdate.defaultExpectation.expectationOrigins.originIsDefault = minimock.CallerInfo(1)
+
+	return mmUpdate
+}
+
+// Inspect accepts an inspector function that has same arguments as the AccountRole.Update
+func (mmUpdate *mAccountRoleMockUpdate) Inspect(f func(ctx context.Context, roleID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool)) *mAccountRoleMockUpdate {
+	if mmUpdate.mock.inspectFuncUpdate != nil {
+		mmUpdate.mock.t.Fatalf("Inspect function is already set for AccountRoleMock.Update")
+	}
+
+	mmUpdate.mock.inspectFuncUpdate = f
+
+	return mmUpdate
+}
+
+// Return sets up results that will be returned by AccountRole.Update
+func (mmUpdate *mAccountRoleMockUpdate) Return(a1 domain.AccountRole, err error) *AccountRoleMock {
+	if mmUpdate.mock.funcUpdate != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Set")
+	}
+
+	if mmUpdate.defaultExpectation == nil {
+		mmUpdate.defaultExpectation = &AccountRoleMockUpdateExpectation{mock: mmUpdate.mock}
+	}
+	mmUpdate.defaultExpectation.results = &AccountRoleMockUpdateResults{a1, err}
+	mmUpdate.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdate.mock
+}
+
+// Set uses given function f to mock the AccountRole.Update method
+func (mmUpdate *mAccountRoleMockUpdate) Set(f func(ctx context.Context, roleID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool) (a1 domain.AccountRole, err error)) *AccountRoleMock {
+	if mmUpdate.defaultExpectation != nil {
+		mmUpdate.mock.t.Fatalf("Default expectation is already set for the AccountRole.Update method")
+	}
+
+	if len(mmUpdate.expectations) > 0 {
+		mmUpdate.mock.t.Fatalf("Some expectations are already set for the AccountRole.Update method")
+	}
+
+	mmUpdate.mock.funcUpdate = f
+	mmUpdate.mock.funcUpdateOrigin = minimock.CallerInfo(1)
+	return mmUpdate.mock
+}
+
+// When sets expectation for the AccountRole.Update which will trigger the result defined by the following
+// Then helper
+func (mmUpdate *mAccountRoleMockUpdate) When(ctx context.Context, roleID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool) *AccountRoleMockUpdateExpectation {
+	if mmUpdate.mock.funcUpdate != nil {
+		mmUpdate.mock.t.Fatalf("AccountRoleMock.Update mock is already set by Set")
+	}
+
+	expectation := &AccountRoleMockUpdateExpectation{
+		mock:               mmUpdate.mock,
+		params:             &AccountRoleMockUpdateParams{ctx, roleID, name, parentID, permission, isDefault},
+		expectationOrigins: AccountRoleMockUpdateExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdate.expectations = append(mmUpdate.expectations, expectation)
+	return expectation
+}
+
+// Then sets up AccountRole.Update return parameters for the expectation previously defined by the When method
+func (e *AccountRoleMockUpdateExpectation) Then(a1 domain.AccountRole, err error) *AccountRoleMock {
+	e.results = &AccountRoleMockUpdateResults{a1, err}
+	return e.mock
+}
+
+// Times sets number of times AccountRole.Update should be invoked
+func (mmUpdate *mAccountRoleMockUpdate) Times(n uint64) *mAccountRoleMockUpdate {
+	if n == 0 {
+		mmUpdate.mock.t.Fatalf("Times of AccountRoleMock.Update mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdate.expectedInvocations, n)
+	mmUpdate.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdate
+}
+
+func (mmUpdate *mAccountRoleMockUpdate) invocationsDone() bool {
+	if len(mmUpdate.expectations) == 0 && mmUpdate.defaultExpectation == nil && mmUpdate.mock.funcUpdate == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdate.mock.afterUpdateCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdate.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// Update implements mm_repository.AccountRole
+func (mmUpdate *AccountRoleMock) Update(ctx context.Context, roleID uuid.UUID, name string, parentID *uuid.UUID, permission domain.PermissionMask, isDefault bool) (a1 domain.AccountRole, err error) {
+	mm_atomic.AddUint64(&mmUpdate.beforeUpdateCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdate.afterUpdateCounter, 1)
+
+	mmUpdate.t.Helper()
+
+	if mmUpdate.inspectFuncUpdate != nil {
+		mmUpdate.inspectFuncUpdate(ctx, roleID, name, parentID, permission, isDefault)
+	}
+
+	mm_params := AccountRoleMockUpdateParams{ctx, roleID, name, parentID, permission, isDefault}
+
+	// Record call args
+	mmUpdate.UpdateMock.mutex.Lock()
+	mmUpdate.UpdateMock.callArgs = append(mmUpdate.UpdateMock.callArgs, &mm_params)
+	mmUpdate.UpdateMock.mutex.Unlock()
+
+	for _, e := range mmUpdate.UpdateMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.a1, e.results.err
+		}
+	}
+
+	if mmUpdate.UpdateMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdate.UpdateMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdate.UpdateMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdate.UpdateMock.defaultExpectation.paramPtrs
+
+		mm_got := AccountRoleMockUpdateParams{ctx, roleID, name, parentID, permission, isDefault}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdate.t.Errorf("AccountRoleMock.Update got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.roleID != nil && !minimock.Equal(*mm_want_ptrs.roleID, mm_got.roleID) {
+				mmUpdate.t.Errorf("AccountRoleMock.Update got unexpected parameter roleID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originRoleID, *mm_want_ptrs.roleID, mm_got.roleID, minimock.Diff(*mm_want_ptrs.roleID, mm_got.roleID))
+			}
+
+			if mm_want_ptrs.name != nil && !minimock.Equal(*mm_want_ptrs.name, mm_got.name) {
+				mmUpdate.t.Errorf("AccountRoleMock.Update got unexpected parameter name, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originName, *mm_want_ptrs.name, mm_got.name, minimock.Diff(*mm_want_ptrs.name, mm_got.name))
+			}
+
+			if mm_want_ptrs.parentID != nil && !minimock.Equal(*mm_want_ptrs.parentID, mm_got.parentID) {
+				mmUpdate.t.Errorf("AccountRoleMock.Update got unexpected parameter parentID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originParentID, *mm_want_ptrs.parentID, mm_got.parentID, minimock.Diff(*mm_want_ptrs.parentID, mm_got.parentID))
+			}
+
+			if mm_want_ptrs.permission != nil && !minimock.Equal(*mm_want_ptrs.permission, mm_got.permission) {
+				mmUpdate.t.Errorf("AccountRoleMock.Update got unexpected parameter permission, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originPermission, *mm_want_ptrs.permission, mm_got.permission, minimock.Diff(*mm_want_ptrs.permission, mm_got.permission))
+			}
+
+			if mm_want_ptrs.isDefault != nil && !minimock.Equal(*mm_want_ptrs.isDefault, mm_got.isDefault) {
+				mmUpdate.t.Errorf("AccountRoleMock.Update got unexpected parameter isDefault, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.originIsDefault, *mm_want_ptrs.isDefault, mm_got.isDefault, minimock.Diff(*mm_want_ptrs.isDefault, mm_got.isDefault))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdate.t.Errorf("AccountRoleMock.Update got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdate.UpdateMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdate.UpdateMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdate.t.Fatal("No results are set for the AccountRoleMock.Update")
+		}
+		return (*mm_results).a1, (*mm_results).err
+	}
+	if mmUpdate.funcUpdate != nil {
+		return mmUpdate.funcUpdate(ctx, roleID, name, parentID, permission, isDefault)
+	}
+	mmUpdate.t.Fatalf("Unexpected call to AccountRoleMock.Update. %v %v %v %v %v %v", ctx, roleID, name, parentID, permission, isDefault)
+	return
+}
+
+// UpdateAfterCounter returns a count of finished AccountRoleMock.Update invocations
+func (mmUpdate *AccountRoleMock) UpdateAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdate.afterUpdateCounter)
+}
+
+// UpdateBeforeCounter returns a count of AccountRoleMock.Update invocations
+func (mmUpdate *AccountRoleMock) UpdateBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdate.beforeUpdateCounter)
+}
+
+// Calls returns a list of arguments used in each call to AccountRoleMock.Update.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdate *mAccountRoleMockUpdate) Calls() []*AccountRoleMockUpdateParams {
+	mmUpdate.mutex.RLock()
+
+	argCopy := make([]*AccountRoleMockUpdateParams, len(mmUpdate.callArgs))
+	copy(argCopy, mmUpdate.callArgs)
+
+	mmUpdate.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateDone returns true if the count of the Update invocations corresponds
+// the number of defined expectations
+func (m *AccountRoleMock) MinimockUpdateDone() bool {
+	if m.UpdateMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateMock.invocationsDone()
+}
+
+// MinimockUpdateInspect logs each unmet expectation
+func (m *AccountRoleMock) MinimockUpdateInspect() {
+	for _, e := range m.UpdateMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AccountRoleMock.Update at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateCounter := mm_atomic.LoadUint64(&m.afterUpdateCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateMock.defaultExpectation != nil && afterUpdateCounter < 1 {
+		if m.UpdateMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AccountRoleMock.Update at\n%s", m.UpdateMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AccountRoleMock.Update at\n%s with params: %#v", m.UpdateMock.defaultExpectation.expectationOrigins.origin, *m.UpdateMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdate != nil && afterUpdateCounter < 1 {
+		m.t.Errorf("Expected call to AccountRoleMock.Update at\n%s", m.funcUpdateOrigin)
+	}
+
+	if !m.UpdateMock.invocationsDone() && afterUpdateCounter > 0 {
+		m.t.Errorf("Expected %d calls to AccountRoleMock.Update at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateMock.expectedInvocations), m.UpdateMock.expectedInvocationsOrigin, afterUpdateCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *AccountRoleMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockClearDefaultInspect()
+
 			m.MinimockDeleteInspect()
 
 			m.MinimockInsertInspect()
@@ -2351,6 +3182,8 @@ func (m *AccountRoleMock) MinimockFinish() {
 			m.MinimockSelectByAccountIDInspect()
 
 			m.MinimockSelectByIDInspect()
+
+			m.MinimockUpdateInspect()
 		}
 	})
 }
@@ -2374,10 +3207,12 @@ func (m *AccountRoleMock) MinimockWait(timeout mm_time.Duration) {
 func (m *AccountRoleMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockClearDefaultDone() &&
 		m.MinimockDeleteDone() &&
 		m.MinimockInsertDone() &&
 		m.MinimockResetRoleToDefaultDone() &&
 		m.MinimockSelectActiveUsersByRoleDone() &&
 		m.MinimockSelectByAccountIDDone() &&
-		m.MinimockSelectByIDDone()
+		m.MinimockSelectByIDDone() &&
+		m.MinimockUpdateDone()
 }

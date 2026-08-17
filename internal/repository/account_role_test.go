@@ -3,6 +3,7 @@ package repository_test
 import (
 	"testing"
 	"vilib-api/internal/domain"
+	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 	"vilib-api/testutil"
 
@@ -127,5 +128,84 @@ func TestRepository_AccountRoleSelectByID_NilNotFound(t *testing.T) {
 
 		require.Nil(t, roles)
 		require.ErrorIs(t, repository.ErrNotFound, err)
+	})
+}
+
+func TestRepository_AccountRoleUpdate_Success(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		var (
+			newName                             = f.Beer().Name()
+			newPermission domain.PermissionMask = 7
+		)
+
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		parent, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
+		role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 1, false, false)
+
+		updated, err := r.AccountRole.Update(t.Context(), role.ID, newName, &parent.ID, newPermission, true)
+
+		require.NoError(t, err)
+		require.Equal(t, role.ID, updated.ID)
+		require.Equal(t, newName, updated.Name)
+		require.Equal(t, newPermission, updated.PermissionMask)
+		require.Equal(t, parent.ID, *updated.ParentID)
+		require.True(t, updated.IsDefault)
+
+		roles, err := r.AccountRole.SelectByID(t.Context(), role.ID)
+		require.NoError(t, err)
+		require.Equal(t, updated, roles[0])
+	})
+}
+
+func TestRepository_AccountRoleUpdate_NotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		_, err := r.AccountRole.Update(t.Context(), uuid.New(), f.Beer().Name(), nil, 0, false)
+
+		require.ErrorIs(t, err, repository.ErrNotFound)
+	})
+}
+
+func TestRepository_AccountRoleUpdate_DuplicateNameReturnsError(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		existing, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
+		role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
+
+		_, err := r.AccountRole.Update(t.Context(), role.ID, existing.Name, nil, 0, false)
+
+		require.ErrorIs(t, dberrors.AccountRoleErrors.ErrUniqueUniqueAccountRole, err)
+	})
+}
+
+func TestRepository_AccountRoleClearDefault_UnsetsFlagForAllAccountRoles(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		otherAccount, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+
+		roleA, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, true, false)
+		roleB, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
+		otherRole, _ := r.AccountRole.Insert(t.Context(), otherAccount.ID, f.Beer().Name(), nil, 0, true, false)
+
+		err := r.AccountRole.ClearDefault(t.Context(), account.ID)
+		require.NoError(t, err)
+
+		roles, err := r.AccountRole.SelectByID(t.Context(), roleA.ID, roleB.ID)
+		require.NoError(t, err)
+		for _, role := range roles {
+			require.False(t, role.IsDefault)
+		}
+
+		// Роль по умолчанию другого аккаунта не затрагивается.
+		otherRoles, err := r.AccountRole.SelectByID(t.Context(), otherRole.ID)
+		require.NoError(t, err)
+		require.True(t, otherRoles[0].IsDefault)
 	})
 }

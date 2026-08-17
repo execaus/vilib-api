@@ -3,6 +3,7 @@ package repository_test
 import (
 	"testing"
 	"vilib-api/internal/domain"
+	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 	"vilib-api/testutil"
 
@@ -146,5 +147,84 @@ func TestRepository_GroupRoleGetDefault_NotFound(t *testing.T) {
 		_, err := r.GroupRole.GetDefault(t.Context(), uuid.New())
 
 		require.ErrorIs(t, repository.ErrNotFound, err)
+	})
+}
+
+func TestRepository_GroupRoleUpdate_Success(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		var (
+			newName                             = f.Beer().Name()
+			newPermission domain.PermissionMask = 6
+		)
+
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		role, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 1, false)
+
+		updated, err := r.GroupRole.Update(t.Context(), role.ID, newName, newPermission, true)
+
+		require.NoError(t, err)
+		require.Equal(t, role.ID, updated.ID)
+		require.Equal(t, newName, updated.Name)
+		require.Equal(t, newPermission, updated.PermissionMask)
+		require.True(t, updated.IsDefault)
+
+		roles, err := r.GroupRole.SelectByID(t.Context(), role.ID)
+		require.NoError(t, err)
+		require.Equal(t, updated, roles[0])
+	})
+}
+
+func TestRepository_GroupRoleUpdate_NotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		_, err := r.GroupRole.Update(t.Context(), uuid.New(), f.Beer().Name(), 0, false)
+
+		require.ErrorIs(t, err, repository.ErrNotFound)
+	})
+}
+
+func TestRepository_GroupRoleUpdate_DuplicateNameReturnsError(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		existing, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 0, false)
+		role, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 0, false)
+
+		_, err := r.GroupRole.Update(t.Context(), role.ID, existing.Name, 0, false)
+
+		require.ErrorIs(t, dberrors.GroupRoleErrors.ErrUniqueGroupRolesAccountIdNameKey, err)
+	})
+}
+
+func TestRepository_GroupRoleClearDefault_UnsetsFlagForAllAccountRoles(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		otherAccount, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+
+		roleA, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 0, true)
+		roleB, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 0, false)
+		otherRole, _ := r.GroupRole.Insert(t.Context(), otherAccount.ID, f.Beer().Name(), 0, true)
+
+		err := r.GroupRole.ClearDefault(t.Context(), account.ID)
+		require.NoError(t, err)
+
+		roles, err := r.GroupRole.SelectByID(t.Context(), roleA.ID)
+		require.NoError(t, err)
+		require.False(t, roles[0].IsDefault)
+
+		roles, err = r.GroupRole.SelectByID(t.Context(), roleB.ID)
+		require.NoError(t, err)
+		require.False(t, roles[0].IsDefault)
+
+		// Роль по умолчанию другого аккаунта не затрагивается.
+		otherRoles, err := r.GroupRole.SelectByID(t.Context(), otherRole.ID)
+		require.NoError(t, err)
+		require.True(t, otherRoles[0].IsDefault)
 	})
 }

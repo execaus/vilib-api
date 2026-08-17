@@ -142,6 +142,64 @@ func (r *AccountRoleRepository) SelectActiveUsersByRole(
 	return users, nil
 }
 
+// Update заменяет имя, родительскую роль, маску прав и флаг is_default роли аккаунта. Строка
+// ищется отдельным SELECT (как VideoRepository.UpdateName): модель нужна для модифицирующего
+// метода bob AccountRole.Update, который заодно перечитывает актуальные значения после апдейта.
+func (r *AccountRoleRepository) Update(
+	ctx context.Context,
+	roleID uuid.UUID,
+	name string,
+	parentID *uuid.UUID,
+	permission domain.PermissionMask,
+	isDefault bool,
+) (domain.AccountRole, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	roleDB, err := schema.AccountRoles.Query(
+		sm.Where(schema.AccountRoles.Columns.AccountRoleID.EQ(psql.Arg(roleID))),
+	).One(ctx, exec)
+	if err != nil {
+		if errors.Is(pgx.ErrNoRows, err) {
+			return domain.AccountRole{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.AccountRole{}, err
+	}
+
+	if err = roleDB.Update(ctx, exec, &schema.AccountRoleSetter{
+		Name:           omit.From(name),
+		PermissionMask: omit.From(permission),
+		ParentRoleID:   omitnull.FromPtr(parentID),
+		IsDefault:      omit.From(isDefault),
+	}); err != nil {
+		zap.L().Error(err.Error())
+		return domain.AccountRole{}, err
+	}
+
+	role := domain.AccountRole{}
+	role.FromDB(roleDB)
+
+	return role, nil
+}
+
+// ClearDefault снимает флаг is_default у всех ролей аккаунта — используется перед назначением
+// новой дефолтной роли (Create/Update с isDefault=true), чтобы в аккаунте всегда была не
+// больше одной роли по умолчанию (§4 дизайна эпика Э2).
+func (r *AccountRoleRepository) ClearDefault(ctx context.Context, accountID uuid.UUID) error {
+	exec := r.provider.GetExecutor(ctx)
+
+	_, err := schema.AccountRoles.Update(
+		(&schema.AccountRoleSetter{IsDefault: omit.From(false)}).UpdateMod(),
+		um.Where(schema.AccountRoles.Columns.AccountID.EQ(psql.Arg(accountID))),
+	).Exec(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
+}
+
 func (r *AccountRoleRepository) ResetRoleToDefault(
 	ctx context.Context,
 	oldRoleID, defaultRoleID uuid.UUID,

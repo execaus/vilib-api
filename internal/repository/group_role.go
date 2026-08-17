@@ -2,15 +2,18 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/schema"
 
 	"github.com/aarondl/opt/omit"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/stephenafamo/bob/dialect/psql"
 	"github.com/stephenafamo/bob/dialect/psql/dm"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
+	"github.com/stephenafamo/bob/dialect/psql/um"
 	"go.uber.org/zap"
 )
 
@@ -121,6 +124,60 @@ func (r *GroupRoleRepository) GetDefault(ctx context.Context, accountID uuid.UUI
 	role.FromDB(rolesDB[0])
 
 	return role, nil
+}
+
+// Update заменяет имя, маску прав и флаг is_default роли группы (полная замена, §4 дизайна
+// эпика Э2). Строка ищется отдельным SELECT — как AccountRoleRepository.Update.
+func (r *GroupRoleRepository) Update(
+	ctx context.Context,
+	roleID uuid.UUID,
+	name string,
+	permission domain.PermissionMask,
+	isDefault bool,
+) (domain.GroupRole, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	roleDB, err := schema.GroupRoles.Query(
+		sm.Where(schema.GroupRoles.Columns.GroupRoleID.EQ(psql.Arg(roleID))),
+	).One(ctx, exec)
+	if err != nil {
+		if errors.Is(pgx.ErrNoRows, err) {
+			return domain.GroupRole{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.GroupRole{}, err
+	}
+
+	if err = roleDB.Update(ctx, exec, &schema.GroupRoleSetter{
+		Name:           omit.From(name),
+		PermissionMask: omit.From(permission),
+		IsDefault:      omit.From(isDefault),
+	}); err != nil {
+		zap.L().Error(err.Error())
+		return domain.GroupRole{}, err
+	}
+
+	role := domain.GroupRole{}
+	role.FromDB(roleDB)
+
+	return role, nil
+}
+
+// ClearDefault снимает флаг is_default у всех ролей групп аккаунта — используется перед
+// назначением новой дефолтной роли (Create/Update с isDefault=true).
+func (r *GroupRoleRepository) ClearDefault(ctx context.Context, accountID uuid.UUID) error {
+	exec := r.provider.GetExecutor(ctx)
+
+	_, err := schema.GroupRoles.Update(
+		(&schema.GroupRoleSetter{IsDefault: omit.From(false)}).UpdateMod(),
+		um.Where(schema.GroupRoles.Columns.AccountID.EQ(psql.Arg(accountID))),
+	).Exec(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
 }
 
 func (r *GroupRoleRepository) SelectMembersByRole(
