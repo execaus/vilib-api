@@ -370,6 +370,25 @@ definitions:
       token:
         type: string
     type: object
+  dto.UpdateAccountRoleRequest:
+    properties:
+      is_default:
+        type: boolean
+      name:
+        maxLength: 64
+        type: string
+      parent_id:
+        type: string
+      permission:
+        $ref: '#/definitions/domain.PermissionMask'
+    required:
+    - name
+    type: object
+  dto.UpdateAccountRoleResponse:
+    properties:
+      account_role:
+        $ref: '#/definitions/dto.AccountRole'
+    type: object
   dto.UpdateGroupMemberRequest:
     properties:
       role_id:
@@ -381,6 +400,23 @@ definitions:
     properties:
       member:
         $ref: '#/definitions/dto.GroupMemberDetails'
+    type: object
+  dto.UpdateGroupRoleRequest:
+    properties:
+      is_default:
+        type: boolean
+      name:
+        maxLength: 64
+        type: string
+      permission_mask:
+        $ref: '#/definitions/domain.PermissionMask'
+    required:
+    - name
+    type: object
+  dto.UpdateGroupRoleResponse:
+    properties:
+      role:
+        $ref: '#/definitions/dto.GroupRole'
     type: object
   dto.UpdateUserRequest:
     properties:
@@ -637,6 +673,62 @@ paths:
       security:
       - BearerAuth: []
       summary: Удаление роли аккаунта
+      tags:
+      - account_roles
+    put:
+      consumes:
+      - application/json
+      description: |-
+        Полностью заменяет роль аккаунта. Системную роль редактировать нельзя, бит
+        владельца в маске прав запрещён, у аккаунта всегда должна остаться ровно одна
+        роль по умолчанию.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID роли
+        in: path
+        name: roleId
+        required: true
+        type: string
+      - description: Тело запроса для редактирования роли
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateAccountRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UpdateAccountRoleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Редактирование роли аккаунта
       tags:
       - account_roles
   /api/v1/accounts/{accountId}/user-groups:
@@ -1522,6 +1614,62 @@ paths:
       security:
       - BearerAuth: []
       summary: Удаление роли группы
+      tags:
+      - group_roles
+    put:
+      consumes:
+      - application/json
+      description: |-
+        Полностью заменяет роль группы. В отличие от роли аккаунта бит владельца
+        группы в маске прав разрешён. У аккаунта всегда должна остаться ровно одна
+        роль группы по умолчанию.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID роли группы
+        in: path
+        name: groupRoleId
+        required: true
+        type: string
+      - description: Тело запроса для редактирования роли группы
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateGroupRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UpdateGroupRoleResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Редактирование роли группы
       tags:
       - group_roles
   /api/v1/accounts/{accountId}/users:
