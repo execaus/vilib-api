@@ -252,6 +252,7 @@ type videoCompleteUploadMocks struct {
 	Video       *repository_mocks.VideoMock
 	VideoAsset  *service_mocks.VideoAssetMock
 	Outbox      *service_mocks.OutboxMock
+	User        *service_mocks.UserMock
 }
 
 func TestService_Video_CompleteUpload(t *testing.T) {
@@ -267,24 +268,43 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 		testTopic     = "video.original-uploaded"
 	)
 
-	uploadingVideo := domain.Video{ID: testVideoID, GroupID: testGroupID, Status: domain.VideoStatusUploading}
+	testAuthorID := uuid.New()
+	testAuthorUser := domain.User{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"}
+	testAuthor := domain.VideoAuthor{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"}
+
+	uploadingVideo := domain.Video{
+		ID: testVideoID, GroupID: testGroupID, Author: testAuthorID, Status: domain.VideoStatusUploading,
+	}
 	queuedVideo := domain.Video{
 		ID:                testVideoID,
 		GroupID:           testGroupID,
+		Author:            testAuthorID,
 		Status:            domain.VideoStatusQueued,
 		ProcessingAttempt: 1,
 	}
-	readyVideo := domain.Video{ID: testVideoID, GroupID: testGroupID, Status: domain.VideoStatusReady}
+	readyVideo := domain.Video{
+		ID: testVideoID, GroupID: testGroupID, Author: testAuthorID, Status: domain.VideoStatusReady,
+	}
 	failureReason := "timeout"
 	failedVideo := domain.Video{
-		ID: testVideoID, GroupID: testGroupID, Status: domain.VideoStatusFailed, FailureReason: &failureReason,
+		ID: testVideoID, GroupID: testGroupID, Author: testAuthorID,
+		Status: domain.VideoStatusFailed, FailureReason: &failureReason,
 	}
 	otherGroupVideo := domain.Video{ID: testVideoID, GroupID: uuid.New(), Status: domain.VideoStatusUploading}
+
+	// resolveAuthor настраивает моки, вызываемые videoListItemWithAuthor после успешного
+	// подтверждения (§5.1 контракта Э2): ассеты видео и батч-резолв автора.
+	resolveAuthor := func(m videoCompleteUploadMocks) {
+		m.VideoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return(nil, nil)
+		m.User.GetByIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
+			Return([]domain.User{testAuthorUser}, nil)
+	}
 
 	tests := []struct {
 		name       string
 		setupMocks func(t *testing.T, m videoCompleteUploadMocks)
-		want       domain.Video
+		want       domain.VideoListItem
 		wantErr    error
 	}{
 		{
@@ -341,8 +361,9 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 
 					return nil
 				})
+				resolveAuthor(m)
 			},
-			want: queuedVideo,
+			want: domain.VideoListItem{Video: queuedVideo, Author: testAuthor},
 		},
 		{
 			name: "object not found",
@@ -402,8 +423,9 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 				// UpdateStatusIf/Outbox.Publish не настроены: проигравший гонку запрос не
 				// должен доходить до перевода статуса и публикации события — это уже сделал
 				// победивший запрос.
+				resolveAuthor(m)
 			},
-			want: queuedVideo,
+			want: domain.VideoListItem{Video: queuedVideo, Author: testAuthor},
 		},
 		{
 			// То же самое, но конфликт пришёл по второму уникальному ограничению двухшаговой
@@ -432,8 +454,9 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 						testBucket, testKey, "video/mp4", int64(2048),
 					).
 					Return(domain.VideoAsset{}, dberrors.VideoAssetErrors.ErrUniqueVideoAssetsVideoIdKindProfileKey)
+				resolveAuthor(m)
 			},
-			want: queuedVideo,
+			want: domain.VideoListItem{Video: queuedVideo, Author: testAuthor},
 		},
 		{
 			name: "repeat for queued video is idempotent",
@@ -442,8 +465,9 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 					Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
 					Return(nil)
 				m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(&queuedVideo, nil)
+				resolveAuthor(m)
 			},
-			want: queuedVideo,
+			want: domain.VideoListItem{Video: queuedVideo, Author: testAuthor},
 		},
 		{
 			name: "repeat for ready video is idempotent",
@@ -452,8 +476,9 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 					Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
 					Return(nil)
 				m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(&readyVideo, nil)
+				resolveAuthor(m)
 			},
-			want: readyVideo,
+			want: domain.VideoListItem{Video: readyVideo, Author: testAuthor},
 		},
 		{
 			name: "failed video returns conflict",
@@ -503,6 +528,7 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 				Video:       repository_mocks.NewVideoMock(mc),
 				VideoAsset:  service_mocks.NewVideoAssetMock(mc),
 				Outbox:      service_mocks.NewOutboxMock(mc),
+				User:        service_mocks.NewUserMock(mc),
 			}
 
 			tt.setupMocks(t, m)
@@ -513,6 +539,7 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 				GroupRole:   m.GroupRole,
 				VideoAsset:  m.VideoAsset,
 				Outbox:      m.Outbox,
+				User:        m.User,
 			}
 
 			videoSvc := service.NewVideoService(m.S3, m.Video, &svc, service.VideoServiceConfig{
@@ -1532,6 +1559,7 @@ type videoGetAllMocks struct {
 	GroupRole   *service_mocks.GroupRoleMock
 	Video       *repository_mocks.VideoMock
 	VideoAsset  *service_mocks.VideoAssetMock
+	User        *service_mocks.UserMock
 }
 
 func newVideoGetAllMocks(mc *minimock.Controller) videoGetAllMocks {
@@ -1541,6 +1569,7 @@ func newVideoGetAllMocks(mc *minimock.Controller) videoGetAllMocks {
 		GroupRole:   service_mocks.NewGroupRoleMock(mc),
 		Video:       repository_mocks.NewVideoMock(mc),
 		VideoAsset:  service_mocks.NewVideoAssetMock(mc),
+		User:        service_mocks.NewUserMock(mc),
 	}
 }
 
@@ -1550,6 +1579,7 @@ func newVideoGetAllService(m videoGetAllMocks) *service.VideoService {
 		GroupMember: m.GroupMember,
 		GroupRole:   m.GroupRole,
 		VideoAsset:  m.VideoAsset,
+		User:        m.User,
 	}
 	return service.NewVideoService(nil, m.Video, svc, service.VideoServiceConfig{})
 }
@@ -1568,11 +1598,16 @@ func TestService_Video_GetAll(t *testing.T) {
 	failureClass := domain.VideoFailureClassPermanent
 	failureReason := "unsupported codec"
 
+	testAuthorID := uuid.New()
+	testAuthor := domain.User{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"}
+
 	videoA := domain.Video{
-		ID: uuid.New(), GroupID: testGroupID, Name: "a",
+		ID: uuid.New(), GroupID: testGroupID, Name: "a", Author: testAuthorID,
 		Status: domain.VideoStatusFailed, FailureClass: &failureClass, FailureReason: &failureReason,
 	}
-	videoB := domain.Video{ID: uuid.New(), GroupID: testGroupID, Name: "b", Status: domain.VideoStatusReady}
+	videoB := domain.Video{
+		ID: uuid.New(), GroupID: testGroupID, Name: "b", Author: testAuthorID, Status: domain.VideoStatusReady,
+	}
 
 	assets := []domain.VideoAsset{
 		{VideoID: videoA.ID, Kind: domain.VideoAssetKindOriginal},
@@ -1625,6 +1660,9 @@ func TestService_Video_GetAll(t *testing.T) {
 		m.VideoAsset.SelectByVideoIDsMock.
 			Expect(minimock.AnyContext, []uuid.UUID{videoA.ID, videoB.ID}).
 			Return(assets, nil)
+		m.User.GetByIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
+			Return([]domain.User{testAuthor}, nil)
 
 		videoSvc := newVideoGetAllService(m)
 
@@ -1637,6 +1675,8 @@ func TestService_Video_GetAll(t *testing.T) {
 		require.Empty(t, got[0].Profiles)
 		require.True(t, got[1].HasProcessed)
 		require.Equal(t, []string{"360p", "720p"}, got[1].Profiles)
+		require.Equal(t, domain.VideoAuthor{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"}, got[0].Author)
+		require.Equal(t, domain.VideoAuthor{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"}, got[1].Author)
 	})
 
 	t.Run("fills failure for initiator with account manage video right", func(t *testing.T) {
@@ -1654,6 +1694,9 @@ func TestService_Video_GetAll(t *testing.T) {
 		m.VideoAsset.SelectByVideoIDsMock.
 			Expect(minimock.AnyContext, []uuid.UUID{videoA.ID, videoB.ID}).
 			Return(assets, nil)
+		m.User.GetByIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
+			Return([]domain.User{testAuthor}, nil)
 
 		videoSvc := newVideoGetAllService(m)
 
@@ -1690,6 +1733,11 @@ func TestService_Video_GetAll(t *testing.T) {
 		m.VideoAsset.SelectByVideoIDsMock.
 			Expect(minimock.AnyContext, []uuid.UUID{videoA.ID}).
 			Return(nil, nil)
+		// Автор не резолвится (например, удалён) — не ошибка: в карточке остаётся только id
+		// (П-6 контракта Э2).
+		m.User.GetByIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
+			Return(nil, nil)
 
 		videoSvc := newVideoGetAllService(m)
 
@@ -1698,6 +1746,7 @@ func TestService_Video_GetAll(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		require.NotNil(t, got[0].Failure)
+		require.Equal(t, domain.VideoAuthor{ID: testAuthorID}, got[0].Author)
 	})
 
 	t.Run("video asset select error propagates", func(t *testing.T) {
@@ -1983,6 +2032,8 @@ type videoRenameMocks struct {
 	GroupMember *service_mocks.GroupMemberMock
 	S3          *service_mocks.S3Mock
 	Video       *repository_mocks.VideoMock
+	VideoAsset  *service_mocks.VideoAssetMock
+	User        *service_mocks.UserMock
 }
 
 func newVideoRenameMocks(mc *minimock.Controller) videoRenameMocks {
@@ -1991,11 +2042,18 @@ func newVideoRenameMocks(mc *minimock.Controller) videoRenameMocks {
 		GroupMember: service_mocks.NewGroupMemberMock(mc),
 		S3:          service_mocks.NewS3Mock(mc),
 		Video:       repository_mocks.NewVideoMock(mc),
+		VideoAsset:  service_mocks.NewVideoAssetMock(mc),
+		User:        service_mocks.NewUserMock(mc),
 	}
 }
 
 func newVideoRenameService(m videoRenameMocks) *service.VideoService {
-	svc := &service.Service{Access: m.Access, GroupMember: m.GroupMember}
+	svc := &service.Service{
+		Access:      m.Access,
+		GroupMember: m.GroupMember,
+		VideoAsset:  m.VideoAsset,
+		User:        m.User,
+	}
 	return service.NewVideoService(m.S3, m.Video, svc, service.VideoServiceConfig{})
 }
 
@@ -2009,9 +2067,10 @@ func TestService_Video_Rename(t *testing.T) {
 	testGroupID := uuid.New()
 	testInitiatorID := uuid.New()
 	testVideoID := uuid.New()
+	testAuthorID := uuid.New()
 	testName := "renamed video"
 	ownVideo := &domain.Video{ID: testVideoID, GroupID: testGroupID}
-	renamedVideo := domain.Video{ID: testVideoID, GroupID: testGroupID, Name: testName}
+	renamedVideo := domain.Video{ID: testVideoID, GroupID: testGroupID, Name: testName, Author: testAuthorID}
 
 	t.Run("forbidden - no account or group permission", func(t *testing.T) {
 		t.Parallel()
@@ -2079,13 +2138,20 @@ func TestService_Video_Rename(t *testing.T) {
 			Return(nil)
 		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
 		m.Video.UpdateNameMock.Expect(minimock.AnyContext, testVideoID, testName).Return(renamedVideo, nil)
+		m.VideoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return(nil, nil)
+		m.User.GetByIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
+			Return([]domain.User{{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"}}, nil)
 
 		videoSvc := newVideoRenameService(m)
 
 		got, err := videoSvc.Rename(t.Context(), testAccountID, testGroupID, testInitiatorID, testVideoID, testName)
 
 		require.NoError(t, err)
-		require.Equal(t, renamedVideo, got)
+		require.Equal(t, renamedVideo, got.Video)
+		require.False(t, got.HasProcessed)
+		require.Empty(t, got.Profiles)
+		require.Equal(t, domain.VideoAuthor{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"}, got.Author)
 	})
 }
 

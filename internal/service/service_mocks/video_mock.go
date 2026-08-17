@@ -43,7 +43,7 @@ type VideoMock struct {
 	beforeApplyProcessingStartedCounter uint64
 	ApplyProcessingStartedMock          mVideoMockApplyProcessingStarted
 
-	funcCompleteUpload          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, videoID uuid.UUID) (v1 domain.Video, err error)
+	funcCompleteUpload          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, videoID uuid.UUID) (v1 domain.VideoListItem, err error)
 	funcCompleteUploadOrigin    string
 	inspectFuncCompleteUpload   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, videoID uuid.UUID)
 	afterCompleteUploadCounter  uint64
@@ -106,7 +106,7 @@ type VideoMock struct {
 	beforeGetHLSPlaylistCounter uint64
 	GetHLSPlaylistMock          mVideoMockGetHLSPlaylist
 
-	funcRename          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) (v1 domain.Video, err error)
+	funcRename          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) (v1 domain.VideoListItem, err error)
 	funcRenameOrigin    string
 	inspectFuncRename   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string)
 	afterRenameCounter  uint64
@@ -1329,7 +1329,7 @@ type VideoMockCompleteUploadParamPtrs struct {
 
 // VideoMockCompleteUploadResults contains results of the Video.CompleteUpload
 type VideoMockCompleteUploadResults struct {
-	v1  domain.Video
+	v1  domain.VideoListItem
 	err error
 }
 
@@ -1505,7 +1505,7 @@ func (mmCompleteUpload *mVideoMockCompleteUpload) Inspect(f func(ctx context.Con
 }
 
 // Return sets up results that will be returned by Video.CompleteUpload
-func (mmCompleteUpload *mVideoMockCompleteUpload) Return(v1 domain.Video, err error) *VideoMock {
+func (mmCompleteUpload *mVideoMockCompleteUpload) Return(v1 domain.VideoListItem, err error) *VideoMock {
 	if mmCompleteUpload.mock.funcCompleteUpload != nil {
 		mmCompleteUpload.mock.t.Fatalf("VideoMock.CompleteUpload mock is already set by Set")
 	}
@@ -1519,7 +1519,7 @@ func (mmCompleteUpload *mVideoMockCompleteUpload) Return(v1 domain.Video, err er
 }
 
 // Set uses given function f to mock the Video.CompleteUpload method
-func (mmCompleteUpload *mVideoMockCompleteUpload) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, videoID uuid.UUID) (v1 domain.Video, err error)) *VideoMock {
+func (mmCompleteUpload *mVideoMockCompleteUpload) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, videoID uuid.UUID) (v1 domain.VideoListItem, err error)) *VideoMock {
 	if mmCompleteUpload.defaultExpectation != nil {
 		mmCompleteUpload.mock.t.Fatalf("Default expectation is already set for the Video.CompleteUpload method")
 	}
@@ -1550,7 +1550,7 @@ func (mmCompleteUpload *mVideoMockCompleteUpload) When(ctx context.Context, acco
 }
 
 // Then sets up Video.CompleteUpload return parameters for the expectation previously defined by the When method
-func (e *VideoMockCompleteUploadExpectation) Then(v1 domain.Video, err error) *VideoMock {
+func (e *VideoMockCompleteUploadExpectation) Then(v1 domain.VideoListItem, err error) *VideoMock {
 	e.results = &VideoMockCompleteUploadResults{v1, err}
 	return e.mock
 }
@@ -1577,7 +1577,7 @@ func (mmCompleteUpload *mVideoMockCompleteUpload) invocationsDone() bool {
 }
 
 // CompleteUpload implements mm_service.Video
-func (mmCompleteUpload *VideoMock) CompleteUpload(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, videoID uuid.UUID) (v1 domain.Video, err error) {
+func (mmCompleteUpload *VideoMock) CompleteUpload(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, videoID uuid.UUID) (v1 domain.VideoListItem, err error) {
 	mm_atomic.AddUint64(&mmCompleteUpload.beforeCompleteUploadCounter, 1)
 	defer mm_atomic.AddUint64(&mmCompleteUpload.afterCompleteUploadCounter, 1)
 
@@ -5029,7 +5029,7 @@ type VideoMockRenameParamPtrs struct {
 
 // VideoMockRenameResults contains results of the Video.Rename
 type VideoMockRenameResults struct {
-	v1  domain.Video
+	v1  domain.VideoListItem
 	err error
 }
 
@@ -5229,7 +5229,7 @@ func (mmRename *mVideoMockRename) Inspect(f func(ctx context.Context, accountID 
 }
 
 // Return sets up results that will be returned by Video.Rename
-func (mmRename *mVideoMockRename) Return(v1 domain.Video, err error) *VideoMock {
+func (mmRename *mVideoMockRename) Return(v1 domain.VideoListItem, err error) *VideoMock {
 	if mmRename.mock.funcRename != nil {
 		mmRename.mock.t.Fatalf("VideoMock.Rename mock is already set by Set")
 	}
@@ -5243,7 +5243,7 @@ func (mmRename *mVideoMockRename) Return(v1 domain.Video, err error) *VideoMock 
 }
 
 // Set uses given function f to mock the Video.Rename method
-func (mmRename *mVideoMockRename) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) (v1 domain.Video, err error)) *VideoMock {
+func (mmRename *mVideoMockRename) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) (v1 domain.VideoListItem, err error)) *VideoMock {
 	if mmRename.defaultExpectation != nil {
 		mmRename.mock.t.Fatalf("Default expectation is already set for the Video.Rename method")
 	}
@@ -5274,7 +5274,7 @@ func (mmRename *mVideoMockRename) When(ctx context.Context, accountID uuid.UUID,
 }
 
 // Then sets up Video.Rename return parameters for the expectation previously defined by the When method
-func (e *VideoMockRenameExpectation) Then(v1 domain.Video, err error) *VideoMock {
+func (e *VideoMockRenameExpectation) Then(v1 domain.VideoListItem, err error) *VideoMock {
 	e.results = &VideoMockRenameResults{v1, err}
 	return e.mock
 }
@@ -5301,7 +5301,7 @@ func (mmRename *mVideoMockRename) invocationsDone() bool {
 }
 
 // Rename implements mm_service.Video
-func (mmRename *VideoMock) Rename(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) (v1 domain.Video, err error) {
+func (mmRename *VideoMock) Rename(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID, name string) (v1 domain.VideoListItem, err error) {
 	mm_atomic.AddUint64(&mmRename.beforeRenameCounter, 1)
 	defer mm_atomic.AddUint64(&mmRename.afterRenameCounter, 1)
 

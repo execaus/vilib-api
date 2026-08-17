@@ -420,10 +420,12 @@ func (s *VideoService) CreateUpload(
 // регистрирует ассет-оригинал, переводит видео в очередь на обработку и публикует событие
 // OriginalUploaded через outbox. Повторный вызов для видео, уже поставленного в очередь,
 // обрабатываемого или готового, идемпотентен и не имеет побочных эффектов (Э1-Т9…Т11).
+// Возвращает карточку того же вида, что и элемент списка видео (VideoListItem с профилями и
+// автором, §5.1 контракта Э2).
 func (s *VideoService) CompleteUpload(
 	ctx context.Context,
 	accountID, groupID, userID, videoID uuid.UUID,
-) (domain.Video, error) {
+) (domain.VideoListItem, error) {
 	// OR-логика: аккаунтное право ИЛИ групповое право
 	if err := s.srv.Access.IsCheckAccountAction(
 		ctx,
@@ -432,37 +434,43 @@ func (s *VideoService) CompleteUpload(
 		domain.AccountPermissionManageVideo,
 	); err != nil {
 		if groupErr := s.isCheckGroupAction(ctx, groupID, userID, domain.GroupPermissionManageVideo); groupErr != nil {
-			return domain.Video{}, ErrForbidden
+			return domain.VideoListItem{}, ErrForbidden
 		}
 	}
 
 	video, err := s.repo.Select(ctx, videoID)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return domain.Video{}, err
+		return domain.VideoListItem{}, err
 	}
 
 	// Проверка, что видео принадлежит указанной группе
 	if video.GroupID != groupID {
 		zap.L().Error("video does not belong to the specified group")
-		return domain.Video{}, ErrForbidden
+		return domain.VideoListItem{}, ErrForbidden
 	}
 
 	switch video.Status {
 	case domain.VideoStatusQueued, domain.VideoStatusCompressing, domain.VideoStatusReady:
-		// Повторное подтверждение уже принятой загрузки — идемпотентный no-op.
-		return *video, nil
+		// Повторное подтверждение уже принятой загрузки — идемпотентный no-op. Право
+		// ManageVideo уже подтверждено проверкой выше — повторно не проверяем.
+		return s.videoListItemWithAuthor(ctx, *video, true)
 	case domain.VideoStatusFailed:
 		reason := "timeout"
 		if video.FailureReason != nil {
 			reason = *video.FailureReason
 		}
-		return domain.Video{}, NewConflictErrorCode(codeConflictUploadFailed, "upload failed: "+reason)
+		return domain.VideoListItem{}, NewConflictErrorCode(codeConflictUploadFailed, "upload failed: "+reason)
 	case domain.VideoStatusUploading:
 		// Продолжение обработки ниже.
 	}
 
-	return s.completeUploadingVideo(ctx, videoID)
+	result, err := s.completeUploadingVideo(ctx, videoID)
+	if err != nil {
+		return domain.VideoListItem{}, err
+	}
+
+	return s.videoListItemWithAuthor(ctx, result, true)
 }
 
 // completeUploadingVideo выполняет подтверждение загрузки для видео в статусе uploading:
@@ -983,12 +991,97 @@ func (s *VideoService) GetAll(
 		assetsByVideo[asset.VideoID] = append(assetsByVideo[asset.VideoID], asset)
 	}
 
+	authorIDs := make([]uuid.UUID, len(videos))
+	for i, video := range videos {
+		authorIDs[i] = video.Author
+	}
+
+	authors, err := s.authorsByID(ctx, authorIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	items := make([]domain.VideoListItem, len(videos))
 	for i, video := range videos {
 		items[i] = newVideoListItem(video, assetsByVideo[video.ID], canManage)
+		items[i].Author = authorFor(video.Author, authors)
 	}
 
 	return items, nil
+}
+
+// authorsByID батчем резолвит пользователей по уникальным идентификаторам в карту id → User
+// (П-6 контракта Э2, автор видео объектом). Дубликаты во входном списке схлопываются перед
+// запросом; пустой список не порождает запроса к БД.
+func (s *VideoService) authorsByID(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]domain.User, error) {
+	unique := uniqueUUIDs(ids)
+
+	users, err := s.srv.User.GetByIDs(ctx, unique)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	byID := make(map[uuid.UUID]domain.User, len(users))
+	for _, user := range users {
+		byID[user.ID] = user
+	}
+
+	return byID, nil
+}
+
+// authorFor собирает domain.VideoAuthor по id создателя видео и карте резолвнутых
+// пользователей. Пользователь, которого не удалось найти, — не ошибка (П-6 контракта Э2):
+// автор остаётся с заполненным только ID, без имени и фамилии.
+func authorFor(id uuid.UUID, users map[uuid.UUID]domain.User) domain.VideoAuthor {
+	if user, ok := users[id]; ok {
+		return domain.VideoAuthor{ID: id, Name: user.Name, Surname: user.Surname}
+	}
+
+	return domain.VideoAuthor{ID: id}
+}
+
+// uniqueUUIDs возвращает список идентификаторов без повторов, сохраняя порядок первого
+// появления.
+func uniqueUUIDs(ids []uuid.UUID) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	unique := make([]uuid.UUID, 0, len(ids))
+
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		unique = append(unique, id)
+	}
+
+	return unique
+}
+
+// videoListItemWithAuthor собирает карточку одного видео вида VideoListItem — того же, что и
+// элемент списка видео (Э2-Т16, §5.1 контракта Э2): используется Rename и CompleteUpload, чтобы
+// ответ был единообразен со списком. canManage передаётся вызывающей стороной без повторной
+// проверки прав — оба метода уже требуют ManageVideo для самого вызова.
+func (s *VideoService) videoListItemWithAuthor(
+	ctx context.Context,
+	video domain.Video,
+	canManage bool,
+) (domain.VideoListItem, error) {
+	assets, err := s.srv.VideoAsset.Get(ctx, video.ID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.VideoListItem{}, err
+	}
+
+	item := newVideoListItem(video, assets, canManage)
+
+	authors, err := s.authorsByID(ctx, []uuid.UUID{video.Author})
+	if err != nil {
+		return domain.VideoListItem{}, err
+	}
+	item.Author = authorFor(video.Author, authors)
+
+	return item, nil
 }
 
 // newVideoListItem собирает элемент списка видео (Э1-Т20): профили и признак обработки — из
@@ -1028,11 +1121,14 @@ func (s *VideoService) canManageVideo(ctx context.Context, accountID, groupID, i
 	return s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo) == nil
 }
 
+// Rename переименовывает видео и возвращает карточку того же вида, что и элемент списка
+// видео (VideoListItem с профилями и автором, §5.1 контракта Э2) — чтобы фронту не нужно было
+// перезапрашивать список ради актуального представления переименованного видео.
 func (s *VideoService) Rename(
 	ctx context.Context,
 	accountID, groupID, initiatorID, videoID uuid.UUID,
 	name string,
-) (domain.Video, error) {
+) (domain.VideoListItem, error) {
 	// OR-логика: аккаунтное право ИЛИ групповое право
 	if err := s.srv.Access.IsCheckAccountAction(
 		ctx,
@@ -1041,24 +1137,25 @@ func (s *VideoService) Rename(
 		domain.AccountPermissionManageVideo,
 	); err != nil {
 		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo); err != nil {
-			return domain.Video{}, ErrForbidden
+			return domain.VideoListItem{}, ErrForbidden
 		}
 	}
 
 	// Проверка, что видео принадлежит указанной группе (Б-1 ревью эпика: без неё право
 	// ManageVideo в своей группе позволяло переименовать чужое видео — IDOR).
 	if err := s.checkVideoBelongsToGroup(ctx, groupID, videoID); err != nil {
-		return domain.Video{}, err
+		return domain.VideoListItem{}, err
 	}
 
 	// Переименование видео
 	video, err := s.repo.UpdateName(ctx, videoID, name)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return domain.Video{}, err
+		return domain.VideoListItem{}, err
 	}
 
-	return video, nil
+	// Право ManageVideo уже подтверждено проверкой выше — повторно не проверяем.
+	return s.videoListItemWithAuthor(ctx, video, true)
 }
 
 // checkVideoBelongsToGroup перечитывает видео и убеждается, что оно принадлежит groupID —

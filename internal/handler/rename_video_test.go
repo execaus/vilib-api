@@ -28,10 +28,15 @@ func TestHandler_RenameVideo(t *testing.T) {
 		testInitiatorID = uuid.New()
 		testToken       = "valid-token"
 		testNewName     = "updated name"
-		testVideo       = domain.Video{
-			ID:      testVideoID,
-			GroupID: testGroupID,
-			Name:    testNewName,
+		testAuthorID    = uuid.New()
+		testVideoItem   = domain.VideoListItem{
+			Video: domain.Video{
+				ID:      testVideoID,
+				GroupID: testGroupID,
+				Name:    testNewName,
+				Author:  testAuthorID,
+			},
+			Author: domain.VideoAuthor{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"},
 		}
 	)
 
@@ -63,7 +68,7 @@ func TestHandler_RenameVideo(t *testing.T) {
 			CurrentAccountID: testAccountID,
 		}, nil)
 		svcMock.Video.RenameMock.When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID, testNewName).
-			Then(testVideo, nil)
+			Then(testVideoItem, nil)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
@@ -78,6 +83,10 @@ func TestHandler_RenameVideo(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
+
+		var response dto.RenameVideoResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		require.Equal(t, dto.VideoAuthor{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"}, response.Video.Author)
 	})
 
 	t.Run("forbidden", func(t *testing.T) {
@@ -92,7 +101,7 @@ func TestHandler_RenameVideo(t *testing.T) {
 			CurrentAccountID: testAccountID,
 		}, nil)
 		svcMock.Video.RenameMock.When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID, testNewName).
-			Then(domain.Video{}, service.ErrForbidden)
+			Then(domain.VideoListItem{}, service.ErrForbidden)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
@@ -121,7 +130,7 @@ func TestHandler_RenameVideo(t *testing.T) {
 			CurrentAccountID: testAccountID,
 		}, nil)
 		svcMock.Video.RenameMock.When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID, testNewName).
-			Then(domain.Video{}, service.ErrNotFound)
+			Then(domain.VideoListItem{}, service.ErrNotFound)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()

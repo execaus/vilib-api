@@ -26,7 +26,13 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 		testVideoID     = uuid.New()
 		testInitiatorID = uuid.New()
 		testToken       = "valid-token"
-		testVideo       = domain.Video{ID: testVideoID, GroupID: testGroupID, Status: domain.VideoStatusQueued}
+		testAuthorID    = uuid.New()
+		testVideoItem   = domain.VideoListItem{
+			Video: domain.Video{
+				ID: testVideoID, GroupID: testGroupID, Author: testAuthorID, Status: domain.VideoStatusQueued,
+			},
+			Author: domain.VideoAuthor{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"},
+		}
 	)
 
 	setupCommitTx := func(mc *minimock.Controller) *saga_mocks.TransactableMock {
@@ -61,7 +67,7 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 		}, nil)
 		svcMock.Video.CompleteUploadMock.
 			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
-			Then(testVideo, nil)
+			Then(testVideoItem, nil)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
@@ -78,6 +84,7 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 		require.Equal(t, testVideoID, response.Video.ID)
 		require.Equal(t, "queued", response.Video.StatusName)
+		require.Equal(t, dto.VideoAuthor{ID: testAuthorID, Name: "Ivan", Surname: "Ivanov"}, response.Video.Author)
 	})
 
 	t.Run("not found", func(t *testing.T) {
@@ -93,7 +100,7 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 		}, nil)
 		svcMock.Video.CompleteUploadMock.
 			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
-			Then(domain.Video{}, service.ErrNotFound)
+			Then(domain.VideoListItem{}, service.ErrNotFound)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
@@ -120,7 +127,7 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 		}, nil)
 		svcMock.Video.CompleteUploadMock.
 			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
-			Then(domain.Video{}, service.NewConflictError("object not found in storage"))
+			Then(domain.VideoListItem{}, service.NewConflictError("object not found in storage"))
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()
@@ -147,7 +154,7 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 		}, nil)
 		svcMock.Video.CompleteUploadMock.
 			When(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID, testVideoID).
-			Then(domain.Video{}, service.ErrForbidden)
+			Then(domain.VideoListItem{}, service.ErrForbidden)
 
 		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
 		router := h.GetRouter()

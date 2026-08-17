@@ -167,12 +167,24 @@ type Video struct {
 	Height            *int
 }
 
+// VideoAuthor — краткие сведения об авторе видео для отображения в карточке (П-6 контракта
+// Э2): имя и фамилия резолвятся батчем по author-id видео (Video.SelectByIDs), поэтому не
+// всегда доступны — при отсутствующем пользователе остаются пустыми, заполнен только ID.
+type VideoAuthor struct {
+	ID      uuid.UUID
+	Name    string
+	Surname string
+}
+
 // VideoListItem — элемент списка видео группы (Э1-Т20, §5 дизайна эпика): видео вместе со
 // сведениями, вычисляемыми из его ассетов (Profiles, HasProcessed), и причиной сбоя, видимой
 // только инициатору с правом ManageVideo (Э1-Т17).
 type VideoListItem struct {
 	Video
 
+	// Author — автор видео объектом (П-6 контракта Э2), затеняет промотированное поле
+	// Video.Author (id создателя) полными сведениями об авторе.
+	Author VideoAuthor
 	// Profiles — имена HLS-профилей видео по возрастанию качества.
 	Profiles []string
 	// HasProcessed — признак наличия обработанной версии (готового мастер-плейлиста HLS).

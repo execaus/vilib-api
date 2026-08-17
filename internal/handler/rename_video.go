@@ -53,7 +53,7 @@ func (h *Handler) RenameVideo(c *gin.Context) {
 		return
 	}
 
-	var video domain.Video
+	var item domain.VideoListItem
 	if err = h.saga.Run(c, func(ctx context.Context, services *service.Service) error {
 		claims, claimsErr := h.claims(c)
 		if claimsErr != nil {
@@ -61,7 +61,7 @@ func (h *Handler) RenameVideo(c *gin.Context) {
 			return claimsErr
 		}
 
-		video, err = services.Video.Rename(ctx, accountID, groupID, claims.UserID, videoID, req.Name)
+		item, err = services.Video.Rename(ctx, accountID, groupID, claims.UserID, videoID, req.Name)
 		if err != nil {
 			zap.L().Error(err.Error())
 			return err
@@ -74,7 +74,7 @@ func (h *Handler) RenameVideo(c *gin.Context) {
 	}
 
 	dtoVideo := dto.Video{}
-	dtoVideo.FromDomain(video)
+	dtoVideo.FromDomainListItem(item)
 
 	sendOK(c, dto.RenameVideoResponse{Video: dtoVideo})
 }

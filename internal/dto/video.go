@@ -52,14 +52,23 @@ type VideoFailure struct {
 	Reason string `json:"reason"`
 }
 
+// VideoAuthor — автор видео в ответе API (П-6 контракта Э2): полные имя и фамилия резолвятся
+// батчем в списке видео (GetAllVideos, RenameVideo, CompleteVideoUpload), для одиночных
+// представлений без резолва (Video.FromDomain) заполнен только id.
+type VideoAuthor struct {
+	ID      uuid.UUID `json:"id"`
+	Name    string    `json:"name"`
+	Surname string    `json:"surname"`
+}
+
 type Video struct {
-	ID         uuid.UUID `json:"id"`
-	GroupID    uuid.UUID `json:"group_id"`
-	Name       string    `json:"name"`
-	Author     uuid.UUID `json:"author"`
-	Status     uint      `json:"status"`
-	StatusName string    `json:"status_name"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         uuid.UUID   `json:"id"`
+	GroupID    uuid.UUID   `json:"group_id"`
+	Name       string      `json:"name"`
+	Author     VideoAuthor `json:"author"`
+	Status     uint        `json:"status"`
+	StatusName string      `json:"status_name"`
+	CreatedAt  time.Time   `json:"created_at"`
 	// Profiles — имена HLS-профилей видео по возрастанию качества (пустой список, пока
 	// профилей нет).
 	Profiles []string `json:"profiles"`
@@ -84,7 +93,7 @@ func (v *Video) FromDomain(video domain.Video) {
 	v.ID = video.ID
 	v.GroupID = video.GroupID
 	v.Name = video.Name
-	v.Author = video.Author
+	v.Author = VideoAuthor{ID: video.Author}
 	v.Status = uint(video.Status)
 	v.StatusName = video.Status.String()
 	v.CreatedAt = video.CreatedAt
@@ -96,6 +105,8 @@ func (v *Video) FromDomain(video domain.Video) {
 // дизайна эпика, Э1-Т17).
 func (v *Video) FromDomainListItem(item domain.VideoListItem) {
 	v.FromDomain(item.Video)
+
+	v.Author = VideoAuthor{ID: item.Author.ID, Name: item.Author.Name, Surname: item.Author.Surname}
 
 	v.Profiles = item.Profiles
 	if v.Profiles == nil {
