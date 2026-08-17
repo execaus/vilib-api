@@ -8,7 +8,9 @@ import (
 	"context"
 	"sync"
 	mm_atomic "sync/atomic"
+	"time"
 	mm_time "time"
+	"vilib-api/internal/domain"
 
 	"github.com/gojuno/minimock/v3"
 )
@@ -24,6 +26,13 @@ type EmailMock struct {
 	afterSendCreateUserEmailCounter  uint64
 	beforeSendCreateUserEmailCounter uint64
 	SendCreateUserEmailMock          mEmailMockSendCreateUserEmail
+
+	funcSendPasswordResetMail          func(ctx context.Context, email string, links []domain.PasswordResetLink, ttl time.Duration) (err error)
+	funcSendPasswordResetMailOrigin    string
+	inspectFuncSendPasswordResetMail   func(ctx context.Context, email string, links []domain.PasswordResetLink, ttl time.Duration)
+	afterSendPasswordResetMailCounter  uint64
+	beforeSendPasswordResetMailCounter uint64
+	SendPasswordResetMailMock          mEmailMockSendPasswordResetMail
 
 	funcSendRegisteredMail          func(ctx context.Context, email string, password string) (err error)
 	funcSendRegisteredMailOrigin    string
@@ -43,6 +52,9 @@ func NewEmailMock(t minimock.Tester) *EmailMock {
 
 	m.SendCreateUserEmailMock = mEmailMockSendCreateUserEmail{mock: m}
 	m.SendCreateUserEmailMock.callArgs = []*EmailMockSendCreateUserEmailParams{}
+
+	m.SendPasswordResetMailMock = mEmailMockSendPasswordResetMail{mock: m}
+	m.SendPasswordResetMailMock.callArgs = []*EmailMockSendPasswordResetMailParams{}
 
 	m.SendRegisteredMailMock = mEmailMockSendRegisteredMail{mock: m}
 	m.SendRegisteredMailMock.callArgs = []*EmailMockSendRegisteredMailParams{}
@@ -425,6 +437,410 @@ func (m *EmailMock) MinimockSendCreateUserEmailInspect() {
 	}
 }
 
+type mEmailMockSendPasswordResetMail struct {
+	optional           bool
+	mock               *EmailMock
+	defaultExpectation *EmailMockSendPasswordResetMailExpectation
+	expectations       []*EmailMockSendPasswordResetMailExpectation
+
+	callArgs []*EmailMockSendPasswordResetMailParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// EmailMockSendPasswordResetMailExpectation specifies expectation struct of the Email.SendPasswordResetMail
+type EmailMockSendPasswordResetMailExpectation struct {
+	mock               *EmailMock
+	params             *EmailMockSendPasswordResetMailParams
+	paramPtrs          *EmailMockSendPasswordResetMailParamPtrs
+	expectationOrigins EmailMockSendPasswordResetMailExpectationOrigins
+	results            *EmailMockSendPasswordResetMailResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// EmailMockSendPasswordResetMailParams contains parameters of the Email.SendPasswordResetMail
+type EmailMockSendPasswordResetMailParams struct {
+	ctx   context.Context
+	email string
+	links []domain.PasswordResetLink
+	ttl   time.Duration
+}
+
+// EmailMockSendPasswordResetMailParamPtrs contains pointers to parameters of the Email.SendPasswordResetMail
+type EmailMockSendPasswordResetMailParamPtrs struct {
+	ctx   *context.Context
+	email *string
+	links *[]domain.PasswordResetLink
+	ttl   *time.Duration
+}
+
+// EmailMockSendPasswordResetMailResults contains results of the Email.SendPasswordResetMail
+type EmailMockSendPasswordResetMailResults struct {
+	err error
+}
+
+// EmailMockSendPasswordResetMailOrigins contains origins of expectations of the Email.SendPasswordResetMail
+type EmailMockSendPasswordResetMailExpectationOrigins struct {
+	origin      string
+	originCtx   string
+	originEmail string
+	originLinks string
+	originTtl   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) Optional() *mEmailMockSendPasswordResetMail {
+	mmSendPasswordResetMail.optional = true
+	return mmSendPasswordResetMail
+}
+
+// Expect sets up expected params for Email.SendPasswordResetMail
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) Expect(ctx context.Context, email string, links []domain.PasswordResetLink, ttl time.Duration) *mEmailMockSendPasswordResetMail {
+	if mmSendPasswordResetMail.mock.funcSendPasswordResetMail != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Set")
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation == nil {
+		mmSendPasswordResetMail.defaultExpectation = &EmailMockSendPasswordResetMailExpectation{}
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation.paramPtrs != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by ExpectParams functions")
+	}
+
+	mmSendPasswordResetMail.defaultExpectation.params = &EmailMockSendPasswordResetMailParams{ctx, email, links, ttl}
+	mmSendPasswordResetMail.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSendPasswordResetMail.expectations {
+		if minimock.Equal(e.params, mmSendPasswordResetMail.defaultExpectation.params) {
+			mmSendPasswordResetMail.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSendPasswordResetMail.defaultExpectation.params)
+		}
+	}
+
+	return mmSendPasswordResetMail
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Email.SendPasswordResetMail
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) ExpectCtxParam1(ctx context.Context) *mEmailMockSendPasswordResetMail {
+	if mmSendPasswordResetMail.mock.funcSendPasswordResetMail != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Set")
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation == nil {
+		mmSendPasswordResetMail.defaultExpectation = &EmailMockSendPasswordResetMailExpectation{}
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation.params != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Expect")
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation.paramPtrs == nil {
+		mmSendPasswordResetMail.defaultExpectation.paramPtrs = &EmailMockSendPasswordResetMailParamPtrs{}
+	}
+	mmSendPasswordResetMail.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSendPasswordResetMail.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSendPasswordResetMail
+}
+
+// ExpectEmailParam2 sets up expected param email for Email.SendPasswordResetMail
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) ExpectEmailParam2(email string) *mEmailMockSendPasswordResetMail {
+	if mmSendPasswordResetMail.mock.funcSendPasswordResetMail != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Set")
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation == nil {
+		mmSendPasswordResetMail.defaultExpectation = &EmailMockSendPasswordResetMailExpectation{}
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation.params != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Expect")
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation.paramPtrs == nil {
+		mmSendPasswordResetMail.defaultExpectation.paramPtrs = &EmailMockSendPasswordResetMailParamPtrs{}
+	}
+	mmSendPasswordResetMail.defaultExpectation.paramPtrs.email = &email
+	mmSendPasswordResetMail.defaultExpectation.expectationOrigins.originEmail = minimock.CallerInfo(1)
+
+	return mmSendPasswordResetMail
+}
+
+// ExpectLinksParam3 sets up expected param links for Email.SendPasswordResetMail
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) ExpectLinksParam3(links []domain.PasswordResetLink) *mEmailMockSendPasswordResetMail {
+	if mmSendPasswordResetMail.mock.funcSendPasswordResetMail != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Set")
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation == nil {
+		mmSendPasswordResetMail.defaultExpectation = &EmailMockSendPasswordResetMailExpectation{}
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation.params != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Expect")
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation.paramPtrs == nil {
+		mmSendPasswordResetMail.defaultExpectation.paramPtrs = &EmailMockSendPasswordResetMailParamPtrs{}
+	}
+	mmSendPasswordResetMail.defaultExpectation.paramPtrs.links = &links
+	mmSendPasswordResetMail.defaultExpectation.expectationOrigins.originLinks = minimock.CallerInfo(1)
+
+	return mmSendPasswordResetMail
+}
+
+// ExpectTtlParam4 sets up expected param ttl for Email.SendPasswordResetMail
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) ExpectTtlParam4(ttl time.Duration) *mEmailMockSendPasswordResetMail {
+	if mmSendPasswordResetMail.mock.funcSendPasswordResetMail != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Set")
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation == nil {
+		mmSendPasswordResetMail.defaultExpectation = &EmailMockSendPasswordResetMailExpectation{}
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation.params != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Expect")
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation.paramPtrs == nil {
+		mmSendPasswordResetMail.defaultExpectation.paramPtrs = &EmailMockSendPasswordResetMailParamPtrs{}
+	}
+	mmSendPasswordResetMail.defaultExpectation.paramPtrs.ttl = &ttl
+	mmSendPasswordResetMail.defaultExpectation.expectationOrigins.originTtl = minimock.CallerInfo(1)
+
+	return mmSendPasswordResetMail
+}
+
+// Inspect accepts an inspector function that has same arguments as the Email.SendPasswordResetMail
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) Inspect(f func(ctx context.Context, email string, links []domain.PasswordResetLink, ttl time.Duration)) *mEmailMockSendPasswordResetMail {
+	if mmSendPasswordResetMail.mock.inspectFuncSendPasswordResetMail != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("Inspect function is already set for EmailMock.SendPasswordResetMail")
+	}
+
+	mmSendPasswordResetMail.mock.inspectFuncSendPasswordResetMail = f
+
+	return mmSendPasswordResetMail
+}
+
+// Return sets up results that will be returned by Email.SendPasswordResetMail
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) Return(err error) *EmailMock {
+	if mmSendPasswordResetMail.mock.funcSendPasswordResetMail != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Set")
+	}
+
+	if mmSendPasswordResetMail.defaultExpectation == nil {
+		mmSendPasswordResetMail.defaultExpectation = &EmailMockSendPasswordResetMailExpectation{mock: mmSendPasswordResetMail.mock}
+	}
+	mmSendPasswordResetMail.defaultExpectation.results = &EmailMockSendPasswordResetMailResults{err}
+	mmSendPasswordResetMail.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSendPasswordResetMail.mock
+}
+
+// Set uses given function f to mock the Email.SendPasswordResetMail method
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) Set(f func(ctx context.Context, email string, links []domain.PasswordResetLink, ttl time.Duration) (err error)) *EmailMock {
+	if mmSendPasswordResetMail.defaultExpectation != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("Default expectation is already set for the Email.SendPasswordResetMail method")
+	}
+
+	if len(mmSendPasswordResetMail.expectations) > 0 {
+		mmSendPasswordResetMail.mock.t.Fatalf("Some expectations are already set for the Email.SendPasswordResetMail method")
+	}
+
+	mmSendPasswordResetMail.mock.funcSendPasswordResetMail = f
+	mmSendPasswordResetMail.mock.funcSendPasswordResetMailOrigin = minimock.CallerInfo(1)
+	return mmSendPasswordResetMail.mock
+}
+
+// When sets expectation for the Email.SendPasswordResetMail which will trigger the result defined by the following
+// Then helper
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) When(ctx context.Context, email string, links []domain.PasswordResetLink, ttl time.Duration) *EmailMockSendPasswordResetMailExpectation {
+	if mmSendPasswordResetMail.mock.funcSendPasswordResetMail != nil {
+		mmSendPasswordResetMail.mock.t.Fatalf("EmailMock.SendPasswordResetMail mock is already set by Set")
+	}
+
+	expectation := &EmailMockSendPasswordResetMailExpectation{
+		mock:               mmSendPasswordResetMail.mock,
+		params:             &EmailMockSendPasswordResetMailParams{ctx, email, links, ttl},
+		expectationOrigins: EmailMockSendPasswordResetMailExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSendPasswordResetMail.expectations = append(mmSendPasswordResetMail.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Email.SendPasswordResetMail return parameters for the expectation previously defined by the When method
+func (e *EmailMockSendPasswordResetMailExpectation) Then(err error) *EmailMock {
+	e.results = &EmailMockSendPasswordResetMailResults{err}
+	return e.mock
+}
+
+// Times sets number of times Email.SendPasswordResetMail should be invoked
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) Times(n uint64) *mEmailMockSendPasswordResetMail {
+	if n == 0 {
+		mmSendPasswordResetMail.mock.t.Fatalf("Times of EmailMock.SendPasswordResetMail mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSendPasswordResetMail.expectedInvocations, n)
+	mmSendPasswordResetMail.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSendPasswordResetMail
+}
+
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) invocationsDone() bool {
+	if len(mmSendPasswordResetMail.expectations) == 0 && mmSendPasswordResetMail.defaultExpectation == nil && mmSendPasswordResetMail.mock.funcSendPasswordResetMail == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSendPasswordResetMail.mock.afterSendPasswordResetMailCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSendPasswordResetMail.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SendPasswordResetMail implements mm_service.Email
+func (mmSendPasswordResetMail *EmailMock) SendPasswordResetMail(ctx context.Context, email string, links []domain.PasswordResetLink, ttl time.Duration) (err error) {
+	mm_atomic.AddUint64(&mmSendPasswordResetMail.beforeSendPasswordResetMailCounter, 1)
+	defer mm_atomic.AddUint64(&mmSendPasswordResetMail.afterSendPasswordResetMailCounter, 1)
+
+	mmSendPasswordResetMail.t.Helper()
+
+	if mmSendPasswordResetMail.inspectFuncSendPasswordResetMail != nil {
+		mmSendPasswordResetMail.inspectFuncSendPasswordResetMail(ctx, email, links, ttl)
+	}
+
+	mm_params := EmailMockSendPasswordResetMailParams{ctx, email, links, ttl}
+
+	// Record call args
+	mmSendPasswordResetMail.SendPasswordResetMailMock.mutex.Lock()
+	mmSendPasswordResetMail.SendPasswordResetMailMock.callArgs = append(mmSendPasswordResetMail.SendPasswordResetMailMock.callArgs, &mm_params)
+	mmSendPasswordResetMail.SendPasswordResetMailMock.mutex.Unlock()
+
+	for _, e := range mmSendPasswordResetMail.SendPasswordResetMailMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmSendPasswordResetMail.SendPasswordResetMailMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSendPasswordResetMail.SendPasswordResetMailMock.defaultExpectation.Counter, 1)
+		mm_want := mmSendPasswordResetMail.SendPasswordResetMailMock.defaultExpectation.params
+		mm_want_ptrs := mmSendPasswordResetMail.SendPasswordResetMailMock.defaultExpectation.paramPtrs
+
+		mm_got := EmailMockSendPasswordResetMailParams{ctx, email, links, ttl}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSendPasswordResetMail.t.Errorf("EmailMock.SendPasswordResetMail got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSendPasswordResetMail.SendPasswordResetMailMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.email != nil && !minimock.Equal(*mm_want_ptrs.email, mm_got.email) {
+				mmSendPasswordResetMail.t.Errorf("EmailMock.SendPasswordResetMail got unexpected parameter email, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSendPasswordResetMail.SendPasswordResetMailMock.defaultExpectation.expectationOrigins.originEmail, *mm_want_ptrs.email, mm_got.email, minimock.Diff(*mm_want_ptrs.email, mm_got.email))
+			}
+
+			if mm_want_ptrs.links != nil && !minimock.Equal(*mm_want_ptrs.links, mm_got.links) {
+				mmSendPasswordResetMail.t.Errorf("EmailMock.SendPasswordResetMail got unexpected parameter links, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSendPasswordResetMail.SendPasswordResetMailMock.defaultExpectation.expectationOrigins.originLinks, *mm_want_ptrs.links, mm_got.links, minimock.Diff(*mm_want_ptrs.links, mm_got.links))
+			}
+
+			if mm_want_ptrs.ttl != nil && !minimock.Equal(*mm_want_ptrs.ttl, mm_got.ttl) {
+				mmSendPasswordResetMail.t.Errorf("EmailMock.SendPasswordResetMail got unexpected parameter ttl, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSendPasswordResetMail.SendPasswordResetMailMock.defaultExpectation.expectationOrigins.originTtl, *mm_want_ptrs.ttl, mm_got.ttl, minimock.Diff(*mm_want_ptrs.ttl, mm_got.ttl))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSendPasswordResetMail.t.Errorf("EmailMock.SendPasswordResetMail got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSendPasswordResetMail.SendPasswordResetMailMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSendPasswordResetMail.SendPasswordResetMailMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSendPasswordResetMail.t.Fatal("No results are set for the EmailMock.SendPasswordResetMail")
+		}
+		return (*mm_results).err
+	}
+	if mmSendPasswordResetMail.funcSendPasswordResetMail != nil {
+		return mmSendPasswordResetMail.funcSendPasswordResetMail(ctx, email, links, ttl)
+	}
+	mmSendPasswordResetMail.t.Fatalf("Unexpected call to EmailMock.SendPasswordResetMail. %v %v %v %v", ctx, email, links, ttl)
+	return
+}
+
+// SendPasswordResetMailAfterCounter returns a count of finished EmailMock.SendPasswordResetMail invocations
+func (mmSendPasswordResetMail *EmailMock) SendPasswordResetMailAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSendPasswordResetMail.afterSendPasswordResetMailCounter)
+}
+
+// SendPasswordResetMailBeforeCounter returns a count of EmailMock.SendPasswordResetMail invocations
+func (mmSendPasswordResetMail *EmailMock) SendPasswordResetMailBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSendPasswordResetMail.beforeSendPasswordResetMailCounter)
+}
+
+// Calls returns a list of arguments used in each call to EmailMock.SendPasswordResetMail.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSendPasswordResetMail *mEmailMockSendPasswordResetMail) Calls() []*EmailMockSendPasswordResetMailParams {
+	mmSendPasswordResetMail.mutex.RLock()
+
+	argCopy := make([]*EmailMockSendPasswordResetMailParams, len(mmSendPasswordResetMail.callArgs))
+	copy(argCopy, mmSendPasswordResetMail.callArgs)
+
+	mmSendPasswordResetMail.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSendPasswordResetMailDone returns true if the count of the SendPasswordResetMail invocations corresponds
+// the number of defined expectations
+func (m *EmailMock) MinimockSendPasswordResetMailDone() bool {
+	if m.SendPasswordResetMailMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SendPasswordResetMailMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SendPasswordResetMailMock.invocationsDone()
+}
+
+// MinimockSendPasswordResetMailInspect logs each unmet expectation
+func (m *EmailMock) MinimockSendPasswordResetMailInspect() {
+	for _, e := range m.SendPasswordResetMailMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to EmailMock.SendPasswordResetMail at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSendPasswordResetMailCounter := mm_atomic.LoadUint64(&m.afterSendPasswordResetMailCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SendPasswordResetMailMock.defaultExpectation != nil && afterSendPasswordResetMailCounter < 1 {
+		if m.SendPasswordResetMailMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to EmailMock.SendPasswordResetMail at\n%s", m.SendPasswordResetMailMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to EmailMock.SendPasswordResetMail at\n%s with params: %#v", m.SendPasswordResetMailMock.defaultExpectation.expectationOrigins.origin, *m.SendPasswordResetMailMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSendPasswordResetMail != nil && afterSendPasswordResetMailCounter < 1 {
+		m.t.Errorf("Expected call to EmailMock.SendPasswordResetMail at\n%s", m.funcSendPasswordResetMailOrigin)
+	}
+
+	if !m.SendPasswordResetMailMock.invocationsDone() && afterSendPasswordResetMailCounter > 0 {
+		m.t.Errorf("Expected %d calls to EmailMock.SendPasswordResetMail at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SendPasswordResetMailMock.expectedInvocations), m.SendPasswordResetMailMock.expectedInvocationsOrigin, afterSendPasswordResetMailCounter)
+	}
+}
+
 type mEmailMockSendRegisteredMail struct {
 	optional           bool
 	mock               *EmailMock
@@ -804,6 +1220,8 @@ func (m *EmailMock) MinimockFinish() {
 		if !m.minimockDone() {
 			m.MinimockSendCreateUserEmailInspect()
 
+			m.MinimockSendPasswordResetMailInspect()
+
 			m.MinimockSendRegisteredMailInspect()
 		}
 	})
@@ -829,5 +1247,6 @@ func (m *EmailMock) minimockDone() bool {
 	done := true
 	return done &&
 		m.MinimockSendCreateUserEmailDone() &&
+		m.MinimockSendPasswordResetMailDone() &&
 		m.MinimockSendRegisteredMailDone()
 }

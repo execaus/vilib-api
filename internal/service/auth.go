@@ -3,7 +3,11 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 	"time"
@@ -27,15 +31,32 @@ const (
 	// bearerPrefix — префикс значения заголовка Authorization; GetClaimsFromToken принимает
 	// значение как с ним, так и без (§1 дизайна эпика).
 	bearerPrefix = "Bearer "
+	// resetTokenBytesLength — длина сырого токена сброса пароля в байтах до base64url-
+	// кодирования (§6 дизайна эпика Э2).
+	resetTokenBytesLength = 32
 )
 
 type AuthService struct {
-	secretKey string
-	srv       *Service
+	secretKey        string
+	passwordResetTTL time.Duration
+	frontendOrigin   string
+	repo             repository.PasswordResetToken
+	srv              *Service
 }
 
-func NewAuthService(cfg config.AuthConfig, srv *Service) *AuthService {
-	return &AuthService{secretKey: cfg.Key, srv: srv}
+func NewAuthService(
+	cfg config.AuthConfig,
+	frontendCfg config.FrontendConfig,
+	repo repository.PasswordResetToken,
+	srv *Service,
+) *AuthService {
+	return &AuthService{
+		secretKey:        cfg.Key,
+		passwordResetTTL: cfg.PasswordResetTTL,
+		frontendOrigin:   frontendCfg.Origin,
+		repo:             repo,
+		srv:              srv,
+	}
 }
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, error) {
@@ -299,4 +320,215 @@ func (s *AuthService) GeneratePassword() (string, error) {
 	}
 
 	return string(password), nil
+}
+
+// ChangePassword меняет пароль текущей строки пользователя userID (§6 дизайна эпика Э2,
+// поправка О-1: пароль — свойство организации, а не человека, а не всех строк email).
+func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error {
+	users, err := s.srv.User.GetByID(ctx, userID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+	user := users[0]
+
+	// Старый пароль должен совпасть с текущим хешем строки.
+	if !s.srv.Auth.ComparePassword(user.PasswordHash, oldPassword) {
+		zap.L().Warn(ErrOldPasswordInvalid.Error())
+		return ErrOldPasswordInvalid
+	}
+
+	// Новый пароль не должен совпадать со старым и быть короче минимальной длины.
+	if len(newPassword) < PasswordMinLength || s.srv.Auth.ComparePassword(user.PasswordHash, newPassword) {
+		zap.L().Warn(ErrPasswordInvalid.Error())
+		return ErrPasswordInvalid
+	}
+
+	newHash, err := s.srv.Auth.HashPassword(newPassword)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if _, err = s.srv.User.UpdatePasswordHash(ctx, userID, newHash); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// passwordResetTarget — строка пользователя, которой будет выдан токен сброса пароля, вместе
+// с названием её организации (для письма со списком ссылок, §6 дизайна эпика Э2).
+type passwordResetTarget struct {
+	user        domain.User
+	accountName string
+}
+
+// RequestPasswordReset запрашивает сброс пароля по email (§6 дизайна эпика Э2, поправка О-1).
+// Email не найден, активных строк нет или ни одна не подошла под accountID — тихо ничего не
+// делает (лог Warn), ответ вызывающей стороне всегда успешен. Иначе удаляет прежние токены
+// email, выдаёт по одному токену на каждую подошедшую строку и отправляет письмо: одна
+// строка — одна ссылка, несколько — список организаций со ссылкой на каждую.
+func (s *AuthService) RequestPasswordReset(ctx context.Context, email string, accountID *uuid.UUID) error {
+	users, err := s.srv.User.GetByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			zap.L().Warn("password reset requested for unknown email")
+			return nil
+		}
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	targets, err := s.resolvePasswordResetTargets(ctx, users, accountID)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		zap.L().Warn("password reset requested but no matching active account row found")
+		return nil
+	}
+
+	if err = s.repo.DeleteByEmail(ctx, email); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	links := make([]domain.PasswordResetLink, 0, len(targets))
+	for _, target := range targets {
+		rawToken, tokenErr := s.generateResetToken()
+		if tokenErr != nil {
+			zap.L().Error(tokenErr.Error())
+			return tokenErr
+		}
+
+		if _, err = s.repo.Insert(
+			ctx, target.user.ID, email, hashResetToken(rawToken), time.Now().Add(s.passwordResetTTL),
+		); err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		links = append(links, domain.PasswordResetLink{
+			AccountName: target.accountName,
+			URL:         s.buildResetLink(rawToken),
+		})
+	}
+
+	if err = s.srv.Email.SendPasswordResetMail(ctx, email, links, s.passwordResetTTL); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// resolvePasswordResetTargets отбирает активные строки email, подходящие под accountID (§6
+// дизайна эпика Э2, поправка О-1): accountID задан — только строка этой организации; не
+// задан — все активные строки (одна или несколько).
+func (s *AuthService) resolvePasswordResetTargets(
+	ctx context.Context,
+	users []domain.User,
+	accountID *uuid.UUID,
+) ([]passwordResetTarget, error) {
+	targets := make([]passwordResetTarget, 0, len(users))
+
+	for _, user := range users {
+		if !user.IsActive() {
+			continue
+		}
+
+		roles, err := s.srv.AccountRole.GetByID(ctx, user.RoleID)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return nil, err
+		}
+
+		if accountID != nil && roles[0].AccountID != *accountID {
+			continue
+		}
+
+		accounts, err := s.srv.Account.GetByID(ctx, roles[0].AccountID)
+		if err != nil {
+			zap.L().Error(err.Error())
+			return nil, err
+		}
+
+		targets = append(targets, passwordResetTarget{user: user, accountName: accounts[0].Name})
+	}
+
+	return targets, nil
+}
+
+// ResetPassword обновляет пароль строки пользователя, которой принадлежит токен (§6 дизайна
+// эпика Э2, поправка О-1). Токен не найден, использован или просрочен — ErrResetTokenInvalid;
+// после успешного сброса помечает токен использованным и удаляет остальные токены email.
+func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	if len(newPassword) < PasswordMinLength {
+		zap.L().Warn(ErrPasswordInvalid.Error())
+		return ErrPasswordInvalid
+	}
+
+	resetToken, err := s.repo.SelectByHash(ctx, hashResetToken(token))
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			zap.L().Warn(ErrResetTokenInvalid.Error())
+			return ErrResetTokenInvalid
+		}
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if !resetToken.IsUsable(time.Now()) {
+		zap.L().Warn(ErrResetTokenInvalid.Error())
+		return ErrResetTokenInvalid
+	}
+
+	newHash, err := s.srv.Auth.HashPassword(newPassword)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if _, err = s.srv.User.UpdatePasswordHash(ctx, resetToken.UserID, newHash); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if err = s.repo.MarkUsed(ctx, resetToken.ID); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if err = s.repo.DeleteByEmail(ctx, resetToken.Email); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// generateResetToken генерирует сырой токен сброса пароля — resetTokenBytesLength случайных
+// байт, закодированных в base64url без паддинга (§6 дизайна эпика Э2).
+func (s *AuthService) generateResetToken() (string, error) {
+	buf := make([]byte, resetTokenBytesLength)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+// hashResetToken возвращает SHA-256 хеш сырого токена — только он хранится в базе (§6 дизайна
+// эпика Э2).
+func hashResetToken(rawToken string) string {
+	sum := sha256.Sum256([]byte(rawToken))
+	return hex.EncodeToString(sum[:])
+}
+
+// buildResetLink собирает ссылку сброса пароля для фронтенда из FRONTEND_ORIGIN и сырого
+// токена (§6 дизайна эпика Э2).
+func (s *AuthService) buildResetLink(rawToken string) string {
+	return fmt.Sprintf("%s/reset-password?token=%s", s.frontendOrigin, rawToken)
 }

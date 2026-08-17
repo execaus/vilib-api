@@ -14,6 +14,15 @@ var (
 	// ErrNotAccountMember — у пользователя нет строки в организации, на которую он пытается
 	// переключиться (HTTP 403 forbidden, §2.4 дизайна эпика Э2).
 	ErrNotAccountMember = NewForbiddenError("user is not a member of the account")
+	// ErrOldPasswordInvalid — старый пароль в ChangePassword не совпал с текущим хешем строки
+	// (HTTP 400 validation.old_password, §6 дизайна эпика Э2).
+	ErrOldPasswordInvalid = NewValidationErrorCode("validation.old_password", "old password is invalid")
+	// ErrPasswordInvalid — новый пароль совпадает со старым или короче PasswordMinLength
+	// (HTTP 400 validation.password, §6 дизайна эпика Э2).
+	ErrPasswordInvalid = NewValidationErrorCode("validation.password", "new password is invalid")
+	// ErrResetTokenInvalid — токен сброса пароля не найден, уже использован или просрочен
+	// (HTTP 400 validation.reset_token, §6 дизайна эпика Э2).
+	ErrResetTokenInvalid = NewValidationErrorCode("validation.reset_token", "reset token is invalid")
 )
 
 var (

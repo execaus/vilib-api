@@ -163,12 +163,30 @@ func (s *UserService) GetByIDs(ctx context.Context, userID []uuid.UUID) ([]domai
 	return users, nil
 }
 
+// UpdatePasswordHash обновляет хеш пароля одной строки пользователя userID (§6 дизайна эпика
+// Э2, поправка О-1) — без проверки прав, вызывается только сервисом Auth для собственной или
+// адресуемой токеном сброса строки.
+func (s *UserService) UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) (domain.User, error) {
+	user, err := s.repo.UpdatePasswordHash(ctx, userID, hash)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+
+	return user, nil
+}
+
 func (s *UserService) Deactivate(
 	ctx context.Context,
 	initiatorID, accountID, targetID uuid.UUID,
 ) error {
 	// Проверка прав на управление пользователями
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageUsers); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageUsers,
+	); err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
@@ -213,7 +231,12 @@ func (s *UserService) Reactivate(
 	initiatorID, accountID, targetID uuid.UUID,
 ) error {
 	// Проверка прав на управление пользователями
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageUsers); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageUsers,
+	); err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
@@ -263,7 +286,12 @@ func (s *UserService) ListByAccount(
 	status repository.UserStatus,
 ) ([]domain.User, error) {
 	// Проверка прав на управление пользователями
-	if err := s.srv.Access.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageUsers); err != nil {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx,
+		accountID,
+		initiatorID,
+		domain.AccountPermissionManageUsers,
+	); err != nil {
 		zap.L().Error(err.Error())
 		return nil, err
 	}

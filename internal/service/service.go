@@ -47,6 +47,23 @@ type Auth interface {
 	// (§2.4 дизайна эпика Э2). Нет строки в организации → ErrNotAccountMember (403 forbidden),
 	// строка деактивирована → ErrForbiddenUserDeactivated (403 forbidden.user_deactivated).
 	SwitchAccount(ctx context.Context, userID, accountID uuid.UUID) (string, error)
+	// ChangePassword меняет пароль текущей строки пользователя userID (§6 дизайна эпика Э2,
+	// поправка О-1: пароль — свойство организации, а не человека). Неверный oldPassword →
+	// ErrOldPasswordInvalid (400 validation.old_password); newPassword совпадает со старым или
+	// короче PasswordMinLength → ErrPasswordInvalid (400 validation.password).
+	ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error
+	// RequestPasswordReset запрашивает сброс пароля по email (§6 дизайна эпика Э2, поправка
+	// О-1). accountID задан — токен выдаётся только для этой строки (при её отсутствии или
+	// неактивности — тихо ничего не делает); не задан и активная строка одна — она; несколько —
+	// одно письмо со списком организаций и отдельным токеном на каждую. Email не найден или
+	// строк нет — тихо ничего не делает (лог Warn). Ответ вызывающей стороне всегда успешен,
+	// кроме ошибки отправки письма.
+	RequestPasswordReset(ctx context.Context, email string, accountID *uuid.UUID) error
+	// ResetPassword обновляет пароль строки пользователя, которой принадлежит токен
+	// (§6 дизайна эпика Э2, поправка О-1). Токен не найден, использован или просрочен →
+	// ErrResetTokenInvalid (400 validation.reset_token); newPassword короче PasswordMinLength →
+	// ErrPasswordInvalid.
+	ResetPassword(ctx context.Context, token, newPassword string) error
 }
 
 type Account interface {
@@ -105,11 +122,17 @@ type User interface {
 	// GetByEmailAndAccountID возвращает строку пользователя с указанным email в указанной
 	// организации — используется переключением организации (§2.4 дизайна эпика Э2).
 	GetByEmailAndAccountID(ctx context.Context, email string, accountID uuid.UUID) (domain.User, error)
+	// UpdatePasswordHash обновляет хеш пароля одной строки пользователя (§6 дизайна эпика Э2,
+	// поправка О-1). Строка не найдена — ErrNotFound.
+	UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) (domain.User, error)
 }
 
 type Email interface {
 	SendRegisteredMail(ctx context.Context, email, password string) error
 	SendCreateUserEmail(ctx context.Context, email, password string) error
+	// SendPasswordResetMail отправляет письмо со ссылкой (или списком ссылок по организациям)
+	// сброса пароля (§6 дизайна эпика Э2, поправка О-1).
+	SendPasswordResetMail(ctx context.Context, email string, links []domain.PasswordResetLink, ttl time.Duration) error
 }
 
 type UserGroup interface {
@@ -322,7 +345,7 @@ type Service struct {
 func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *repository.Repository) *Service {
 	s := &Service{}
 
-	s.Auth = NewAuthService(cfg.Auth, s)
+	s.Auth = NewAuthService(cfg.Auth, cfg.Frontend, r.PasswordResetToken, s)
 	s.Account = NewAccountService(r.Account, s)
 	s.User = NewUserService(r.User, s)
 	s.Email = NewEmailService(cfg.Email, cfg.Server.Mode, localMailBox)

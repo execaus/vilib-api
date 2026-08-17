@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 	"vilib-api/config"
+	"vilib-api/internal/domain"
 	"vilib-api/internal/service"
 	"vilib-api/server"
 
@@ -212,4 +213,70 @@ func TestEmailService_SendLocalMail_NoPanicWhenMailboxNil(t *testing.T) {
 
 	err := srv.SendRegisteredMail(t.Context(), "user@example.com", "pass123")
 	require.NoError(t, err)
+}
+
+// TestService_Email_SendPasswordResetMail проверяет текст письма сброса пароля (§6 дизайна
+// эпика Э2, поправка О-1): одна организация — единая ссылка в тексте, несколько — список
+// организаций со ссылкой на каждую.
+func TestService_Email_SendPasswordResetMail(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		links          []domain.PasswordResetLink
+		ttl            time.Duration
+		wantContains   []string
+		wantNotContain string
+	}{
+		{
+			name: "single organization",
+			links: []domain.PasswordResetLink{
+				{AccountName: "Организация Один", URL: "http://localhost:5173/reset-password?token=abc"},
+			},
+			ttl: time.Hour,
+			wantContains: []string{
+				"Для установки нового пароля перейдите по ссылке: http://localhost:5173/reset-password?token=abc",
+				"1h0m0s",
+			},
+			wantNotContain: "Организация",
+		},
+		{
+			name: "multiple organizations",
+			links: []domain.PasswordResetLink{
+				{AccountName: "Организация Один", URL: "http://localhost:5173/reset-password?token=abc"},
+				{AccountName: "Организация Два", URL: "http://localhost:5173/reset-password?token=def"},
+			},
+			ttl: time.Hour,
+			wantContains: []string{
+				"Организация «Организация Один»: http://localhost:5173/reset-password?token=abc",
+				"Организация «Организация Два»: http://localhost:5173/reset-password?token=def",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var gotMsg []byte
+			sendMail := func(_ string, _ smtp.Auth, _ string, _ []string, msg []byte) error {
+				gotMsg = msg
+				return nil
+			}
+
+			cfg := config.EmailConfig{Host: "mailpit", Port: "1025", From: "noreply@vilib.local"}
+			srv := service.NewEmailService(cfg, server.ProductionMode, nil, service.WithSendMail(sendMail))
+
+			err := srv.SendPasswordResetMail(t.Context(), "user@example.com", tt.links, tt.ttl)
+			require.NoError(t, err)
+
+			require.Contains(t, string(gotMsg), "Subject: Сброс пароля ViLib")
+			for _, want := range tt.wantContains {
+				require.Contains(t, string(gotMsg), want)
+			}
+			if tt.wantNotContain != "" {
+				require.NotContains(t, string(gotMsg), tt.wantNotContain)
+			}
+		})
+	}
 }

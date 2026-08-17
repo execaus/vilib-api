@@ -83,6 +83,13 @@ type UserMock struct {
 	afterUpdateCounter  uint64
 	beforeUpdateCounter uint64
 	UpdateMock          mUserMockUpdate
+
+	funcUpdatePasswordHash          func(ctx context.Context, userID uuid.UUID, hash string) (u1 domain.User, err error)
+	funcUpdatePasswordHashOrigin    string
+	inspectFuncUpdatePasswordHash   func(ctx context.Context, userID uuid.UUID, hash string)
+	afterUpdatePasswordHashCounter  uint64
+	beforeUpdatePasswordHashCounter uint64
+	UpdatePasswordHashMock          mUserMockUpdatePasswordHash
 }
 
 // NewUserMock returns a mock for mm_service.User
@@ -119,6 +126,9 @@ func NewUserMock(t minimock.Tester) *UserMock {
 
 	m.UpdateMock = mUserMockUpdate{mock: m}
 	m.UpdateMock.callArgs = []*UserMockUpdateParams{}
+
+	m.UpdatePasswordHashMock = mUserMockUpdatePasswordHash{mock: m}
+	m.UpdatePasswordHashMock.callArgs = []*UserMockUpdatePasswordHashParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
@@ -3644,6 +3654,380 @@ func (m *UserMock) MinimockUpdateInspect() {
 	}
 }
 
+type mUserMockUpdatePasswordHash struct {
+	optional           bool
+	mock               *UserMock
+	defaultExpectation *UserMockUpdatePasswordHashExpectation
+	expectations       []*UserMockUpdatePasswordHashExpectation
+
+	callArgs []*UserMockUpdatePasswordHashParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// UserMockUpdatePasswordHashExpectation specifies expectation struct of the User.UpdatePasswordHash
+type UserMockUpdatePasswordHashExpectation struct {
+	mock               *UserMock
+	params             *UserMockUpdatePasswordHashParams
+	paramPtrs          *UserMockUpdatePasswordHashParamPtrs
+	expectationOrigins UserMockUpdatePasswordHashExpectationOrigins
+	results            *UserMockUpdatePasswordHashResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// UserMockUpdatePasswordHashParams contains parameters of the User.UpdatePasswordHash
+type UserMockUpdatePasswordHashParams struct {
+	ctx    context.Context
+	userID uuid.UUID
+	hash   string
+}
+
+// UserMockUpdatePasswordHashParamPtrs contains pointers to parameters of the User.UpdatePasswordHash
+type UserMockUpdatePasswordHashParamPtrs struct {
+	ctx    *context.Context
+	userID *uuid.UUID
+	hash   *string
+}
+
+// UserMockUpdatePasswordHashResults contains results of the User.UpdatePasswordHash
+type UserMockUpdatePasswordHashResults struct {
+	u1  domain.User
+	err error
+}
+
+// UserMockUpdatePasswordHashOrigins contains origins of expectations of the User.UpdatePasswordHash
+type UserMockUpdatePasswordHashExpectationOrigins struct {
+	origin       string
+	originCtx    string
+	originUserID string
+	originHash   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) Optional() *mUserMockUpdatePasswordHash {
+	mmUpdatePasswordHash.optional = true
+	return mmUpdatePasswordHash
+}
+
+// Expect sets up expected params for User.UpdatePasswordHash
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) Expect(ctx context.Context, userID uuid.UUID, hash string) *mUserMockUpdatePasswordHash {
+	if mmUpdatePasswordHash.mock.funcUpdatePasswordHash != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("UserMock.UpdatePasswordHash mock is already set by Set")
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation == nil {
+		mmUpdatePasswordHash.defaultExpectation = &UserMockUpdatePasswordHashExpectation{}
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation.paramPtrs != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("UserMock.UpdatePasswordHash mock is already set by ExpectParams functions")
+	}
+
+	mmUpdatePasswordHash.defaultExpectation.params = &UserMockUpdatePasswordHashParams{ctx, userID, hash}
+	mmUpdatePasswordHash.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdatePasswordHash.expectations {
+		if minimock.Equal(e.params, mmUpdatePasswordHash.defaultExpectation.params) {
+			mmUpdatePasswordHash.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdatePasswordHash.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdatePasswordHash
+}
+
+// ExpectCtxParam1 sets up expected param ctx for User.UpdatePasswordHash
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) ExpectCtxParam1(ctx context.Context) *mUserMockUpdatePasswordHash {
+	if mmUpdatePasswordHash.mock.funcUpdatePasswordHash != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("UserMock.UpdatePasswordHash mock is already set by Set")
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation == nil {
+		mmUpdatePasswordHash.defaultExpectation = &UserMockUpdatePasswordHashExpectation{}
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation.params != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("UserMock.UpdatePasswordHash mock is already set by Expect")
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation.paramPtrs == nil {
+		mmUpdatePasswordHash.defaultExpectation.paramPtrs = &UserMockUpdatePasswordHashParamPtrs{}
+	}
+	mmUpdatePasswordHash.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdatePasswordHash.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdatePasswordHash
+}
+
+// ExpectUserIDParam2 sets up expected param userID for User.UpdatePasswordHash
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) ExpectUserIDParam2(userID uuid.UUID) *mUserMockUpdatePasswordHash {
+	if mmUpdatePasswordHash.mock.funcUpdatePasswordHash != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("UserMock.UpdatePasswordHash mock is already set by Set")
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation == nil {
+		mmUpdatePasswordHash.defaultExpectation = &UserMockUpdatePasswordHashExpectation{}
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation.params != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("UserMock.UpdatePasswordHash mock is already set by Expect")
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation.paramPtrs == nil {
+		mmUpdatePasswordHash.defaultExpectation.paramPtrs = &UserMockUpdatePasswordHashParamPtrs{}
+	}
+	mmUpdatePasswordHash.defaultExpectation.paramPtrs.userID = &userID
+	mmUpdatePasswordHash.defaultExpectation.expectationOrigins.originUserID = minimock.CallerInfo(1)
+
+	return mmUpdatePasswordHash
+}
+
+// ExpectHashParam3 sets up expected param hash for User.UpdatePasswordHash
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) ExpectHashParam3(hash string) *mUserMockUpdatePasswordHash {
+	if mmUpdatePasswordHash.mock.funcUpdatePasswordHash != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("UserMock.UpdatePasswordHash mock is already set by Set")
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation == nil {
+		mmUpdatePasswordHash.defaultExpectation = &UserMockUpdatePasswordHashExpectation{}
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation.params != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("UserMock.UpdatePasswordHash mock is already set by Expect")
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation.paramPtrs == nil {
+		mmUpdatePasswordHash.defaultExpectation.paramPtrs = &UserMockUpdatePasswordHashParamPtrs{}
+	}
+	mmUpdatePasswordHash.defaultExpectation.paramPtrs.hash = &hash
+	mmUpdatePasswordHash.defaultExpectation.expectationOrigins.originHash = minimock.CallerInfo(1)
+
+	return mmUpdatePasswordHash
+}
+
+// Inspect accepts an inspector function that has same arguments as the User.UpdatePasswordHash
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) Inspect(f func(ctx context.Context, userID uuid.UUID, hash string)) *mUserMockUpdatePasswordHash {
+	if mmUpdatePasswordHash.mock.inspectFuncUpdatePasswordHash != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("Inspect function is already set for UserMock.UpdatePasswordHash")
+	}
+
+	mmUpdatePasswordHash.mock.inspectFuncUpdatePasswordHash = f
+
+	return mmUpdatePasswordHash
+}
+
+// Return sets up results that will be returned by User.UpdatePasswordHash
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) Return(u1 domain.User, err error) *UserMock {
+	if mmUpdatePasswordHash.mock.funcUpdatePasswordHash != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("UserMock.UpdatePasswordHash mock is already set by Set")
+	}
+
+	if mmUpdatePasswordHash.defaultExpectation == nil {
+		mmUpdatePasswordHash.defaultExpectation = &UserMockUpdatePasswordHashExpectation{mock: mmUpdatePasswordHash.mock}
+	}
+	mmUpdatePasswordHash.defaultExpectation.results = &UserMockUpdatePasswordHashResults{u1, err}
+	mmUpdatePasswordHash.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdatePasswordHash.mock
+}
+
+// Set uses given function f to mock the User.UpdatePasswordHash method
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) Set(f func(ctx context.Context, userID uuid.UUID, hash string) (u1 domain.User, err error)) *UserMock {
+	if mmUpdatePasswordHash.defaultExpectation != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("Default expectation is already set for the User.UpdatePasswordHash method")
+	}
+
+	if len(mmUpdatePasswordHash.expectations) > 0 {
+		mmUpdatePasswordHash.mock.t.Fatalf("Some expectations are already set for the User.UpdatePasswordHash method")
+	}
+
+	mmUpdatePasswordHash.mock.funcUpdatePasswordHash = f
+	mmUpdatePasswordHash.mock.funcUpdatePasswordHashOrigin = minimock.CallerInfo(1)
+	return mmUpdatePasswordHash.mock
+}
+
+// When sets expectation for the User.UpdatePasswordHash which will trigger the result defined by the following
+// Then helper
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) When(ctx context.Context, userID uuid.UUID, hash string) *UserMockUpdatePasswordHashExpectation {
+	if mmUpdatePasswordHash.mock.funcUpdatePasswordHash != nil {
+		mmUpdatePasswordHash.mock.t.Fatalf("UserMock.UpdatePasswordHash mock is already set by Set")
+	}
+
+	expectation := &UserMockUpdatePasswordHashExpectation{
+		mock:               mmUpdatePasswordHash.mock,
+		params:             &UserMockUpdatePasswordHashParams{ctx, userID, hash},
+		expectationOrigins: UserMockUpdatePasswordHashExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdatePasswordHash.expectations = append(mmUpdatePasswordHash.expectations, expectation)
+	return expectation
+}
+
+// Then sets up User.UpdatePasswordHash return parameters for the expectation previously defined by the When method
+func (e *UserMockUpdatePasswordHashExpectation) Then(u1 domain.User, err error) *UserMock {
+	e.results = &UserMockUpdatePasswordHashResults{u1, err}
+	return e.mock
+}
+
+// Times sets number of times User.UpdatePasswordHash should be invoked
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) Times(n uint64) *mUserMockUpdatePasswordHash {
+	if n == 0 {
+		mmUpdatePasswordHash.mock.t.Fatalf("Times of UserMock.UpdatePasswordHash mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdatePasswordHash.expectedInvocations, n)
+	mmUpdatePasswordHash.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdatePasswordHash
+}
+
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) invocationsDone() bool {
+	if len(mmUpdatePasswordHash.expectations) == 0 && mmUpdatePasswordHash.defaultExpectation == nil && mmUpdatePasswordHash.mock.funcUpdatePasswordHash == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdatePasswordHash.mock.afterUpdatePasswordHashCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdatePasswordHash.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdatePasswordHash implements mm_service.User
+func (mmUpdatePasswordHash *UserMock) UpdatePasswordHash(ctx context.Context, userID uuid.UUID, hash string) (u1 domain.User, err error) {
+	mm_atomic.AddUint64(&mmUpdatePasswordHash.beforeUpdatePasswordHashCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdatePasswordHash.afterUpdatePasswordHashCounter, 1)
+
+	mmUpdatePasswordHash.t.Helper()
+
+	if mmUpdatePasswordHash.inspectFuncUpdatePasswordHash != nil {
+		mmUpdatePasswordHash.inspectFuncUpdatePasswordHash(ctx, userID, hash)
+	}
+
+	mm_params := UserMockUpdatePasswordHashParams{ctx, userID, hash}
+
+	// Record call args
+	mmUpdatePasswordHash.UpdatePasswordHashMock.mutex.Lock()
+	mmUpdatePasswordHash.UpdatePasswordHashMock.callArgs = append(mmUpdatePasswordHash.UpdatePasswordHashMock.callArgs, &mm_params)
+	mmUpdatePasswordHash.UpdatePasswordHashMock.mutex.Unlock()
+
+	for _, e := range mmUpdatePasswordHash.UpdatePasswordHashMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.u1, e.results.err
+		}
+	}
+
+	if mmUpdatePasswordHash.UpdatePasswordHashMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdatePasswordHash.UpdatePasswordHashMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdatePasswordHash.UpdatePasswordHashMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdatePasswordHash.UpdatePasswordHashMock.defaultExpectation.paramPtrs
+
+		mm_got := UserMockUpdatePasswordHashParams{ctx, userID, hash}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdatePasswordHash.t.Errorf("UserMock.UpdatePasswordHash got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdatePasswordHash.UpdatePasswordHashMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.userID != nil && !minimock.Equal(*mm_want_ptrs.userID, mm_got.userID) {
+				mmUpdatePasswordHash.t.Errorf("UserMock.UpdatePasswordHash got unexpected parameter userID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdatePasswordHash.UpdatePasswordHashMock.defaultExpectation.expectationOrigins.originUserID, *mm_want_ptrs.userID, mm_got.userID, minimock.Diff(*mm_want_ptrs.userID, mm_got.userID))
+			}
+
+			if mm_want_ptrs.hash != nil && !minimock.Equal(*mm_want_ptrs.hash, mm_got.hash) {
+				mmUpdatePasswordHash.t.Errorf("UserMock.UpdatePasswordHash got unexpected parameter hash, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdatePasswordHash.UpdatePasswordHashMock.defaultExpectation.expectationOrigins.originHash, *mm_want_ptrs.hash, mm_got.hash, minimock.Diff(*mm_want_ptrs.hash, mm_got.hash))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdatePasswordHash.t.Errorf("UserMock.UpdatePasswordHash got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdatePasswordHash.UpdatePasswordHashMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdatePasswordHash.UpdatePasswordHashMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdatePasswordHash.t.Fatal("No results are set for the UserMock.UpdatePasswordHash")
+		}
+		return (*mm_results).u1, (*mm_results).err
+	}
+	if mmUpdatePasswordHash.funcUpdatePasswordHash != nil {
+		return mmUpdatePasswordHash.funcUpdatePasswordHash(ctx, userID, hash)
+	}
+	mmUpdatePasswordHash.t.Fatalf("Unexpected call to UserMock.UpdatePasswordHash. %v %v %v", ctx, userID, hash)
+	return
+}
+
+// UpdatePasswordHashAfterCounter returns a count of finished UserMock.UpdatePasswordHash invocations
+func (mmUpdatePasswordHash *UserMock) UpdatePasswordHashAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdatePasswordHash.afterUpdatePasswordHashCounter)
+}
+
+// UpdatePasswordHashBeforeCounter returns a count of UserMock.UpdatePasswordHash invocations
+func (mmUpdatePasswordHash *UserMock) UpdatePasswordHashBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdatePasswordHash.beforeUpdatePasswordHashCounter)
+}
+
+// Calls returns a list of arguments used in each call to UserMock.UpdatePasswordHash.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdatePasswordHash *mUserMockUpdatePasswordHash) Calls() []*UserMockUpdatePasswordHashParams {
+	mmUpdatePasswordHash.mutex.RLock()
+
+	argCopy := make([]*UserMockUpdatePasswordHashParams, len(mmUpdatePasswordHash.callArgs))
+	copy(argCopy, mmUpdatePasswordHash.callArgs)
+
+	mmUpdatePasswordHash.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdatePasswordHashDone returns true if the count of the UpdatePasswordHash invocations corresponds
+// the number of defined expectations
+func (m *UserMock) MinimockUpdatePasswordHashDone() bool {
+	if m.UpdatePasswordHashMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdatePasswordHashMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdatePasswordHashMock.invocationsDone()
+}
+
+// MinimockUpdatePasswordHashInspect logs each unmet expectation
+func (m *UserMock) MinimockUpdatePasswordHashInspect() {
+	for _, e := range m.UpdatePasswordHashMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to UserMock.UpdatePasswordHash at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdatePasswordHashCounter := mm_atomic.LoadUint64(&m.afterUpdatePasswordHashCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdatePasswordHashMock.defaultExpectation != nil && afterUpdatePasswordHashCounter < 1 {
+		if m.UpdatePasswordHashMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to UserMock.UpdatePasswordHash at\n%s", m.UpdatePasswordHashMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to UserMock.UpdatePasswordHash at\n%s with params: %#v", m.UpdatePasswordHashMock.defaultExpectation.expectationOrigins.origin, *m.UpdatePasswordHashMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdatePasswordHash != nil && afterUpdatePasswordHashCounter < 1 {
+		m.t.Errorf("Expected call to UserMock.UpdatePasswordHash at\n%s", m.funcUpdatePasswordHashOrigin)
+	}
+
+	if !m.UpdatePasswordHashMock.invocationsDone() && afterUpdatePasswordHashCounter > 0 {
+		m.t.Errorf("Expected %d calls to UserMock.UpdatePasswordHash at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdatePasswordHashMock.expectedInvocations), m.UpdatePasswordHashMock.expectedInvocationsOrigin, afterUpdatePasswordHashCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *UserMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
@@ -3665,6 +4049,8 @@ func (m *UserMock) MinimockFinish() {
 			m.MinimockReactivateInspect()
 
 			m.MinimockUpdateInspect()
+
+			m.MinimockUpdatePasswordHashInspect()
 		}
 	})
 }
@@ -3696,5 +4082,6 @@ func (m *UserMock) minimockDone() bool {
 		m.MinimockGetByIDsDone() &&
 		m.MinimockListByAccountDone() &&
 		m.MinimockReactivateDone() &&
-		m.MinimockUpdateDone()
+		m.MinimockUpdateDone() &&
+		m.MinimockUpdatePasswordHashDone()
 }

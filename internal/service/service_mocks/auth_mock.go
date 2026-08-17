@@ -21,6 +21,13 @@ type AuthMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
+	funcChangePassword          func(ctx context.Context, userID uuid.UUID, oldPassword string, newPassword string) (err error)
+	funcChangePasswordOrigin    string
+	inspectFuncChangePassword   func(ctx context.Context, userID uuid.UUID, oldPassword string, newPassword string)
+	afterChangePasswordCounter  uint64
+	beforeChangePasswordCounter uint64
+	ChangePasswordMock          mAuthMockChangePassword
+
 	funcComparePassword          func(hashedPassword string, password string) (b1 bool)
 	funcComparePasswordOrigin    string
 	inspectFuncComparePassword   func(hashedPassword string, password string)
@@ -77,6 +84,20 @@ type AuthMock struct {
 	beforeParseHLSTokenCounter uint64
 	ParseHLSTokenMock          mAuthMockParseHLSToken
 
+	funcRequestPasswordReset          func(ctx context.Context, email string, accountID *uuid.UUID) (err error)
+	funcRequestPasswordResetOrigin    string
+	inspectFuncRequestPasswordReset   func(ctx context.Context, email string, accountID *uuid.UUID)
+	afterRequestPasswordResetCounter  uint64
+	beforeRequestPasswordResetCounter uint64
+	RequestPasswordResetMock          mAuthMockRequestPasswordReset
+
+	funcResetPassword          func(ctx context.Context, token string, newPassword string) (err error)
+	funcResetPasswordOrigin    string
+	inspectFuncResetPassword   func(ctx context.Context, token string, newPassword string)
+	afterResetPasswordCounter  uint64
+	beforeResetPasswordCounter uint64
+	ResetPasswordMock          mAuthMockResetPassword
+
 	funcSwitchAccount          func(ctx context.Context, userID uuid.UUID, accountID uuid.UUID) (s1 string, err error)
 	funcSwitchAccountOrigin    string
 	inspectFuncSwitchAccount   func(ctx context.Context, userID uuid.UUID, accountID uuid.UUID)
@@ -92,6 +113,9 @@ func NewAuthMock(t minimock.Tester) *AuthMock {
 	if controller, ok := t.(minimock.MockController); ok {
 		controller.RegisterMocker(m)
 	}
+
+	m.ChangePasswordMock = mAuthMockChangePassword{mock: m}
+	m.ChangePasswordMock.callArgs = []*AuthMockChangePasswordParams{}
 
 	m.ComparePasswordMock = mAuthMockComparePassword{mock: m}
 	m.ComparePasswordMock.callArgs = []*AuthMockComparePasswordParams{}
@@ -116,12 +140,422 @@ func NewAuthMock(t minimock.Tester) *AuthMock {
 	m.ParseHLSTokenMock = mAuthMockParseHLSToken{mock: m}
 	m.ParseHLSTokenMock.callArgs = []*AuthMockParseHLSTokenParams{}
 
+	m.RequestPasswordResetMock = mAuthMockRequestPasswordReset{mock: m}
+	m.RequestPasswordResetMock.callArgs = []*AuthMockRequestPasswordResetParams{}
+
+	m.ResetPasswordMock = mAuthMockResetPassword{mock: m}
+	m.ResetPasswordMock.callArgs = []*AuthMockResetPasswordParams{}
+
 	m.SwitchAccountMock = mAuthMockSwitchAccount{mock: m}
 	m.SwitchAccountMock.callArgs = []*AuthMockSwitchAccountParams{}
 
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mAuthMockChangePassword struct {
+	optional           bool
+	mock               *AuthMock
+	defaultExpectation *AuthMockChangePasswordExpectation
+	expectations       []*AuthMockChangePasswordExpectation
+
+	callArgs []*AuthMockChangePasswordParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AuthMockChangePasswordExpectation specifies expectation struct of the Auth.ChangePassword
+type AuthMockChangePasswordExpectation struct {
+	mock               *AuthMock
+	params             *AuthMockChangePasswordParams
+	paramPtrs          *AuthMockChangePasswordParamPtrs
+	expectationOrigins AuthMockChangePasswordExpectationOrigins
+	results            *AuthMockChangePasswordResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AuthMockChangePasswordParams contains parameters of the Auth.ChangePassword
+type AuthMockChangePasswordParams struct {
+	ctx         context.Context
+	userID      uuid.UUID
+	oldPassword string
+	newPassword string
+}
+
+// AuthMockChangePasswordParamPtrs contains pointers to parameters of the Auth.ChangePassword
+type AuthMockChangePasswordParamPtrs struct {
+	ctx         *context.Context
+	userID      *uuid.UUID
+	oldPassword *string
+	newPassword *string
+}
+
+// AuthMockChangePasswordResults contains results of the Auth.ChangePassword
+type AuthMockChangePasswordResults struct {
+	err error
+}
+
+// AuthMockChangePasswordOrigins contains origins of expectations of the Auth.ChangePassword
+type AuthMockChangePasswordExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originUserID      string
+	originOldPassword string
+	originNewPassword string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmChangePassword *mAuthMockChangePassword) Optional() *mAuthMockChangePassword {
+	mmChangePassword.optional = true
+	return mmChangePassword
+}
+
+// Expect sets up expected params for Auth.ChangePassword
+func (mmChangePassword *mAuthMockChangePassword) Expect(ctx context.Context, userID uuid.UUID, oldPassword string, newPassword string) *mAuthMockChangePassword {
+	if mmChangePassword.mock.funcChangePassword != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Set")
+	}
+
+	if mmChangePassword.defaultExpectation == nil {
+		mmChangePassword.defaultExpectation = &AuthMockChangePasswordExpectation{}
+	}
+
+	if mmChangePassword.defaultExpectation.paramPtrs != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by ExpectParams functions")
+	}
+
+	mmChangePassword.defaultExpectation.params = &AuthMockChangePasswordParams{ctx, userID, oldPassword, newPassword}
+	mmChangePassword.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmChangePassword.expectations {
+		if minimock.Equal(e.params, mmChangePassword.defaultExpectation.params) {
+			mmChangePassword.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmChangePassword.defaultExpectation.params)
+		}
+	}
+
+	return mmChangePassword
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Auth.ChangePassword
+func (mmChangePassword *mAuthMockChangePassword) ExpectCtxParam1(ctx context.Context) *mAuthMockChangePassword {
+	if mmChangePassword.mock.funcChangePassword != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Set")
+	}
+
+	if mmChangePassword.defaultExpectation == nil {
+		mmChangePassword.defaultExpectation = &AuthMockChangePasswordExpectation{}
+	}
+
+	if mmChangePassword.defaultExpectation.params != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Expect")
+	}
+
+	if mmChangePassword.defaultExpectation.paramPtrs == nil {
+		mmChangePassword.defaultExpectation.paramPtrs = &AuthMockChangePasswordParamPtrs{}
+	}
+	mmChangePassword.defaultExpectation.paramPtrs.ctx = &ctx
+	mmChangePassword.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmChangePassword
+}
+
+// ExpectUserIDParam2 sets up expected param userID for Auth.ChangePassword
+func (mmChangePassword *mAuthMockChangePassword) ExpectUserIDParam2(userID uuid.UUID) *mAuthMockChangePassword {
+	if mmChangePassword.mock.funcChangePassword != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Set")
+	}
+
+	if mmChangePassword.defaultExpectation == nil {
+		mmChangePassword.defaultExpectation = &AuthMockChangePasswordExpectation{}
+	}
+
+	if mmChangePassword.defaultExpectation.params != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Expect")
+	}
+
+	if mmChangePassword.defaultExpectation.paramPtrs == nil {
+		mmChangePassword.defaultExpectation.paramPtrs = &AuthMockChangePasswordParamPtrs{}
+	}
+	mmChangePassword.defaultExpectation.paramPtrs.userID = &userID
+	mmChangePassword.defaultExpectation.expectationOrigins.originUserID = minimock.CallerInfo(1)
+
+	return mmChangePassword
+}
+
+// ExpectOldPasswordParam3 sets up expected param oldPassword for Auth.ChangePassword
+func (mmChangePassword *mAuthMockChangePassword) ExpectOldPasswordParam3(oldPassword string) *mAuthMockChangePassword {
+	if mmChangePassword.mock.funcChangePassword != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Set")
+	}
+
+	if mmChangePassword.defaultExpectation == nil {
+		mmChangePassword.defaultExpectation = &AuthMockChangePasswordExpectation{}
+	}
+
+	if mmChangePassword.defaultExpectation.params != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Expect")
+	}
+
+	if mmChangePassword.defaultExpectation.paramPtrs == nil {
+		mmChangePassword.defaultExpectation.paramPtrs = &AuthMockChangePasswordParamPtrs{}
+	}
+	mmChangePassword.defaultExpectation.paramPtrs.oldPassword = &oldPassword
+	mmChangePassword.defaultExpectation.expectationOrigins.originOldPassword = minimock.CallerInfo(1)
+
+	return mmChangePassword
+}
+
+// ExpectNewPasswordParam4 sets up expected param newPassword for Auth.ChangePassword
+func (mmChangePassword *mAuthMockChangePassword) ExpectNewPasswordParam4(newPassword string) *mAuthMockChangePassword {
+	if mmChangePassword.mock.funcChangePassword != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Set")
+	}
+
+	if mmChangePassword.defaultExpectation == nil {
+		mmChangePassword.defaultExpectation = &AuthMockChangePasswordExpectation{}
+	}
+
+	if mmChangePassword.defaultExpectation.params != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Expect")
+	}
+
+	if mmChangePassword.defaultExpectation.paramPtrs == nil {
+		mmChangePassword.defaultExpectation.paramPtrs = &AuthMockChangePasswordParamPtrs{}
+	}
+	mmChangePassword.defaultExpectation.paramPtrs.newPassword = &newPassword
+	mmChangePassword.defaultExpectation.expectationOrigins.originNewPassword = minimock.CallerInfo(1)
+
+	return mmChangePassword
+}
+
+// Inspect accepts an inspector function that has same arguments as the Auth.ChangePassword
+func (mmChangePassword *mAuthMockChangePassword) Inspect(f func(ctx context.Context, userID uuid.UUID, oldPassword string, newPassword string)) *mAuthMockChangePassword {
+	if mmChangePassword.mock.inspectFuncChangePassword != nil {
+		mmChangePassword.mock.t.Fatalf("Inspect function is already set for AuthMock.ChangePassword")
+	}
+
+	mmChangePassword.mock.inspectFuncChangePassword = f
+
+	return mmChangePassword
+}
+
+// Return sets up results that will be returned by Auth.ChangePassword
+func (mmChangePassword *mAuthMockChangePassword) Return(err error) *AuthMock {
+	if mmChangePassword.mock.funcChangePassword != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Set")
+	}
+
+	if mmChangePassword.defaultExpectation == nil {
+		mmChangePassword.defaultExpectation = &AuthMockChangePasswordExpectation{mock: mmChangePassword.mock}
+	}
+	mmChangePassword.defaultExpectation.results = &AuthMockChangePasswordResults{err}
+	mmChangePassword.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmChangePassword.mock
+}
+
+// Set uses given function f to mock the Auth.ChangePassword method
+func (mmChangePassword *mAuthMockChangePassword) Set(f func(ctx context.Context, userID uuid.UUID, oldPassword string, newPassword string) (err error)) *AuthMock {
+	if mmChangePassword.defaultExpectation != nil {
+		mmChangePassword.mock.t.Fatalf("Default expectation is already set for the Auth.ChangePassword method")
+	}
+
+	if len(mmChangePassword.expectations) > 0 {
+		mmChangePassword.mock.t.Fatalf("Some expectations are already set for the Auth.ChangePassword method")
+	}
+
+	mmChangePassword.mock.funcChangePassword = f
+	mmChangePassword.mock.funcChangePasswordOrigin = minimock.CallerInfo(1)
+	return mmChangePassword.mock
+}
+
+// When sets expectation for the Auth.ChangePassword which will trigger the result defined by the following
+// Then helper
+func (mmChangePassword *mAuthMockChangePassword) When(ctx context.Context, userID uuid.UUID, oldPassword string, newPassword string) *AuthMockChangePasswordExpectation {
+	if mmChangePassword.mock.funcChangePassword != nil {
+		mmChangePassword.mock.t.Fatalf("AuthMock.ChangePassword mock is already set by Set")
+	}
+
+	expectation := &AuthMockChangePasswordExpectation{
+		mock:               mmChangePassword.mock,
+		params:             &AuthMockChangePasswordParams{ctx, userID, oldPassword, newPassword},
+		expectationOrigins: AuthMockChangePasswordExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmChangePassword.expectations = append(mmChangePassword.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Auth.ChangePassword return parameters for the expectation previously defined by the When method
+func (e *AuthMockChangePasswordExpectation) Then(err error) *AuthMock {
+	e.results = &AuthMockChangePasswordResults{err}
+	return e.mock
+}
+
+// Times sets number of times Auth.ChangePassword should be invoked
+func (mmChangePassword *mAuthMockChangePassword) Times(n uint64) *mAuthMockChangePassword {
+	if n == 0 {
+		mmChangePassword.mock.t.Fatalf("Times of AuthMock.ChangePassword mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmChangePassword.expectedInvocations, n)
+	mmChangePassword.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmChangePassword
+}
+
+func (mmChangePassword *mAuthMockChangePassword) invocationsDone() bool {
+	if len(mmChangePassword.expectations) == 0 && mmChangePassword.defaultExpectation == nil && mmChangePassword.mock.funcChangePassword == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmChangePassword.mock.afterChangePasswordCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmChangePassword.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ChangePassword implements mm_service.Auth
+func (mmChangePassword *AuthMock) ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword string, newPassword string) (err error) {
+	mm_atomic.AddUint64(&mmChangePassword.beforeChangePasswordCounter, 1)
+	defer mm_atomic.AddUint64(&mmChangePassword.afterChangePasswordCounter, 1)
+
+	mmChangePassword.t.Helper()
+
+	if mmChangePassword.inspectFuncChangePassword != nil {
+		mmChangePassword.inspectFuncChangePassword(ctx, userID, oldPassword, newPassword)
+	}
+
+	mm_params := AuthMockChangePasswordParams{ctx, userID, oldPassword, newPassword}
+
+	// Record call args
+	mmChangePassword.ChangePasswordMock.mutex.Lock()
+	mmChangePassword.ChangePasswordMock.callArgs = append(mmChangePassword.ChangePasswordMock.callArgs, &mm_params)
+	mmChangePassword.ChangePasswordMock.mutex.Unlock()
+
+	for _, e := range mmChangePassword.ChangePasswordMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmChangePassword.ChangePasswordMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmChangePassword.ChangePasswordMock.defaultExpectation.Counter, 1)
+		mm_want := mmChangePassword.ChangePasswordMock.defaultExpectation.params
+		mm_want_ptrs := mmChangePassword.ChangePasswordMock.defaultExpectation.paramPtrs
+
+		mm_got := AuthMockChangePasswordParams{ctx, userID, oldPassword, newPassword}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmChangePassword.t.Errorf("AuthMock.ChangePassword got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChangePassword.ChangePasswordMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.userID != nil && !minimock.Equal(*mm_want_ptrs.userID, mm_got.userID) {
+				mmChangePassword.t.Errorf("AuthMock.ChangePassword got unexpected parameter userID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChangePassword.ChangePasswordMock.defaultExpectation.expectationOrigins.originUserID, *mm_want_ptrs.userID, mm_got.userID, minimock.Diff(*mm_want_ptrs.userID, mm_got.userID))
+			}
+
+			if mm_want_ptrs.oldPassword != nil && !minimock.Equal(*mm_want_ptrs.oldPassword, mm_got.oldPassword) {
+				mmChangePassword.t.Errorf("AuthMock.ChangePassword got unexpected parameter oldPassword, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChangePassword.ChangePasswordMock.defaultExpectation.expectationOrigins.originOldPassword, *mm_want_ptrs.oldPassword, mm_got.oldPassword, minimock.Diff(*mm_want_ptrs.oldPassword, mm_got.oldPassword))
+			}
+
+			if mm_want_ptrs.newPassword != nil && !minimock.Equal(*mm_want_ptrs.newPassword, mm_got.newPassword) {
+				mmChangePassword.t.Errorf("AuthMock.ChangePassword got unexpected parameter newPassword, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmChangePassword.ChangePasswordMock.defaultExpectation.expectationOrigins.originNewPassword, *mm_want_ptrs.newPassword, mm_got.newPassword, minimock.Diff(*mm_want_ptrs.newPassword, mm_got.newPassword))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmChangePassword.t.Errorf("AuthMock.ChangePassword got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmChangePassword.ChangePasswordMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmChangePassword.ChangePasswordMock.defaultExpectation.results
+		if mm_results == nil {
+			mmChangePassword.t.Fatal("No results are set for the AuthMock.ChangePassword")
+		}
+		return (*mm_results).err
+	}
+	if mmChangePassword.funcChangePassword != nil {
+		return mmChangePassword.funcChangePassword(ctx, userID, oldPassword, newPassword)
+	}
+	mmChangePassword.t.Fatalf("Unexpected call to AuthMock.ChangePassword. %v %v %v %v", ctx, userID, oldPassword, newPassword)
+	return
+}
+
+// ChangePasswordAfterCounter returns a count of finished AuthMock.ChangePassword invocations
+func (mmChangePassword *AuthMock) ChangePasswordAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmChangePassword.afterChangePasswordCounter)
+}
+
+// ChangePasswordBeforeCounter returns a count of AuthMock.ChangePassword invocations
+func (mmChangePassword *AuthMock) ChangePasswordBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmChangePassword.beforeChangePasswordCounter)
+}
+
+// Calls returns a list of arguments used in each call to AuthMock.ChangePassword.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmChangePassword *mAuthMockChangePassword) Calls() []*AuthMockChangePasswordParams {
+	mmChangePassword.mutex.RLock()
+
+	argCopy := make([]*AuthMockChangePasswordParams, len(mmChangePassword.callArgs))
+	copy(argCopy, mmChangePassword.callArgs)
+
+	mmChangePassword.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockChangePasswordDone returns true if the count of the ChangePassword invocations corresponds
+// the number of defined expectations
+func (m *AuthMock) MinimockChangePasswordDone() bool {
+	if m.ChangePasswordMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ChangePasswordMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ChangePasswordMock.invocationsDone()
+}
+
+// MinimockChangePasswordInspect logs each unmet expectation
+func (m *AuthMock) MinimockChangePasswordInspect() {
+	for _, e := range m.ChangePasswordMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AuthMock.ChangePassword at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterChangePasswordCounter := mm_atomic.LoadUint64(&m.afterChangePasswordCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ChangePasswordMock.defaultExpectation != nil && afterChangePasswordCounter < 1 {
+		if m.ChangePasswordMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AuthMock.ChangePassword at\n%s", m.ChangePasswordMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AuthMock.ChangePassword at\n%s with params: %#v", m.ChangePasswordMock.defaultExpectation.expectationOrigins.origin, *m.ChangePasswordMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcChangePassword != nil && afterChangePasswordCounter < 1 {
+		m.t.Errorf("Expected call to AuthMock.ChangePassword at\n%s", m.funcChangePasswordOrigin)
+	}
+
+	if !m.ChangePasswordMock.invocationsDone() && afterChangePasswordCounter > 0 {
+		m.t.Errorf("Expected %d calls to AuthMock.ChangePassword at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ChangePasswordMock.expectedInvocations), m.ChangePasswordMock.expectedInvocationsOrigin, afterChangePasswordCounter)
+	}
 }
 
 type mAuthMockComparePassword struct {
@@ -2680,6 +3114,752 @@ func (m *AuthMock) MinimockParseHLSTokenInspect() {
 	}
 }
 
+type mAuthMockRequestPasswordReset struct {
+	optional           bool
+	mock               *AuthMock
+	defaultExpectation *AuthMockRequestPasswordResetExpectation
+	expectations       []*AuthMockRequestPasswordResetExpectation
+
+	callArgs []*AuthMockRequestPasswordResetParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AuthMockRequestPasswordResetExpectation specifies expectation struct of the Auth.RequestPasswordReset
+type AuthMockRequestPasswordResetExpectation struct {
+	mock               *AuthMock
+	params             *AuthMockRequestPasswordResetParams
+	paramPtrs          *AuthMockRequestPasswordResetParamPtrs
+	expectationOrigins AuthMockRequestPasswordResetExpectationOrigins
+	results            *AuthMockRequestPasswordResetResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AuthMockRequestPasswordResetParams contains parameters of the Auth.RequestPasswordReset
+type AuthMockRequestPasswordResetParams struct {
+	ctx       context.Context
+	email     string
+	accountID *uuid.UUID
+}
+
+// AuthMockRequestPasswordResetParamPtrs contains pointers to parameters of the Auth.RequestPasswordReset
+type AuthMockRequestPasswordResetParamPtrs struct {
+	ctx       *context.Context
+	email     *string
+	accountID **uuid.UUID
+}
+
+// AuthMockRequestPasswordResetResults contains results of the Auth.RequestPasswordReset
+type AuthMockRequestPasswordResetResults struct {
+	err error
+}
+
+// AuthMockRequestPasswordResetOrigins contains origins of expectations of the Auth.RequestPasswordReset
+type AuthMockRequestPasswordResetExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originEmail     string
+	originAccountID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) Optional() *mAuthMockRequestPasswordReset {
+	mmRequestPasswordReset.optional = true
+	return mmRequestPasswordReset
+}
+
+// Expect sets up expected params for Auth.RequestPasswordReset
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) Expect(ctx context.Context, email string, accountID *uuid.UUID) *mAuthMockRequestPasswordReset {
+	if mmRequestPasswordReset.mock.funcRequestPasswordReset != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("AuthMock.RequestPasswordReset mock is already set by Set")
+	}
+
+	if mmRequestPasswordReset.defaultExpectation == nil {
+		mmRequestPasswordReset.defaultExpectation = &AuthMockRequestPasswordResetExpectation{}
+	}
+
+	if mmRequestPasswordReset.defaultExpectation.paramPtrs != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("AuthMock.RequestPasswordReset mock is already set by ExpectParams functions")
+	}
+
+	mmRequestPasswordReset.defaultExpectation.params = &AuthMockRequestPasswordResetParams{ctx, email, accountID}
+	mmRequestPasswordReset.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmRequestPasswordReset.expectations {
+		if minimock.Equal(e.params, mmRequestPasswordReset.defaultExpectation.params) {
+			mmRequestPasswordReset.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmRequestPasswordReset.defaultExpectation.params)
+		}
+	}
+
+	return mmRequestPasswordReset
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Auth.RequestPasswordReset
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) ExpectCtxParam1(ctx context.Context) *mAuthMockRequestPasswordReset {
+	if mmRequestPasswordReset.mock.funcRequestPasswordReset != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("AuthMock.RequestPasswordReset mock is already set by Set")
+	}
+
+	if mmRequestPasswordReset.defaultExpectation == nil {
+		mmRequestPasswordReset.defaultExpectation = &AuthMockRequestPasswordResetExpectation{}
+	}
+
+	if mmRequestPasswordReset.defaultExpectation.params != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("AuthMock.RequestPasswordReset mock is already set by Expect")
+	}
+
+	if mmRequestPasswordReset.defaultExpectation.paramPtrs == nil {
+		mmRequestPasswordReset.defaultExpectation.paramPtrs = &AuthMockRequestPasswordResetParamPtrs{}
+	}
+	mmRequestPasswordReset.defaultExpectation.paramPtrs.ctx = &ctx
+	mmRequestPasswordReset.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmRequestPasswordReset
+}
+
+// ExpectEmailParam2 sets up expected param email for Auth.RequestPasswordReset
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) ExpectEmailParam2(email string) *mAuthMockRequestPasswordReset {
+	if mmRequestPasswordReset.mock.funcRequestPasswordReset != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("AuthMock.RequestPasswordReset mock is already set by Set")
+	}
+
+	if mmRequestPasswordReset.defaultExpectation == nil {
+		mmRequestPasswordReset.defaultExpectation = &AuthMockRequestPasswordResetExpectation{}
+	}
+
+	if mmRequestPasswordReset.defaultExpectation.params != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("AuthMock.RequestPasswordReset mock is already set by Expect")
+	}
+
+	if mmRequestPasswordReset.defaultExpectation.paramPtrs == nil {
+		mmRequestPasswordReset.defaultExpectation.paramPtrs = &AuthMockRequestPasswordResetParamPtrs{}
+	}
+	mmRequestPasswordReset.defaultExpectation.paramPtrs.email = &email
+	mmRequestPasswordReset.defaultExpectation.expectationOrigins.originEmail = minimock.CallerInfo(1)
+
+	return mmRequestPasswordReset
+}
+
+// ExpectAccountIDParam3 sets up expected param accountID for Auth.RequestPasswordReset
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) ExpectAccountIDParam3(accountID *uuid.UUID) *mAuthMockRequestPasswordReset {
+	if mmRequestPasswordReset.mock.funcRequestPasswordReset != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("AuthMock.RequestPasswordReset mock is already set by Set")
+	}
+
+	if mmRequestPasswordReset.defaultExpectation == nil {
+		mmRequestPasswordReset.defaultExpectation = &AuthMockRequestPasswordResetExpectation{}
+	}
+
+	if mmRequestPasswordReset.defaultExpectation.params != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("AuthMock.RequestPasswordReset mock is already set by Expect")
+	}
+
+	if mmRequestPasswordReset.defaultExpectation.paramPtrs == nil {
+		mmRequestPasswordReset.defaultExpectation.paramPtrs = &AuthMockRequestPasswordResetParamPtrs{}
+	}
+	mmRequestPasswordReset.defaultExpectation.paramPtrs.accountID = &accountID
+	mmRequestPasswordReset.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmRequestPasswordReset
+}
+
+// Inspect accepts an inspector function that has same arguments as the Auth.RequestPasswordReset
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) Inspect(f func(ctx context.Context, email string, accountID *uuid.UUID)) *mAuthMockRequestPasswordReset {
+	if mmRequestPasswordReset.mock.inspectFuncRequestPasswordReset != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("Inspect function is already set for AuthMock.RequestPasswordReset")
+	}
+
+	mmRequestPasswordReset.mock.inspectFuncRequestPasswordReset = f
+
+	return mmRequestPasswordReset
+}
+
+// Return sets up results that will be returned by Auth.RequestPasswordReset
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) Return(err error) *AuthMock {
+	if mmRequestPasswordReset.mock.funcRequestPasswordReset != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("AuthMock.RequestPasswordReset mock is already set by Set")
+	}
+
+	if mmRequestPasswordReset.defaultExpectation == nil {
+		mmRequestPasswordReset.defaultExpectation = &AuthMockRequestPasswordResetExpectation{mock: mmRequestPasswordReset.mock}
+	}
+	mmRequestPasswordReset.defaultExpectation.results = &AuthMockRequestPasswordResetResults{err}
+	mmRequestPasswordReset.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmRequestPasswordReset.mock
+}
+
+// Set uses given function f to mock the Auth.RequestPasswordReset method
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) Set(f func(ctx context.Context, email string, accountID *uuid.UUID) (err error)) *AuthMock {
+	if mmRequestPasswordReset.defaultExpectation != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("Default expectation is already set for the Auth.RequestPasswordReset method")
+	}
+
+	if len(mmRequestPasswordReset.expectations) > 0 {
+		mmRequestPasswordReset.mock.t.Fatalf("Some expectations are already set for the Auth.RequestPasswordReset method")
+	}
+
+	mmRequestPasswordReset.mock.funcRequestPasswordReset = f
+	mmRequestPasswordReset.mock.funcRequestPasswordResetOrigin = minimock.CallerInfo(1)
+	return mmRequestPasswordReset.mock
+}
+
+// When sets expectation for the Auth.RequestPasswordReset which will trigger the result defined by the following
+// Then helper
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) When(ctx context.Context, email string, accountID *uuid.UUID) *AuthMockRequestPasswordResetExpectation {
+	if mmRequestPasswordReset.mock.funcRequestPasswordReset != nil {
+		mmRequestPasswordReset.mock.t.Fatalf("AuthMock.RequestPasswordReset mock is already set by Set")
+	}
+
+	expectation := &AuthMockRequestPasswordResetExpectation{
+		mock:               mmRequestPasswordReset.mock,
+		params:             &AuthMockRequestPasswordResetParams{ctx, email, accountID},
+		expectationOrigins: AuthMockRequestPasswordResetExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmRequestPasswordReset.expectations = append(mmRequestPasswordReset.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Auth.RequestPasswordReset return parameters for the expectation previously defined by the When method
+func (e *AuthMockRequestPasswordResetExpectation) Then(err error) *AuthMock {
+	e.results = &AuthMockRequestPasswordResetResults{err}
+	return e.mock
+}
+
+// Times sets number of times Auth.RequestPasswordReset should be invoked
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) Times(n uint64) *mAuthMockRequestPasswordReset {
+	if n == 0 {
+		mmRequestPasswordReset.mock.t.Fatalf("Times of AuthMock.RequestPasswordReset mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmRequestPasswordReset.expectedInvocations, n)
+	mmRequestPasswordReset.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmRequestPasswordReset
+}
+
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) invocationsDone() bool {
+	if len(mmRequestPasswordReset.expectations) == 0 && mmRequestPasswordReset.defaultExpectation == nil && mmRequestPasswordReset.mock.funcRequestPasswordReset == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmRequestPasswordReset.mock.afterRequestPasswordResetCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmRequestPasswordReset.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// RequestPasswordReset implements mm_service.Auth
+func (mmRequestPasswordReset *AuthMock) RequestPasswordReset(ctx context.Context, email string, accountID *uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmRequestPasswordReset.beforeRequestPasswordResetCounter, 1)
+	defer mm_atomic.AddUint64(&mmRequestPasswordReset.afterRequestPasswordResetCounter, 1)
+
+	mmRequestPasswordReset.t.Helper()
+
+	if mmRequestPasswordReset.inspectFuncRequestPasswordReset != nil {
+		mmRequestPasswordReset.inspectFuncRequestPasswordReset(ctx, email, accountID)
+	}
+
+	mm_params := AuthMockRequestPasswordResetParams{ctx, email, accountID}
+
+	// Record call args
+	mmRequestPasswordReset.RequestPasswordResetMock.mutex.Lock()
+	mmRequestPasswordReset.RequestPasswordResetMock.callArgs = append(mmRequestPasswordReset.RequestPasswordResetMock.callArgs, &mm_params)
+	mmRequestPasswordReset.RequestPasswordResetMock.mutex.Unlock()
+
+	for _, e := range mmRequestPasswordReset.RequestPasswordResetMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmRequestPasswordReset.RequestPasswordResetMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmRequestPasswordReset.RequestPasswordResetMock.defaultExpectation.Counter, 1)
+		mm_want := mmRequestPasswordReset.RequestPasswordResetMock.defaultExpectation.params
+		mm_want_ptrs := mmRequestPasswordReset.RequestPasswordResetMock.defaultExpectation.paramPtrs
+
+		mm_got := AuthMockRequestPasswordResetParams{ctx, email, accountID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmRequestPasswordReset.t.Errorf("AuthMock.RequestPasswordReset got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRequestPasswordReset.RequestPasswordResetMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.email != nil && !minimock.Equal(*mm_want_ptrs.email, mm_got.email) {
+				mmRequestPasswordReset.t.Errorf("AuthMock.RequestPasswordReset got unexpected parameter email, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRequestPasswordReset.RequestPasswordResetMock.defaultExpectation.expectationOrigins.originEmail, *mm_want_ptrs.email, mm_got.email, minimock.Diff(*mm_want_ptrs.email, mm_got.email))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmRequestPasswordReset.t.Errorf("AuthMock.RequestPasswordReset got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmRequestPasswordReset.RequestPasswordResetMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmRequestPasswordReset.t.Errorf("AuthMock.RequestPasswordReset got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmRequestPasswordReset.RequestPasswordResetMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmRequestPasswordReset.RequestPasswordResetMock.defaultExpectation.results
+		if mm_results == nil {
+			mmRequestPasswordReset.t.Fatal("No results are set for the AuthMock.RequestPasswordReset")
+		}
+		return (*mm_results).err
+	}
+	if mmRequestPasswordReset.funcRequestPasswordReset != nil {
+		return mmRequestPasswordReset.funcRequestPasswordReset(ctx, email, accountID)
+	}
+	mmRequestPasswordReset.t.Fatalf("Unexpected call to AuthMock.RequestPasswordReset. %v %v %v", ctx, email, accountID)
+	return
+}
+
+// RequestPasswordResetAfterCounter returns a count of finished AuthMock.RequestPasswordReset invocations
+func (mmRequestPasswordReset *AuthMock) RequestPasswordResetAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmRequestPasswordReset.afterRequestPasswordResetCounter)
+}
+
+// RequestPasswordResetBeforeCounter returns a count of AuthMock.RequestPasswordReset invocations
+func (mmRequestPasswordReset *AuthMock) RequestPasswordResetBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmRequestPasswordReset.beforeRequestPasswordResetCounter)
+}
+
+// Calls returns a list of arguments used in each call to AuthMock.RequestPasswordReset.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmRequestPasswordReset *mAuthMockRequestPasswordReset) Calls() []*AuthMockRequestPasswordResetParams {
+	mmRequestPasswordReset.mutex.RLock()
+
+	argCopy := make([]*AuthMockRequestPasswordResetParams, len(mmRequestPasswordReset.callArgs))
+	copy(argCopy, mmRequestPasswordReset.callArgs)
+
+	mmRequestPasswordReset.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockRequestPasswordResetDone returns true if the count of the RequestPasswordReset invocations corresponds
+// the number of defined expectations
+func (m *AuthMock) MinimockRequestPasswordResetDone() bool {
+	if m.RequestPasswordResetMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.RequestPasswordResetMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.RequestPasswordResetMock.invocationsDone()
+}
+
+// MinimockRequestPasswordResetInspect logs each unmet expectation
+func (m *AuthMock) MinimockRequestPasswordResetInspect() {
+	for _, e := range m.RequestPasswordResetMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AuthMock.RequestPasswordReset at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterRequestPasswordResetCounter := mm_atomic.LoadUint64(&m.afterRequestPasswordResetCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.RequestPasswordResetMock.defaultExpectation != nil && afterRequestPasswordResetCounter < 1 {
+		if m.RequestPasswordResetMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AuthMock.RequestPasswordReset at\n%s", m.RequestPasswordResetMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AuthMock.RequestPasswordReset at\n%s with params: %#v", m.RequestPasswordResetMock.defaultExpectation.expectationOrigins.origin, *m.RequestPasswordResetMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcRequestPasswordReset != nil && afterRequestPasswordResetCounter < 1 {
+		m.t.Errorf("Expected call to AuthMock.RequestPasswordReset at\n%s", m.funcRequestPasswordResetOrigin)
+	}
+
+	if !m.RequestPasswordResetMock.invocationsDone() && afterRequestPasswordResetCounter > 0 {
+		m.t.Errorf("Expected %d calls to AuthMock.RequestPasswordReset at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.RequestPasswordResetMock.expectedInvocations), m.RequestPasswordResetMock.expectedInvocationsOrigin, afterRequestPasswordResetCounter)
+	}
+}
+
+type mAuthMockResetPassword struct {
+	optional           bool
+	mock               *AuthMock
+	defaultExpectation *AuthMockResetPasswordExpectation
+	expectations       []*AuthMockResetPasswordExpectation
+
+	callArgs []*AuthMockResetPasswordParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AuthMockResetPasswordExpectation specifies expectation struct of the Auth.ResetPassword
+type AuthMockResetPasswordExpectation struct {
+	mock               *AuthMock
+	params             *AuthMockResetPasswordParams
+	paramPtrs          *AuthMockResetPasswordParamPtrs
+	expectationOrigins AuthMockResetPasswordExpectationOrigins
+	results            *AuthMockResetPasswordResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AuthMockResetPasswordParams contains parameters of the Auth.ResetPassword
+type AuthMockResetPasswordParams struct {
+	ctx         context.Context
+	token       string
+	newPassword string
+}
+
+// AuthMockResetPasswordParamPtrs contains pointers to parameters of the Auth.ResetPassword
+type AuthMockResetPasswordParamPtrs struct {
+	ctx         *context.Context
+	token       *string
+	newPassword *string
+}
+
+// AuthMockResetPasswordResults contains results of the Auth.ResetPassword
+type AuthMockResetPasswordResults struct {
+	err error
+}
+
+// AuthMockResetPasswordOrigins contains origins of expectations of the Auth.ResetPassword
+type AuthMockResetPasswordExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originToken       string
+	originNewPassword string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmResetPassword *mAuthMockResetPassword) Optional() *mAuthMockResetPassword {
+	mmResetPassword.optional = true
+	return mmResetPassword
+}
+
+// Expect sets up expected params for Auth.ResetPassword
+func (mmResetPassword *mAuthMockResetPassword) Expect(ctx context.Context, token string, newPassword string) *mAuthMockResetPassword {
+	if mmResetPassword.mock.funcResetPassword != nil {
+		mmResetPassword.mock.t.Fatalf("AuthMock.ResetPassword mock is already set by Set")
+	}
+
+	if mmResetPassword.defaultExpectation == nil {
+		mmResetPassword.defaultExpectation = &AuthMockResetPasswordExpectation{}
+	}
+
+	if mmResetPassword.defaultExpectation.paramPtrs != nil {
+		mmResetPassword.mock.t.Fatalf("AuthMock.ResetPassword mock is already set by ExpectParams functions")
+	}
+
+	mmResetPassword.defaultExpectation.params = &AuthMockResetPasswordParams{ctx, token, newPassword}
+	mmResetPassword.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmResetPassword.expectations {
+		if minimock.Equal(e.params, mmResetPassword.defaultExpectation.params) {
+			mmResetPassword.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmResetPassword.defaultExpectation.params)
+		}
+	}
+
+	return mmResetPassword
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Auth.ResetPassword
+func (mmResetPassword *mAuthMockResetPassword) ExpectCtxParam1(ctx context.Context) *mAuthMockResetPassword {
+	if mmResetPassword.mock.funcResetPassword != nil {
+		mmResetPassword.mock.t.Fatalf("AuthMock.ResetPassword mock is already set by Set")
+	}
+
+	if mmResetPassword.defaultExpectation == nil {
+		mmResetPassword.defaultExpectation = &AuthMockResetPasswordExpectation{}
+	}
+
+	if mmResetPassword.defaultExpectation.params != nil {
+		mmResetPassword.mock.t.Fatalf("AuthMock.ResetPassword mock is already set by Expect")
+	}
+
+	if mmResetPassword.defaultExpectation.paramPtrs == nil {
+		mmResetPassword.defaultExpectation.paramPtrs = &AuthMockResetPasswordParamPtrs{}
+	}
+	mmResetPassword.defaultExpectation.paramPtrs.ctx = &ctx
+	mmResetPassword.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmResetPassword
+}
+
+// ExpectTokenParam2 sets up expected param token for Auth.ResetPassword
+func (mmResetPassword *mAuthMockResetPassword) ExpectTokenParam2(token string) *mAuthMockResetPassword {
+	if mmResetPassword.mock.funcResetPassword != nil {
+		mmResetPassword.mock.t.Fatalf("AuthMock.ResetPassword mock is already set by Set")
+	}
+
+	if mmResetPassword.defaultExpectation == nil {
+		mmResetPassword.defaultExpectation = &AuthMockResetPasswordExpectation{}
+	}
+
+	if mmResetPassword.defaultExpectation.params != nil {
+		mmResetPassword.mock.t.Fatalf("AuthMock.ResetPassword mock is already set by Expect")
+	}
+
+	if mmResetPassword.defaultExpectation.paramPtrs == nil {
+		mmResetPassword.defaultExpectation.paramPtrs = &AuthMockResetPasswordParamPtrs{}
+	}
+	mmResetPassword.defaultExpectation.paramPtrs.token = &token
+	mmResetPassword.defaultExpectation.expectationOrigins.originToken = minimock.CallerInfo(1)
+
+	return mmResetPassword
+}
+
+// ExpectNewPasswordParam3 sets up expected param newPassword for Auth.ResetPassword
+func (mmResetPassword *mAuthMockResetPassword) ExpectNewPasswordParam3(newPassword string) *mAuthMockResetPassword {
+	if mmResetPassword.mock.funcResetPassword != nil {
+		mmResetPassword.mock.t.Fatalf("AuthMock.ResetPassword mock is already set by Set")
+	}
+
+	if mmResetPassword.defaultExpectation == nil {
+		mmResetPassword.defaultExpectation = &AuthMockResetPasswordExpectation{}
+	}
+
+	if mmResetPassword.defaultExpectation.params != nil {
+		mmResetPassword.mock.t.Fatalf("AuthMock.ResetPassword mock is already set by Expect")
+	}
+
+	if mmResetPassword.defaultExpectation.paramPtrs == nil {
+		mmResetPassword.defaultExpectation.paramPtrs = &AuthMockResetPasswordParamPtrs{}
+	}
+	mmResetPassword.defaultExpectation.paramPtrs.newPassword = &newPassword
+	mmResetPassword.defaultExpectation.expectationOrigins.originNewPassword = minimock.CallerInfo(1)
+
+	return mmResetPassword
+}
+
+// Inspect accepts an inspector function that has same arguments as the Auth.ResetPassword
+func (mmResetPassword *mAuthMockResetPassword) Inspect(f func(ctx context.Context, token string, newPassword string)) *mAuthMockResetPassword {
+	if mmResetPassword.mock.inspectFuncResetPassword != nil {
+		mmResetPassword.mock.t.Fatalf("Inspect function is already set for AuthMock.ResetPassword")
+	}
+
+	mmResetPassword.mock.inspectFuncResetPassword = f
+
+	return mmResetPassword
+}
+
+// Return sets up results that will be returned by Auth.ResetPassword
+func (mmResetPassword *mAuthMockResetPassword) Return(err error) *AuthMock {
+	if mmResetPassword.mock.funcResetPassword != nil {
+		mmResetPassword.mock.t.Fatalf("AuthMock.ResetPassword mock is already set by Set")
+	}
+
+	if mmResetPassword.defaultExpectation == nil {
+		mmResetPassword.defaultExpectation = &AuthMockResetPasswordExpectation{mock: mmResetPassword.mock}
+	}
+	mmResetPassword.defaultExpectation.results = &AuthMockResetPasswordResults{err}
+	mmResetPassword.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmResetPassword.mock
+}
+
+// Set uses given function f to mock the Auth.ResetPassword method
+func (mmResetPassword *mAuthMockResetPassword) Set(f func(ctx context.Context, token string, newPassword string) (err error)) *AuthMock {
+	if mmResetPassword.defaultExpectation != nil {
+		mmResetPassword.mock.t.Fatalf("Default expectation is already set for the Auth.ResetPassword method")
+	}
+
+	if len(mmResetPassword.expectations) > 0 {
+		mmResetPassword.mock.t.Fatalf("Some expectations are already set for the Auth.ResetPassword method")
+	}
+
+	mmResetPassword.mock.funcResetPassword = f
+	mmResetPassword.mock.funcResetPasswordOrigin = minimock.CallerInfo(1)
+	return mmResetPassword.mock
+}
+
+// When sets expectation for the Auth.ResetPassword which will trigger the result defined by the following
+// Then helper
+func (mmResetPassword *mAuthMockResetPassword) When(ctx context.Context, token string, newPassword string) *AuthMockResetPasswordExpectation {
+	if mmResetPassword.mock.funcResetPassword != nil {
+		mmResetPassword.mock.t.Fatalf("AuthMock.ResetPassword mock is already set by Set")
+	}
+
+	expectation := &AuthMockResetPasswordExpectation{
+		mock:               mmResetPassword.mock,
+		params:             &AuthMockResetPasswordParams{ctx, token, newPassword},
+		expectationOrigins: AuthMockResetPasswordExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmResetPassword.expectations = append(mmResetPassword.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Auth.ResetPassword return parameters for the expectation previously defined by the When method
+func (e *AuthMockResetPasswordExpectation) Then(err error) *AuthMock {
+	e.results = &AuthMockResetPasswordResults{err}
+	return e.mock
+}
+
+// Times sets number of times Auth.ResetPassword should be invoked
+func (mmResetPassword *mAuthMockResetPassword) Times(n uint64) *mAuthMockResetPassword {
+	if n == 0 {
+		mmResetPassword.mock.t.Fatalf("Times of AuthMock.ResetPassword mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmResetPassword.expectedInvocations, n)
+	mmResetPassword.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmResetPassword
+}
+
+func (mmResetPassword *mAuthMockResetPassword) invocationsDone() bool {
+	if len(mmResetPassword.expectations) == 0 && mmResetPassword.defaultExpectation == nil && mmResetPassword.mock.funcResetPassword == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmResetPassword.mock.afterResetPasswordCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmResetPassword.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ResetPassword implements mm_service.Auth
+func (mmResetPassword *AuthMock) ResetPassword(ctx context.Context, token string, newPassword string) (err error) {
+	mm_atomic.AddUint64(&mmResetPassword.beforeResetPasswordCounter, 1)
+	defer mm_atomic.AddUint64(&mmResetPassword.afterResetPasswordCounter, 1)
+
+	mmResetPassword.t.Helper()
+
+	if mmResetPassword.inspectFuncResetPassword != nil {
+		mmResetPassword.inspectFuncResetPassword(ctx, token, newPassword)
+	}
+
+	mm_params := AuthMockResetPasswordParams{ctx, token, newPassword}
+
+	// Record call args
+	mmResetPassword.ResetPasswordMock.mutex.Lock()
+	mmResetPassword.ResetPasswordMock.callArgs = append(mmResetPassword.ResetPasswordMock.callArgs, &mm_params)
+	mmResetPassword.ResetPasswordMock.mutex.Unlock()
+
+	for _, e := range mmResetPassword.ResetPasswordMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmResetPassword.ResetPasswordMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmResetPassword.ResetPasswordMock.defaultExpectation.Counter, 1)
+		mm_want := mmResetPassword.ResetPasswordMock.defaultExpectation.params
+		mm_want_ptrs := mmResetPassword.ResetPasswordMock.defaultExpectation.paramPtrs
+
+		mm_got := AuthMockResetPasswordParams{ctx, token, newPassword}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmResetPassword.t.Errorf("AuthMock.ResetPassword got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmResetPassword.ResetPasswordMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.token != nil && !minimock.Equal(*mm_want_ptrs.token, mm_got.token) {
+				mmResetPassword.t.Errorf("AuthMock.ResetPassword got unexpected parameter token, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmResetPassword.ResetPasswordMock.defaultExpectation.expectationOrigins.originToken, *mm_want_ptrs.token, mm_got.token, minimock.Diff(*mm_want_ptrs.token, mm_got.token))
+			}
+
+			if mm_want_ptrs.newPassword != nil && !minimock.Equal(*mm_want_ptrs.newPassword, mm_got.newPassword) {
+				mmResetPassword.t.Errorf("AuthMock.ResetPassword got unexpected parameter newPassword, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmResetPassword.ResetPasswordMock.defaultExpectation.expectationOrigins.originNewPassword, *mm_want_ptrs.newPassword, mm_got.newPassword, minimock.Diff(*mm_want_ptrs.newPassword, mm_got.newPassword))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmResetPassword.t.Errorf("AuthMock.ResetPassword got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmResetPassword.ResetPasswordMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmResetPassword.ResetPasswordMock.defaultExpectation.results
+		if mm_results == nil {
+			mmResetPassword.t.Fatal("No results are set for the AuthMock.ResetPassword")
+		}
+		return (*mm_results).err
+	}
+	if mmResetPassword.funcResetPassword != nil {
+		return mmResetPassword.funcResetPassword(ctx, token, newPassword)
+	}
+	mmResetPassword.t.Fatalf("Unexpected call to AuthMock.ResetPassword. %v %v %v", ctx, token, newPassword)
+	return
+}
+
+// ResetPasswordAfterCounter returns a count of finished AuthMock.ResetPassword invocations
+func (mmResetPassword *AuthMock) ResetPasswordAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmResetPassword.afterResetPasswordCounter)
+}
+
+// ResetPasswordBeforeCounter returns a count of AuthMock.ResetPassword invocations
+func (mmResetPassword *AuthMock) ResetPasswordBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmResetPassword.beforeResetPasswordCounter)
+}
+
+// Calls returns a list of arguments used in each call to AuthMock.ResetPassword.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmResetPassword *mAuthMockResetPassword) Calls() []*AuthMockResetPasswordParams {
+	mmResetPassword.mutex.RLock()
+
+	argCopy := make([]*AuthMockResetPasswordParams, len(mmResetPassword.callArgs))
+	copy(argCopy, mmResetPassword.callArgs)
+
+	mmResetPassword.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockResetPasswordDone returns true if the count of the ResetPassword invocations corresponds
+// the number of defined expectations
+func (m *AuthMock) MinimockResetPasswordDone() bool {
+	if m.ResetPasswordMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ResetPasswordMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ResetPasswordMock.invocationsDone()
+}
+
+// MinimockResetPasswordInspect logs each unmet expectation
+func (m *AuthMock) MinimockResetPasswordInspect() {
+	for _, e := range m.ResetPasswordMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AuthMock.ResetPassword at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterResetPasswordCounter := mm_atomic.LoadUint64(&m.afterResetPasswordCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ResetPasswordMock.defaultExpectation != nil && afterResetPasswordCounter < 1 {
+		if m.ResetPasswordMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AuthMock.ResetPassword at\n%s", m.ResetPasswordMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AuthMock.ResetPassword at\n%s with params: %#v", m.ResetPasswordMock.defaultExpectation.expectationOrigins.origin, *m.ResetPasswordMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcResetPassword != nil && afterResetPasswordCounter < 1 {
+		m.t.Errorf("Expected call to AuthMock.ResetPassword at\n%s", m.funcResetPasswordOrigin)
+	}
+
+	if !m.ResetPasswordMock.invocationsDone() && afterResetPasswordCounter > 0 {
+		m.t.Errorf("Expected %d calls to AuthMock.ResetPassword at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ResetPasswordMock.expectedInvocations), m.ResetPasswordMock.expectedInvocationsOrigin, afterResetPasswordCounter)
+	}
+}
+
 type mAuthMockSwitchAccount struct {
 	optional           bool
 	mock               *AuthMock
@@ -3058,6 +4238,8 @@ func (m *AuthMock) MinimockSwitchAccountInspect() {
 func (m *AuthMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockChangePasswordInspect()
+
 			m.MinimockComparePasswordInspect()
 
 			m.MinimockGeneratePasswordInspect()
@@ -3073,6 +4255,10 @@ func (m *AuthMock) MinimockFinish() {
 			m.MinimockLoginInspect()
 
 			m.MinimockParseHLSTokenInspect()
+
+			m.MinimockRequestPasswordResetInspect()
+
+			m.MinimockResetPasswordInspect()
 
 			m.MinimockSwitchAccountInspect()
 		}
@@ -3098,6 +4284,7 @@ func (m *AuthMock) MinimockWait(timeout mm_time.Duration) {
 func (m *AuthMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockChangePasswordDone() &&
 		m.MinimockComparePasswordDone() &&
 		m.MinimockGeneratePasswordDone() &&
 		m.MinimockGenerateTokenDone() &&
@@ -3106,5 +4293,7 @@ func (m *AuthMock) minimockDone() bool {
 		m.MinimockIssueHLSTokenDone() &&
 		m.MinimockLoginDone() &&
 		m.MinimockParseHLSTokenDone() &&
+		m.MinimockRequestPasswordResetDone() &&
+		m.MinimockResetPasswordDone() &&
 		m.MinimockSwitchAccountDone()
 }

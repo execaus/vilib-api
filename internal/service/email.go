@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/smtp"
+	"strings"
+	"time"
 	"vilib-api/config"
+	"vilib-api/internal/domain"
 	"vilib-api/server"
 
 	"go.uber.org/zap"
@@ -58,6 +61,44 @@ func (s *EmailService) SendCreateUserEmail(ctx context.Context, email, password 
 	// Формирование темы письма
 	subject := "Welcome to ViLib!"
 	return s.send(ctx, []string{email}, subject, password)
+}
+
+// resetMailSubject — тема письма сброса пароля (§6 дизайна эпика Э2).
+const resetMailSubject = "Сброс пароля ViLib"
+
+// SendPasswordResetMail отправляет письмо со ссылкой сброса пароля (§6 дизайна эпика Э2,
+// поправка О-1). Одна ссылка (links из одного элемента) — единый текст со ссылкой; несколько —
+// список организаций, у каждой своя ссылка (свой токен), так пользователь не должен знать
+// идентификатор организации.
+func (s *EmailService) SendPasswordResetMail(
+	ctx context.Context,
+	email string,
+	links []domain.PasswordResetLink,
+	ttl time.Duration,
+) error {
+	return s.send(ctx, []string{email}, resetMailSubject, buildPasswordResetBody(links, ttl))
+}
+
+// buildPasswordResetBody собирает текст письма сброса пароля: одна ссылка — короткий текст,
+// несколько — список «Организация «X»: <ссылка>» построчно (§6 дизайна эпика Э2, поправка О-1).
+func buildPasswordResetBody(links []domain.PasswordResetLink, ttl time.Duration) string {
+	var b strings.Builder
+
+	if len(links) == 1 {
+		b.WriteString("Для установки нового пароля перейдите по ссылке: ")
+		b.WriteString(links[0].URL)
+		b.WriteString(".")
+	} else {
+		b.WriteString("Сброс пароля запрошен для нескольких организаций. Перейдите по ссылке своей организации:\n")
+		for _, link := range links {
+			fmt.Fprintf(&b, "Организация «%s»: %s\n", link.AccountName, link.URL)
+		}
+	}
+
+	fmt.Fprintf(&b, " Ссылка действует %s.", ttl)
+	b.WriteString(" Если вы не запрашивали сброс — проигнорируйте письмо.")
+
+	return b.String()
 }
 
 func (s *EmailService) send(ctx context.Context, to []string, subject string, body string) error {
