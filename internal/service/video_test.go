@@ -8,6 +8,7 @@ import (
 	"vilib-api/config"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/dberrors"
+	"vilib-api/internal/repository"
 	"vilib-api/internal/repository/repository_mocks"
 	"vilib-api/internal/s3"
 	"vilib-api/internal/saga"
@@ -370,6 +371,71 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 			wantErr: service.NewConflictError("object is empty"),
 		},
 		{
+			// Д-5 ревью эпика: два одновременных complete для одного видео. Оба проходят
+			// HeadObject, второй проигрывает гонку на уникальном ограничении files(bucket,
+			// object_key) при регистрации ассета-оригинала — вместо 500 возвращается текущее
+			// состояние видео (идемпотентный 200).
+			name: "concurrent complete is idempotent when files unique constraint is hit",
+			setupMocks: func(_ *testing.T, m videoCompleteUploadMocks) {
+				m.Access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
+					Return(nil)
+
+				selectCalls := 0
+				m.Video.SelectMock.Set(func(_ context.Context, _ uuid.UUID) (*domain.Video, error) {
+					selectCalls++
+					if selectCalls == 1 {
+						return &uploadingVideo, nil
+					}
+					return &queuedVideo, nil
+				})
+
+				m.S3.HeadObjectMock.
+					Expect(minimock.AnyContext, testBucket, testKey).
+					Return(s3.ObjectInfo{Size: 2048, ContentType: "video/mp4"}, nil)
+				m.VideoAsset.CreateMock.
+					Expect(
+						minimock.AnyContext, testVideoID, domain.VideoAssetKindOriginal, domain.VideoProfile(""),
+						testBucket, testKey, "video/mp4", int64(2048),
+					).
+					Return(domain.VideoAsset{}, dberrors.FileErrors.ErrUniqueFilesBucketObjectKeyKey)
+				// UpdateStatusIf/Outbox.Publish не настроены: проигравший гонку запрос не
+				// должен доходить до перевода статуса и публикации события — это уже сделал
+				// победивший запрос.
+			},
+			want: queuedVideo,
+		},
+		{
+			// То же самое, но конфликт пришёл по второму уникальному ограничению двухшаговой
+			// вставки — video_assets(video_id, kind, profile).
+			name: "concurrent complete is idempotent when video_assets unique constraint is hit",
+			setupMocks: func(_ *testing.T, m videoCompleteUploadMocks) {
+				m.Access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
+					Return(nil)
+
+				selectCalls := 0
+				m.Video.SelectMock.Set(func(_ context.Context, _ uuid.UUID) (*domain.Video, error) {
+					selectCalls++
+					if selectCalls == 1 {
+						return &uploadingVideo, nil
+					}
+					return &queuedVideo, nil
+				})
+
+				m.S3.HeadObjectMock.
+					Expect(minimock.AnyContext, testBucket, testKey).
+					Return(s3.ObjectInfo{Size: 2048, ContentType: "video/mp4"}, nil)
+				m.VideoAsset.CreateMock.
+					Expect(
+						minimock.AnyContext, testVideoID, domain.VideoAssetKindOriginal, domain.VideoProfile(""),
+						testBucket, testKey, "video/mp4", int64(2048),
+					).
+					Return(domain.VideoAsset{}, dberrors.VideoAssetErrors.ErrUniqueVideoAssetsVideoIdKindProfileKey)
+			},
+			want: queuedVideo,
+		},
+		{
 			name: "repeat for queued video is idempotent",
 			setupMocks: func(_ *testing.T, m videoCompleteUploadMocks) {
 				m.Access.IsCheckAccountActionMock.
@@ -672,28 +738,74 @@ func TestService_Video_ApplyProcessingCompleted(t *testing.T) {
 		require.Equal(t, []string{"delete", "hls_master:", "hls_variant:720p"}, calls)
 	})
 
-	t.Run("invalid asset kind returns validation error and stops registration", func(t *testing.T) {
+	t.Run("invalid asset kind is poison: fails video as permanent instead of infinite retry (Д-3)", func(t *testing.T) {
 		t.Parallel()
 
 		mc := minimock.NewController(t)
 		m := newVideoApplyProcessingMocks(mc)
 
-		m.Video.UpdateStatusIfMock.Return(true, nil)
-		m.VideoAsset.DeleteByVideoAndKindsMock.Return(nil)
-		// VideoAsset.Create не настроен: невалидный kind обязан прерваться до его вызова —
-		// неожиданный вызов упадёт через контроллер моков.
+		attempt := 1
+		m.Video.UpdateStatusIfMock.Set(func(
+			_ context.Context, id uuid.UUID, from []domain.VideoStatus, to domain.VideoStatus, patch domain.VideoPatch,
+		) (bool, error) {
+			require.Equal(t, testVideoID, id)
+			require.ElementsMatch(
+				t,
+				[]domain.VideoStatus{domain.VideoStatusQueued, domain.VideoStatusCompressing},
+				from,
+			)
+			require.Equal(t, domain.VideoStatusFailed, to)
+			require.Equal(t, attempt, *patch.ExpectedAttempt)
+			require.Equal(t, domain.VideoFailureClassPermanent, *patch.FailureClass)
+			require.Contains(t, *patch.FailureReason, "invalid processing result")
+			return true, nil
+		})
+		// VideoAsset.DeleteByVideoAndKinds/Create не настроены: результаты не валидны, видео
+		// должно завалиться до какой-либо записи ассетов — неожиданный вызов упадёт через
+		// контроллер моков.
 
 		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Bucket: testBucket, Video: videoConfig(4 << 30)})
 
-		envelope := events.Envelope{VideoID: testVideoID, Attempt: 1}
+		envelope := events.Envelope{VideoID: testVideoID, Attempt: attempt}
 		payload := events.ProcessingCompleted{
 			Results: []events.AssetResult{{Kind: events.AssetKindOriginal, Bucket: testBucket, Key: "k"}},
 		}
 
 		err := videoSvc.ApplyProcessingCompleted(minimock.AnyContext, envelope, payload)
 
-		var validationErr *service.ValidationError
-		require.ErrorAs(t, err, &validationErr)
+		require.NoError(t, err)
+	})
+
+	t.Run("duplicate kind/profile in results is poison: fails video as permanent (Д-3)", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoApplyProcessingMocks(mc)
+
+		attempt := 1
+		m.Video.UpdateStatusIfMock.Set(func(
+			_ context.Context, id uuid.UUID, from []domain.VideoStatus, to domain.VideoStatus, patch domain.VideoPatch,
+		) (bool, error) {
+			require.Equal(t, testVideoID, id)
+			require.Equal(t, domain.VideoStatusFailed, to)
+			require.Equal(t, domain.VideoFailureClassPermanent, *patch.FailureClass)
+			require.Contains(t, *patch.FailureReason, "duplicate result")
+			return true, nil
+		})
+
+		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Bucket: testBucket, Video: videoConfig(4 << 30)})
+
+		envelope := events.Envelope{VideoID: testVideoID, Attempt: attempt}
+		payload := events.ProcessingCompleted{
+			Results: []events.AssetResult{
+				{Kind: events.AssetKindHLSVariant, Profile: "720p", Bucket: testBucket, Key: "a"},
+				{Kind: events.AssetKindHLSVariant, Profile: "720p", Bucket: testBucket, Key: "b"},
+			},
+		}
+
+		err := videoSvc.ApplyProcessingCompleted(minimock.AnyContext, envelope, payload)
+
+		require.NoError(t, err)
 	})
 
 	t.Run("repository error on status update propagates", func(t *testing.T) {
@@ -729,12 +841,82 @@ func TestService_Video_ApplyProcessingCompleted(t *testing.T) {
 		require.ErrorIs(t, err, repoErr)
 	})
 
-	t.Run("ignored transition schedules orphan cleanup after commit", func(t *testing.T) {
+	// Следующие сценарии закрепляют исправление Д-1 ревью эпика: если условный переход в ready
+	// не применился, видео перечитывается, чтобы отличить дубликат at-least-once доставки
+	// (ready/queued/compressing — не трогаем, объекты только что залил победитель гонки) от
+	// настоящей сироты (видео не найдено или уже failed — чистим hls-префикс).
+
+	t.Run("duplicate delivery for already ready video is a no-op without cleanup (Д-1)", func(t *testing.T) {
 		t.Parallel()
 
 		mc := minimock.NewController(t)
 		m := newVideoApplyProcessingMocks(mc)
 		m.Video.UpdateStatusIfMock.Return(false, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, Status: domain.VideoStatusReady}, nil)
+		// S3.DeleteByPrefix не настроен: удаление свежих HLS-объектов дубликатом стёрло бы
+		// рабочее готовое видео — неожиданный вызов упадёт через контроллер моков.
+
+		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Bucket: testBucket, Video: videoConfig(4 << 30)})
+
+		tx := saga_mocks.NewBobTransactionMock(mc)
+		tx.CommitMock.Return(nil)
+		tx.RollbackMock.Return(nil)
+		tx.RollbackMock.Optional()
+
+		repo := saga_mocks.NewTransactableMock(mc)
+		repo.WithTxMock.Return(tx, nil)
+
+		runner := saga.NewSagaRunner(videoSvc, repo)
+
+		envelope := events.Envelope{VideoID: testVideoID, Attempt: 1}
+		err := runner.Run(t.Context(), func(ctx context.Context, svc *service.VideoService) error {
+			return svc.ApplyProcessingCompleted(ctx, envelope, events.ProcessingCompleted{})
+		})
+
+		require.NoError(t, err)
+	})
+
+	t.Run("stale attempt while still processing is a no-op without cleanup (Д-1)", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoApplyProcessingMocks(mc)
+		m.Video.UpdateStatusIfMock.Return(false, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, Status: domain.VideoStatusCompressing}, nil)
+		// S3.DeleteByPrefix не настроен: актуальный воркер сам чистит префикс перед своей
+		// загрузкой — устаревшая попытка ничего чистить не должна.
+
+		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Bucket: testBucket, Video: videoConfig(4 << 30)})
+
+		tx := saga_mocks.NewBobTransactionMock(mc)
+		tx.CommitMock.Return(nil)
+		tx.RollbackMock.Return(nil)
+		tx.RollbackMock.Optional()
+
+		repo := saga_mocks.NewTransactableMock(mc)
+		repo.WithTxMock.Return(tx, nil)
+
+		runner := saga.NewSagaRunner(videoSvc, repo)
+
+		envelope := events.Envelope{VideoID: testVideoID, Attempt: 1}
+		err := runner.Run(t.Context(), func(ctx context.Context, svc *service.VideoService) error {
+			return svc.ApplyProcessingCompleted(ctx, envelope, events.ProcessingCompleted{})
+		})
+
+		require.NoError(t, err)
+	})
+
+	t.Run("video not found schedules orphan cleanup after commit (Д-1)", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoApplyProcessingMocks(mc)
+		m.Video.UpdateStatusIfMock.Return(false, nil)
+		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(nil, repository.ErrNotFound)
 
 		var cleanedBucket, cleanedPrefix string
 		m.S3.DeleteByPrefixMock.Set(func(_ context.Context, bucket, prefix string) (int, error) {
@@ -763,6 +945,62 @@ func TestService_Video_ApplyProcessingCompleted(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, testBucket, cleanedBucket)
 		require.Equal(t, "videos/"+testVideoID.String()+"/hls/", cleanedPrefix)
+	})
+
+	t.Run("already failed video schedules orphan cleanup after commit (Д-1)", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoApplyProcessingMocks(mc)
+		m.Video.UpdateStatusIfMock.Return(false, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, Status: domain.VideoStatusFailed}, nil)
+
+		var cleanedBucket, cleanedPrefix string
+		m.S3.DeleteByPrefixMock.Set(func(_ context.Context, bucket, prefix string) (int, error) {
+			cleanedBucket = bucket
+			cleanedPrefix = prefix
+			return 0, nil
+		})
+
+		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Bucket: testBucket, Video: videoConfig(4 << 30)})
+
+		tx := saga_mocks.NewBobTransactionMock(mc)
+		tx.CommitMock.Return(nil)
+		tx.RollbackMock.Return(nil)
+		tx.RollbackMock.Optional()
+
+		repo := saga_mocks.NewTransactableMock(mc)
+		repo.WithTxMock.Return(tx, nil)
+
+		runner := saga.NewSagaRunner(videoSvc, repo)
+
+		envelope := events.Envelope{VideoID: testVideoID, Attempt: 1}
+		err := runner.Run(t.Context(), func(ctx context.Context, svc *service.VideoService) error {
+			return svc.ApplyProcessingCompleted(ctx, envelope, events.ProcessingCompleted{})
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, testBucket, cleanedBucket)
+		require.Equal(t, "videos/"+testVideoID.String()+"/hls/", cleanedPrefix)
+	})
+
+	t.Run("select error while resolving ignored transition propagates", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoApplyProcessingMocks(mc)
+		m.Video.UpdateStatusIfMock.Return(false, nil)
+		m.Video.SelectMock.Return(nil, repoErr)
+
+		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Bucket: testBucket, Video: videoConfig(4 << 30)})
+
+		err := videoSvc.ApplyProcessingCompleted(
+			minimock.AnyContext, events.Envelope{VideoID: testVideoID, Attempt: 1}, events.ProcessingCompleted{},
+		)
+
+		require.ErrorIs(t, err, repoErr)
 	})
 }
 
@@ -968,23 +1206,52 @@ func TestService_Video_ApplyProcessingFailed(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("original asset missing when requeuing returns error", func(t *testing.T) {
+	t.Run("original asset missing when requeuing is poison: fails video as permanent (Д-3)", func(t *testing.T) {
 		t.Parallel()
 
 		mc := minimock.NewController(t)
 		m := newVideoApplyProcessingMocks(mc)
-		m.Video.UpdateStatusIfMock.Return(true, nil)
+
+		attempt := 1
+		next := 2
+		callCount := 0
+
+		// Первый вызов — условный переход queued (уже применённый ранее в
+		// requeueAfterTemporaryFailure), второй — переход в failed, обнаруживший отсутствие
+		// оригинала (Д-3 ревью эпика). Различаются по порядку вызова, а не по значению to,
+		// чтобы не заводить switch по domain.VideoStatus (exhaustive требует все ветки).
+		m.Video.UpdateStatusIfMock.Set(func(
+			_ context.Context, id uuid.UUID, from []domain.VideoStatus, to domain.VideoStatus, patch domain.VideoPatch,
+		) (bool, error) {
+			require.Equal(t, testVideoID, id)
+			callCount++
+
+			if callCount == 1 {
+				require.Equal(t, domain.VideoStatusQueued, to)
+				require.Equal(t, attempt, *patch.ExpectedAttempt)
+				require.Equal(t, next, *patch.ProcessingAttempt)
+				return true, nil
+			}
+
+			require.Equal(t, domain.VideoStatusFailed, to)
+			require.Equal(t, next, *patch.ExpectedAttempt)
+			require.Equal(t, domain.VideoFailureClassPermanent, *patch.FailureClass)
+			require.Equal(t, "original asset missing", *patch.FailureReason)
+			return true, nil
+		})
 		m.VideoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return(nil, nil)
+		// Outbox.Publish не настроен: без оригинала повторное событие не публикуется.
 
 		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Video: videoProcessingConfig()})
 
 		err := videoSvc.ApplyProcessingFailed(
 			minimock.AnyContext,
-			events.Envelope{VideoID: testVideoID, Attempt: 1},
+			events.Envelope{VideoID: testVideoID, Attempt: attempt},
 			events.ProcessingFailed{ErrorClass: events.ErrorClassTemporary, Reason: "network timeout"},
 		)
 
-		require.Error(t, err)
+		require.NoError(t, err)
+		require.Equal(t, 2, callCount)
 	})
 
 	t.Run("repository error propagates", func(t *testing.T) {
@@ -1710,6 +1977,118 @@ func TestService_Video_GetHLSPlaylist(t *testing.T) {
 	})
 }
 
+// videoRenameMocks собирает моки, используемые Rename.
+type videoRenameMocks struct {
+	Access      *service_mocks.AccessMock
+	GroupMember *service_mocks.GroupMemberMock
+	S3          *service_mocks.S3Mock
+	Video       *repository_mocks.VideoMock
+}
+
+func newVideoRenameMocks(mc *minimock.Controller) videoRenameMocks {
+	return videoRenameMocks{
+		Access:      service_mocks.NewAccessMock(mc),
+		GroupMember: service_mocks.NewGroupMemberMock(mc),
+		S3:          service_mocks.NewS3Mock(mc),
+		Video:       repository_mocks.NewVideoMock(mc),
+	}
+}
+
+func newVideoRenameService(m videoRenameMocks) *service.VideoService {
+	svc := &service.Service{Access: m.Access, GroupMember: m.GroupMember}
+	return service.NewVideoService(m.S3, m.Video, svc, service.VideoServiceConfig{})
+}
+
+// TestService_Video_Rename проверяет переименование видео: проверку прав и проверку
+// принадлежности видео группе (Б-1 ревью эпика) — до правки право ManageVideo в своей группе
+// позволяло переименовать видео из чужой группы/аккаунта.
+func TestService_Video_Rename(t *testing.T) {
+	t.Parallel()
+
+	testAccountID := uuid.New()
+	testGroupID := uuid.New()
+	testInitiatorID := uuid.New()
+	testVideoID := uuid.New()
+	testName := "renamed video"
+	ownVideo := &domain.Video{ID: testVideoID, GroupID: testGroupID}
+	renamedVideo := domain.Video{ID: testVideoID, GroupID: testGroupID, Name: testName}
+
+	t.Run("forbidden - no account or group permission", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoRenameMocks(mc)
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Return(service.ErrForbidden)
+		m.GroupMember.GetByUserIDAndGroupIDMock.
+			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
+			Return(domain.GroupMember{}, errors.New("not a member"))
+
+		videoSvc := newVideoRenameService(m)
+
+		_, err := videoSvc.Rename(t.Context(), testAccountID, testGroupID, testInitiatorID, testVideoID, testName)
+
+		require.ErrorIs(t, err, service.ErrForbidden)
+	})
+
+	t.Run("video not found returns not found error", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoRenameMocks(mc)
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Return(nil)
+		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(nil, repository.ErrNotFound)
+
+		videoSvc := newVideoRenameService(m)
+
+		_, err := videoSvc.Rename(t.Context(), testAccountID, testGroupID, testInitiatorID, testVideoID, testName)
+
+		require.ErrorIs(t, err, repository.ErrNotFound)
+	})
+
+	t.Run("video belongs to another group returns forbidden (IDOR, Б-1)", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoRenameMocks(mc)
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Return(nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, GroupID: uuid.New()}, nil)
+		// Video.UpdateName не настроен: чужое видео не должно переименовываться.
+
+		videoSvc := newVideoRenameService(m)
+
+		_, err := videoSvc.Rename(t.Context(), testAccountID, testGroupID, testInitiatorID, testVideoID, testName)
+
+		require.ErrorIs(t, err, service.ErrForbidden)
+	})
+
+	t.Run("success - renames own video", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoRenameMocks(mc)
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Return(nil)
+		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
+		m.Video.UpdateNameMock.Expect(minimock.AnyContext, testVideoID, testName).Return(renamedVideo, nil)
+
+		videoSvc := newVideoRenameService(m)
+
+		got, err := videoSvc.Rename(t.Context(), testAccountID, testGroupID, testInitiatorID, testVideoID, testName)
+
+		require.NoError(t, err)
+		require.Equal(t, renamedVideo, got)
+	})
+}
+
 // videoDeleteMocks собирает моки, используемые Delete.
 type videoDeleteMocks struct {
 	Access      *service_mocks.AccessMock
@@ -1737,7 +2116,8 @@ func newVideoDeleteService(
 }
 
 // TestService_Video_Delete проверяет удаление видео (Э1-Т21, §7.3 дизайна эпика): проверку
-// прав, удаление в БД и best-effort очистку объектов хранилища после коммита транзакции.
+// прав, проверку принадлежности видео группе (Б-1 ревью эпика), удаление в БД и best-effort
+// очистку объектов хранилища после коммита транзакции.
 func TestService_Video_Delete(t *testing.T) {
 	t.Parallel()
 
@@ -1746,6 +2126,7 @@ func TestService_Video_Delete(t *testing.T) {
 	testInitiatorID := uuid.New()
 	testVideoID := uuid.New()
 	testBucket := "vilib"
+	ownVideo := &domain.Video{ID: testVideoID, GroupID: testGroupID}
 
 	t.Run("forbidden - no account or group permission", func(t *testing.T) {
 		t.Parallel()
@@ -1766,6 +2147,43 @@ func TestService_Video_Delete(t *testing.T) {
 		require.ErrorIs(t, err, service.ErrForbidden)
 	})
 
+	t.Run("video not found returns not found error", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoDeleteMocks(mc)
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Return(nil)
+		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(nil, repository.ErrNotFound)
+
+		videoSvc := newVideoDeleteService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		err := videoSvc.Delete(t.Context(), testAccountID, testGroupID, testInitiatorID, testVideoID)
+
+		require.ErrorIs(t, err, repository.ErrNotFound)
+	})
+
+	t.Run("video belongs to another group returns forbidden (IDOR, Б-1)", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoDeleteMocks(mc)
+		m.Access.IsCheckAccountActionMock.
+			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Return(nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, GroupID: uuid.New()}, nil)
+		// Video.Delete/S3.DeleteByPrefix не настроены: чужое видео не должно удаляться.
+
+		videoSvc := newVideoDeleteService(m, service.VideoServiceConfig{Bucket: testBucket})
+
+		err := videoSvc.Delete(t.Context(), testAccountID, testGroupID, testInitiatorID, testVideoID)
+
+		require.ErrorIs(t, err, service.ErrForbidden)
+	})
+
 	t.Run("repository error propagates, no cleanup scheduled", func(t *testing.T) {
 		t.Parallel()
 
@@ -1774,6 +2192,7 @@ func TestService_Video_Delete(t *testing.T) {
 		m.Access.IsCheckAccountActionMock.
 			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
 			Return(nil)
+		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
 		repoErr := errors.New("db unavailable")
 		m.Video.DeleteMock.Expect(minimock.AnyContext, testVideoID).Return(repoErr)
 
@@ -1792,6 +2211,7 @@ func TestService_Video_Delete(t *testing.T) {
 		m.Access.IsCheckAccountActionMock.
 			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
 			Return(nil)
+		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
 		m.Video.DeleteMock.Expect(minimock.AnyContext, testVideoID).Return(nil)
 
 		var cleanedBucket, cleanedPrefix string
@@ -1830,6 +2250,7 @@ func TestService_Video_Delete(t *testing.T) {
 		m.Access.IsCheckAccountActionMock.
 			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
 			Return(nil)
+		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
 		m.Video.DeleteMock.Expect(minimock.AnyContext, testVideoID).Return(nil)
 
 		var attempts int

@@ -486,6 +486,21 @@ func (s *VideoService) completeUploadingVideo(ctx context.Context, videoID uuid.
 		s.cfg.Bucket, key, info.ContentType,
 		info.Size,
 	); createErr != nil {
+		if isOriginalAssetConflict(createErr) {
+			// Гонка двух одновременных complete для одного видео (Д-5 ревью эпика): оба прошли
+			// HeadObject, второй проигрывает на уникальном ограничении при регистрации
+			// ассета-оригинала (ключ объекта детерминирован — совпадает и в files, и в
+			// video_assets). Идемпотентно возвращаем текущее состояние вместо 500.
+			zap.L().Warn("concurrent complete upload: original asset already registered by another request",
+				zap.String("video_id", videoID.String()),
+			)
+			current, selectErr := s.repo.Select(ctx, videoID)
+			if selectErr != nil {
+				zap.L().Error(selectErr.Error())
+				return domain.Video{}, selectErr
+			}
+			return *current, nil
+		}
 		zap.L().Error(createErr.Error())
 		return domain.Video{}, createErr
 	}
@@ -524,6 +539,17 @@ func (s *VideoService) completeUploadingVideo(ctx context.Context, videoID uuid.
 	}
 
 	return *result, nil
+}
+
+// isOriginalAssetConflict определяет нарушение уникальности при регистрации ассета-оригинала —
+// сигнал гонки двух одновременных подтверждений загрузки одного видео (Д-5 ревью эпика).
+// VideoAsset.Create вставляет две строки одной операцией (files, затем video_assets); ключ
+// объекта оригинала детерминирован (VideoOriginalObjectKey), поэтому в зависимости от того, на
+// каком шаге столкнулись конкурирующие запросы, конфликт может прийти по любому из двух
+// уникальных ограничений — проверяются оба.
+func isOriginalAssetConflict(err error) bool {
+	return errors.Is(dberrors.FileErrors.ErrUniqueFilesBucketObjectKeyKey, err) ||
+		errors.Is(dberrors.VideoAssetErrors.ErrUniqueVideoAssetsVideoIdKindProfileKey, err)
 }
 
 // publishOriginalUploaded собирает и публикует через outbox событие OriginalUploaded
@@ -619,18 +645,33 @@ func (s *VideoService) ApplyProcessingStarted(
 	return nil
 }
 
-// ApplyProcessingCompleted обрабатывает событие ProcessingCompleted (§7.2 эпика). Переход в
-// ready выполняется условным UPDATE первым: только если он применился (видео было в
-// queued/compressing и номер попытки совпал), в этой же транзакции идемпотентно
-// перерегистрируются ассеты результатов — старые hls_master/hls_variant удаляются и
-// вставляются заново (Э1-Т14). Если переход не применился (видео не найдено, статус вне
-// ожидаемого набора или попытка устарела), новые ассеты не регистрируются: после коммита
-// транзакции best-effort зачищаются возможные результаты-сироты в хранилище (Э1-Т22).
+// ApplyProcessingCompleted обрабатывает событие ProcessingCompleted (§7.2 эпика). Список
+// результатов валидируется до какого-либо UPDATE (Д-3 ревью эпика): неизвестный вид ассета или
+// повторная пара (kind, profile) — poison-событие (иначе `UNIQUE(video_id, kind, profile)`
+// уронит вставку и обработчик уйдёт в бесконечный ретрай), поэтому такое видео сразу
+// переводится в failed(permanent) и событие подтверждается (return nil). Иначе переход в ready
+// выполняется условным UPDATE: только если он применился (видео было в queued/compressing и
+// номер попытки совпал), в этой же транзакции идемпотентно перерегистрируются ассеты
+// результатов — старые hls_master/hls_variant удаляются и вставляются заново (Э1-Т14). Если
+// переход не применился, новые ассеты не регистрируются — обрабатывается как дубликат/устаревшее
+// событие (Д-1 ревью эпика, см. handleIgnoredProcessingCompleted).
 func (s *VideoService) ApplyProcessingCompleted(
 	ctx context.Context,
 	evt events.Envelope,
 	p events.ProcessingCompleted,
 ) error {
+	if validationErr := validateProcessingResults(p.Results); validationErr != nil {
+		zap.L().Warn("processing completed event is poison: invalid results, failing video",
+			zap.String("video_id", evt.VideoID.String()),
+			zap.Int("attempt", evt.Attempt),
+			zap.Error(validationErr),
+		)
+		return s.failProcessing(
+			ctx, evt.VideoID, evt.Attempt,
+			domain.VideoFailureClassPermanent, "invalid processing result: "+validationErr.Error(),
+		)
+	}
+
 	attempt := evt.Attempt
 
 	patch := domain.VideoPatch{ExpectedAttempt: &attempt, ClearFailure: true}
@@ -650,8 +691,41 @@ func (s *VideoService) ApplyProcessingCompleted(
 		return err
 	}
 
-	if !updated {
-		zap.L().Info("processing completed event ignored: stale attempt or video not in processing status",
+	if updated {
+		return s.registerProcessingResults(ctx, evt.VideoID, p.Results)
+	}
+
+	return s.handleIgnoredProcessingCompleted(ctx, evt)
+}
+
+// handleIgnoredProcessingCompleted обрабатывает ProcessingCompleted, не применившийся условным
+// UPDATE в ready (Д-1 ревью эпика). Видео перечитывается, чтобы отличить настоящую сироту от
+// штатного дубликата at-least-once доставки:
+//   - видео не найдено (удалено) — сирота, HLS-результаты, которые воркер мог успеть залить,
+//     зачищаются best-effort после коммита (Э1-Т22);
+//   - видео уже failed — тоже сирота (например, watchdog победил гонку с этим же событием) —
+//     зачистка;
+//   - в остальных случаях (video ready — дубликат этого же события; video queued/compressing —
+//     устаревшая попытка или гонка с watchdog'ом) — no-op без очистки: для ready актуальные
+//     объекты только что залил победивший воркер, их удаление стёрло бы рабочее видео; для
+//     queued/compressing актуальный воркер сам чистит префикс перед своей загрузкой.
+func (s *VideoService) handleIgnoredProcessingCompleted(ctx context.Context, evt events.Envelope) error {
+	video, err := s.repo.Select(ctx, evt.VideoID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			zap.L().Info("processing completed event ignored: video not found, cleaning up orphan results",
+				zap.String("video_id", evt.VideoID.String()),
+				zap.Int("attempt", evt.Attempt),
+			)
+			s.cleanupOrphanProcessingResults(ctx, evt.VideoID)
+			return nil
+		}
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if video.Status == domain.VideoStatusFailed {
+		zap.L().Info("processing completed event ignored: video already failed, cleaning up orphan results",
 			zap.String("video_id", evt.VideoID.String()),
 			zap.Int("attempt", evt.Attempt),
 		)
@@ -659,11 +733,43 @@ func (s *VideoService) ApplyProcessingCompleted(
 		return nil
 	}
 
-	return s.registerProcessingResults(ctx, evt.VideoID, p.Results)
+	zap.L().Info("processing completed event ignored: duplicate delivery or stale attempt, no cleanup",
+		zap.String("video_id", evt.VideoID.String()),
+		zap.Int("attempt", evt.Attempt),
+		zap.String("status", video.Status.String()),
+	)
+
+	return nil
+}
+
+// validateProcessingResults проверяет список результатов ProcessingCompleted до какой-либо
+// записи в БД (Д-3 ревью эпика): вид ассета должен быть из допустимого набора, а пара
+// (kind, profile) не должна повторяться в пределах события — иначе вставка упадёт на
+// `UNIQUE(video_id, kind, profile)` (Э1-Т14) уже после того, как старые ассеты удалены
+// registerProcessingResults, оставляя видео без результатов вовсе.
+func validateProcessingResults(results []events.AssetResult) error {
+	seen := make(map[string]struct{}, len(results))
+
+	for _, result := range results {
+		kind, ok := validProcessingResultKind(result.Kind)
+		if !ok {
+			return fmt.Errorf("unsupported asset kind %q", result.Kind)
+		}
+
+		key := string(kind) + "/" + result.Profile
+		if _, duplicate := seen[key]; duplicate {
+			return fmt.Errorf("duplicate result for kind %q profile %q", kind, result.Profile)
+		}
+		seen[key] = struct{}{}
+	}
+
+	return nil
 }
 
 // registerProcessingResults идемпотентно перерегистрирует ассеты результатов обработки видео:
-// удаляет ранее зарегистрированные hls_master/hls_variant и вставляет присланные заново.
+// удаляет ранее зарегистрированные hls_master/hls_variant и вставляет присланные заново. Список
+// результатов уже прошёл validateProcessingResults — повторная проверка вида ассета здесь лишь
+// защита на случай рассинхронизации со списком допустимых видов.
 func (s *VideoService) registerProcessingResults(
 	ctx context.Context,
 	videoID uuid.UUID,
@@ -807,9 +913,17 @@ func (s *VideoService) requeueAfterTemporaryFailure(ctx context.Context, videoID
 
 	original := findAssetByKind(assets, domain.VideoAssetKindOriginal)
 	if original == nil {
-		notFoundErr := fmt.Errorf("original asset not found for video %s", videoID)
-		zap.L().Error(notFoundErr.Error())
-		return notFoundErr
+		// Оригинал не может пропасть при штатной работе (BR-37, воркер его не трогает) — раз
+		// это всё же произошло, повтор ничего не изменит: poison-случай (Д-3 ревью эпика).
+		// Возврат ошибки здесь уронил бы всю транзакцию (включая уже применённый выше переход
+		// в queued) и обработчик ушёл бы в бесконечный ретрай — вместо этого видео переводится
+		// в failed(permanent) с тем attempt, что уже записан транзакцией (next), и событие
+		// подтверждается (return nil).
+		zap.L().Warn("temporary failure requeue is poison: original asset missing, failing video",
+			zap.String("video_id", videoID.String()),
+			zap.Int("attempt", next),
+		)
+		return s.failProcessing(ctx, videoID, next, domain.VideoFailureClassPermanent, "original asset missing")
 	}
 
 	return s.publishOriginalUploaded(ctx, videoID, next, original.ObjectKey, s3.ObjectInfo{
@@ -925,6 +1039,12 @@ func (s *VideoService) Rename(
 		}
 	}
 
+	// Проверка, что видео принадлежит указанной группе (Б-1 ревью эпика: без неё право
+	// ManageVideo в своей группе позволяло переименовать чужое видео — IDOR).
+	if err := s.checkVideoBelongsToGroup(ctx, groupID, videoID); err != nil {
+		return domain.Video{}, err
+	}
+
 	// Переименование видео
 	video, err := s.repo.UpdateName(ctx, videoID, name)
 	if err != nil {
@@ -933,6 +1053,25 @@ func (s *VideoService) Rename(
 	}
 
 	return video, nil
+}
+
+// checkVideoBelongsToGroup перечитывает видео и убеждается, что оно принадлежит groupID —
+// защита от IDOR (Б-1 ревью эпика): проверка прав ManageVideo проходит по groupID из пути
+// запроса, но без этой проверки videoID мог указывать на видео другой группы/аккаунта. Тот же
+// код ответа, что и в Get: 404, если видео не найдено, 403 — если принадлежит другой группе.
+func (s *VideoService) checkVideoBelongsToGroup(ctx context.Context, groupID, videoID uuid.UUID) error {
+	video, err := s.repo.Select(ctx, videoID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if video.GroupID != groupID {
+		zap.L().Error("video does not belong to the specified group")
+		return ErrForbidden
+	}
+
+	return nil
 }
 
 func (s *VideoService) Delete(
@@ -949,6 +1088,12 @@ func (s *VideoService) Delete(
 		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo); err != nil {
 			return ErrForbidden
 		}
+	}
+
+	// Проверка, что видео принадлежит указанной группе (Б-1 ревью эпика: без неё право
+	// ManageVideo в своей группе позволяло удалить чужое видео вместе с его объектами S3 — IDOR).
+	if err := s.checkVideoBelongsToGroup(ctx, groupID, videoID); err != nil {
+		return err
 	}
 
 	// Удаление видео: сначала БД-транзакция, объекты хранилища — после коммита (Э1-Т21).
