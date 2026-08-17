@@ -187,6 +187,18 @@ definitions:
           $ref: '#/definitions/dto.Video'
         type: array
     type: object
+  dto.GetGroupMembersResponse:
+    properties:
+      members:
+        items:
+          $ref: '#/definitions/dto.GroupMemberDetails'
+        type: array
+    type: object
+  dto.GetUserGroupResponse:
+    properties:
+      group:
+        $ref: '#/definitions/dto.UserGroup'
+    type: object
   dto.GetVideoResponse:
     properties:
       expires_at:
@@ -208,7 +220,28 @@ definitions:
     properties:
       group_id:
         type: string
+      joined_at:
+        type: string
       role_id:
+        type: string
+      user_id:
+        type: string
+    type: object
+  dto.GroupMemberDetails:
+    properties:
+      email:
+        type: string
+      joined_at:
+        type: string
+      name:
+        type: string
+      permission_mask:
+        $ref: '#/definitions/domain.PermissionMask'
+      role_id:
+        type: string
+      role_name:
+        type: string
+      surname:
         type: string
       user_id:
         type: string
@@ -336,6 +369,18 @@ definitions:
     properties:
       token:
         type: string
+    type: object
+  dto.UpdateGroupMemberRequest:
+    properties:
+      role_id:
+        type: string
+    required:
+    - role_id
+    type: object
+  dto.UpdateGroupMemberResponse:
+    properties:
+      member:
+        $ref: '#/definitions/dto.GroupMemberDetails'
     type: object
   dto.UpdateUserRequest:
     properties:
@@ -672,7 +717,92 @@ paths:
       summary: Создание группы пользователей
       tags:
       - user_groups
+  /api/v1/accounts/{accountId}/user-groups/{groupId}:
+    get:
+      description: Возвращает данные группы пользователей аккаунта. Доступно любому
+        участнику аккаунта.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы пользователей
+        in: path
+        name: groupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.GetUserGroupResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
+      summary: Карточка группы пользователей
+      tags:
+      - user_groups
   /api/v1/accounts/{accountId}/user-groups/{groupId}/members:
+    get:
+      description: Возвращает участников группы вместе с их ролью и правами. Требуется
+        право ManageGroups аккаунта или ManageMembers группы.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы пользователей
+        in: path
+        name: groupId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.GetGroupMembersResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
+      summary: Список участников группы
+      tags:
+      - group_members
     post:
       consumes:
       - application/json
@@ -1086,6 +1216,61 @@ paths:
       security:
       - BearerAuth: []
       summary: Удаление участника группы
+      tags:
+      - group_members
+    put:
+      consumes:
+      - application/json
+      description: Меняет роль участника в группе. Требуется право ManageGroups аккаунта
+        или ManageMembers группы.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      - description: ID пользователя-участника
+        in: path
+        name: memberId
+        required: true
+        type: string
+      - description: Тело запроса смены роли участника
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateGroupMemberRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UpdateGroupMemberResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+      security:
+      - BearerAuth: []
+      summary: Смена роли участника группы
       tags:
       - group_members
   /api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}:

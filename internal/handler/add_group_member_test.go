@@ -66,6 +66,12 @@ func TestHandler_AddGroupMember(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusCreated, w.Code)
+
+		var resp dto.AddGroupMemberResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		require.Len(t, resp.Members, 1)
+		require.Equal(t, testUserID, resp.Members[0].UserID)
+		require.Equal(t, testGroupID, resp.Members[0].GroupID)
 	})
 
 	t.Run("invalid account id", func(t *testing.T) {

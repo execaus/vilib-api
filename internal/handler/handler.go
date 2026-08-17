@@ -39,7 +39,9 @@ var (
 	CreateAccountRoleURL   = NewURLSupplier("accounts/%s/roles")
 	UpdateUserURL          = NewURLSupplier("accounts/%s/users/%s")
 	CreateUserGroupURL     = NewURLSupplier("accounts/%s/user-groups")
+	GetUserGroupURL        = NewURLSupplier("accounts/%s/user-groups/%s")
 	AddGroupMemberURL      = NewURLSupplier("accounts/%s/user-groups/%s/members")
+	GetGroupMembersURL     = NewURLSupplier("accounts/%s/user-groups/%s/members")
 	CreateGroupRoleURL     = NewURLSupplier("accounts/%s/user-groups/roles")
 	UploadVideoUrl         = NewURLSupplier("accounts/%s/user-groups/%s/video")
 	GetVideoUrl            = NewURLSupplier("accounts/%s/user-groups/%s/video/%s")
@@ -131,6 +133,11 @@ func (h *Handler) GetRouter() *gin.Engine {
 	// User groups
 	v1.POST(CreateUserGroupURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateUserGroup)
 	v1.GET(ListUserGroupsURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllUserGroups)
+	v1.GET(
+		GetUserGroupURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
+		h.RequireAuthMiddleware,
+		h.GetUserGroup,
+	)
 	v1.DELETE(
 		DeleteUserGroupURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
 		h.RequireAuthMiddleware,
@@ -142,6 +149,16 @@ func (h *Handler) GetRouter() *gin.Engine {
 		AddGroupMemberURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
 		h.RequireAuthMiddleware,
 		h.AddGroupMember,
+	)
+	v1.GET(
+		GetGroupMembersURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
+		h.RequireAuthMiddleware,
+		h.GetGroupMembers,
+	)
+	v1.PUT(
+		DeleteGroupMemberURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyGroupMemberUserID),
+		h.RequireAuthMiddleware,
+		h.UpdateGroupMember,
 	)
 	v1.DELETE(
 		DeleteGroupMemberURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyGroupMemberUserID),
