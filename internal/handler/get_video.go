@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"strings"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/dto"
 	"vilib-api/internal/service"
@@ -108,12 +109,21 @@ func (h *Handler) videoAccessURL(
 	return requestOrigin(c) + "/api/v1/" + path + "?token=" + access.HLSToken
 }
 
-// requestOrigin определяет схему и хост текущего запроса для формирования абсолютных URL ответа.
+// requestOrigin определяет схему и хост текущего запроса для формирования абсолютных URL
+// ответа. Хост берётся из X-Forwarded-Host (первое значение до запятой, если запрос прошёл
+// через несколько прокси), иначе — из Host самого запроса (§5.3 контракта Э2, S-08 ТЗ). Порт
+// отдельно не учитывается — обратный прокси передаёт Host уже с портом при необходимости.
 func requestOrigin(c *gin.Context) string {
 	scheme := "http"
 	if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
 		scheme = "https"
 	}
 
-	return scheme + "://" + c.Request.Host
+	host := c.Request.Host
+	if forwarded := c.GetHeader("X-Forwarded-Host"); forwarded != "" {
+		first, _, _ := strings.Cut(forwarded, ",")
+		host = strings.TrimSpace(first)
+	}
+
+	return scheme + "://" + host
 }

@@ -96,6 +96,45 @@ func TestHandler_GetVideo(t *testing.T) {
 		require.Equal(t, []string{"360p", "720p"}, response.Profiles)
 	})
 
+	t.Run("hls kind uses X-Forwarded-Host over request host (S-08)", func(t *testing.T) {
+		mc := minimock.NewController(t)
+
+		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		repo := setupCommitTx(mc)
+
+		svcMock.Auth.GetClaimsFromTokenMock.When("Bearer "+testToken).Then(&domain.AuthClaims{
+			UserID:           testUserID,
+			CurrentAccountID: testAccountID,
+		}, nil)
+		svcMock.Video.GetMock.
+			When(minimock.AnyContext, testAccountID, testGroupID, testUserID, testVideoID, false).
+			Then(domain.VideoAccess{
+				Kind:      domain.VideoAccessKindHLS,
+				HLSToken:  testHLSToken,
+				ExpiresAt: testExpiresAt,
+				Video:     domain.Video{ID: testVideoID, Status: domain.VideoStatusReady},
+			}, nil)
+
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
+		router := h.GetRouter()
+
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req.Header.Set("Authorization", "Bearer "+testToken)
+		req.Header.Set("X-Forwarded-Host", "public.example.com, internal-proxy.local")
+		req.Host = "internal-backend.local"
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var response dto.GetVideoResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		require.Contains(t, response.URL, "public.example.com")
+		require.NotContains(t, response.URL, "internal-backend.local")
+		require.NotContains(t, response.URL, "internal-proxy.local")
+	})
+
 	t.Run("original kind returns presigned url as is", func(t *testing.T) {
 		mc := minimock.NewController(t)
 		defer mc.Finish()
