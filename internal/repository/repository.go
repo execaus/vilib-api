@@ -18,6 +18,9 @@ import (
 //go:generate minimock -i VideoAsset -o ./repository_mocks/video_asset_mock.go
 //go:generate minimock -i Outbox -o ./repository_mocks/outbox_mock.go
 //go:generate minimock -i PasswordResetToken -o ./repository_mocks/password_reset_token_mock.go
+//go:generate minimock -i WatchProgress -o ./repository_mocks/watch_progress_mock.go
+//go:generate minimock -i WatchSession -o ./repository_mocks/watch_session_mock.go
+//go:generate minimock -i AssignmentParticipant -o ./repository_mocks/assignment_participant_mock.go
 
 // UserStatus определяет фильтр по активности пользователей при выборке.
 type UserStatus string
@@ -199,6 +202,92 @@ type PasswordResetToken interface {
 	DeleteByEmail(ctx context.Context, email string) error
 }
 
+// WatchProgress — репозиторий прогресса просмотра видео пользователем (§1.4, §3 дизайна
+// эпика Э3): объединённые интервалы heartbeat'ов и накопленные метрики.
+type WatchProgress interface {
+	// SelectForUpdate выбирает и блокирует (FOR UPDATE) строку прогресса пользователя по
+	// видео — первый шаг сериализации heartbeat'ов одной пары (user, video). Строка не
+	// найдена — ErrNotFound.
+	SelectForUpdate(ctx context.Context, userID, videoID uuid.UUID) (domain.WatchProgress, error)
+	// InsertEmpty создаёт пустую строку прогресса (first_at/last_at = now) — идемпотентно,
+	// ON CONFLICT по первичному ключу (user_id, video_id) ничего не делает. Вызывающая
+	// сторона обязана перечитать строку через SelectForUpdate, чтобы получить блокировку.
+	InsertEmpty(ctx context.Context, userID, videoID uuid.UUID, now time.Time) error
+	// Apply — единственный UPDATE применения принятого интервала heartbeat'а (§3 шаг 6):
+	// объединяет intervals оператором `+`, пересчитывает covered_ms без чтения-изменения в
+	// Go, увеличивает wall_ms на wallDeltaMs, обновляет last_position_ms/last_at и
+	// выставляет threshold_reached_at при первом достижении needMs (огромное значение —
+	// сентинел «длительность видео ещё не известна»).
+	Apply(
+		ctx context.Context,
+		userID, videoID uuid.UUID,
+		fromMs, toMs, positionMs, wallDeltaMs int64,
+		now time.Time, needMs int64,
+	) (domain.WatchProgress, error)
+	// UpdatePosition обновляет только позицию плеера и last_at — heartbeat, чей интервал не
+	// был зачтён целиком (отброшен или урезан до нуля).
+	UpdatePosition(
+		ctx context.Context, userID, videoID uuid.UUID, positionMs int64, now time.Time,
+	) (domain.WatchProgress, error)
+	// OnDurationKnown выставляет threshold_reached_at всем строкам видео, чьё покрытие уже
+	// достигло needMs, но порог ещё не был зафиксирован (§3, «Э3-Т6»: длительность видео
+	// появилась позже накопленного прогресса) — возвращает id таких пользователей.
+	OnDurationKnown(ctx context.Context, videoID uuid.UUID, needMs int64, now time.Time) ([]uuid.UUID, error)
+	// SelectByUserAndVideoIDs батчем выбирает прогресс пользователя по списку видео.
+	SelectByUserAndVideoIDs(ctx context.Context, userID uuid.UUID, videoIDs []uuid.UUID) ([]domain.WatchProgress, error)
+	// SelectByVideoIDs батчем выбирает прогресс всех пользователей по списку видео (отчёты).
+	SelectByVideoIDs(ctx context.Context, videoIDs []uuid.UUID) ([]domain.WatchProgress, error)
+}
+
+// WatchSession — репозиторий сессий просмотра: идемпотентность heartbeat'ов и защита от
+// перемотки в рамках одной сессии плеера (§1.5 дизайна эпика Э3).
+type WatchSession interface {
+	// SelectForUpdate выбирает и блокирует (FOR UPDATE) сессию по идентификатору — второй
+	// шаг сериализации heartbeat'ов (после блокировки строки прогресса, порядок блокировок
+	// фиксирован). Строка не найдена — ErrNotFound.
+	SelectForUpdate(ctx context.Context, sessionID uuid.UUID) (domain.WatchSession, error)
+	// Insert создаёт новую сессию просмотра — session_id генерирует клиент при открытии
+	// плеера.
+	Insert(
+		ctx context.Context, sessionID, userID, videoID uuid.UUID, now time.Time, positionMs int64,
+	) (domain.WatchSession, error)
+	// Update продвигает сессию на очередной принятый heartbeat: last_seq, last_at,
+	// last_position_ms.
+	Update(
+		ctx context.Context,
+		sessionID uuid.UUID,
+		seq int64,
+		now time.Time,
+		positionMs int64,
+	) (domain.WatchSession, error)
+	// DeleteOlderThan удаляет сессии, чей last_at старше cutoff — периодическая чистка
+	// watchdog'ом (В-52). Возвращает число удалённых строк.
+	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
+}
+
+// AssignmentParticipant — минимальный срез репозитория персональных записей участников
+// назначений, нужный алгоритму зачёта heartbeat'а (§3 шаг 7 дизайна эпика Э3). Остальные
+// методы (Insert/Select/Cancel и т.д., §4 дизайна эпика) добавляются в В-51.
+type AssignmentParticipant interface {
+	// UpdateStatusByUserVideo переводит статус участника из from в to для всех активных
+	// назначений видео videoID, в которых участвует userID. Возвращает id обновлённых
+	// назначений.
+	UpdateStatusByUserVideo(
+		ctx context.Context, userID, videoID uuid.UUID,
+		from, to domain.AssignmentParticipantStatus,
+	) ([]uuid.UUID, error)
+	// CompleteByUserVideo завершает участие userID во всех активных назначениях видео
+	// videoID, ещё не завершённых (assigned/in_progress) — условие WHERE в самом запросе
+	// гарантирует неизменяемость completed_* (Э3-Н1: повторный вызов не переписывает уже
+	// завершённых участников). Возвращает id завершённых назначений.
+	CompleteByUserVideo(
+		ctx context.Context,
+		userID, videoID uuid.UUID,
+		completedAt time.Time, coveragePct, thresholdPct int,
+		sessionID *uuid.UUID,
+	) ([]uuid.UUID, error)
+}
+
 // Outbox — репозиторий очереди исходящих событий Kafka (transactional outbox, §7.1 эпика).
 type Outbox interface {
 	// Insert кладёт событие в очередь публикации внутри текущей транзакции.
@@ -221,19 +310,25 @@ type Repository struct {
 	VideoAsset
 	Outbox
 	PasswordResetToken
+	WatchProgress
+	WatchSession
+	AssignmentParticipant
 }
 
 func NewRepository(provider *ExecutorProvider) *Repository {
 	return &Repository{
-		Account:            NewAccountRepository(provider),
-		User:               NewUserRepository(provider),
-		AccountRole:        NewAccountRoleRepository(provider),
-		UserGroup:          NewUserGroupRepository(provider),
-		GroupMember:        NewGroupMemberRepository(provider),
-		GroupRole:          NewGroupRoleRepository(provider),
-		Video:              NewVideoRepository(provider),
-		VideoAsset:         NewVideoAssetRepository(provider),
-		Outbox:             NewOutboxRepository(provider),
-		PasswordResetToken: NewPasswordResetTokenRepository(provider),
+		Account:               NewAccountRepository(provider),
+		User:                  NewUserRepository(provider),
+		AccountRole:           NewAccountRoleRepository(provider),
+		UserGroup:             NewUserGroupRepository(provider),
+		GroupMember:           NewGroupMemberRepository(provider),
+		GroupRole:             NewGroupRoleRepository(provider),
+		Video:                 NewVideoRepository(provider),
+		VideoAsset:            NewVideoAssetRepository(provider),
+		Outbox:                NewOutboxRepository(provider),
+		PasswordResetToken:    NewPasswordResetTokenRepository(provider),
+		WatchProgress:         NewWatchProgressRepository(provider),
+		WatchSession:          NewWatchSessionRepository(provider),
+		AssignmentParticipant: NewAssignmentParticipantRepository(provider),
 	}
 }
