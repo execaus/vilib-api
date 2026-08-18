@@ -18,4 +18,10 @@ type ConfigResponse struct {
 	TokenTTLSeconds int64 `json:"token_ttl_seconds"`
 	// PasswordMinLength — минимальная длина пароля пользователя.
 	PasswordMinLength int `json:"password_min_length"`
+	// HeartbeatSeconds — ожидаемый период отправки heartbeat'ов плеером, секунды (§3 дизайна
+	// эпика Э3).
+	HeartbeatSeconds int64 `json:"heartbeat_seconds"`
+	// CompletionThreshold — доля покрытия видео (0;1], после которой просмотр считается
+	// подтверждённым (В-1 решение владельца, §3 дизайна эпика Э3).
+	CompletionThreshold float64 `json:"completion_threshold"`
 }

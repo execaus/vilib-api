@@ -45,14 +45,16 @@ const (
 
 // Дефолты обработки видео.
 const (
-	defaultVideoMaxUploadSizeBytes    int64 = 4294967296
-	defaultVideoMaxProcessingAttempts       = 3
-	defaultVideoUploadTimeout               = 2 * time.Hour
-	defaultVideoQueuedTimeout               = time.Hour
-	defaultVideoProcessingTimeout           = 3 * time.Hour
-	defaultVideoWatchdogInterval            = time.Minute
-	defaultVideoHLSURLTTL                   = time.Hour
-	defaultVideoHLSSegmentTTL               = time.Hour
+	defaultVideoMaxUploadSizeBytes       int64 = 4294967296
+	defaultVideoMaxProcessingAttempts          = 3
+	defaultVideoUploadTimeout                  = 2 * time.Hour
+	defaultVideoQueuedTimeout                  = time.Hour
+	defaultVideoProcessingTimeout              = 3 * time.Hour
+	defaultVideoWatchdogInterval               = time.Minute
+	defaultVideoHLSURLTTL                      = time.Hour
+	defaultVideoHLSSegmentTTL                  = time.Hour
+	defaultVideoWatchCompletionThreshold       = 0.95
+	defaultVideoWatchHeartbeatInterval         = 10 * time.Second
 )
 
 // defaultVideoProfiles — дефолтный набор профилей качества видео.
@@ -113,4 +115,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("video.watchdog_interval", defaultVideoWatchdogInterval)
 	v.SetDefault("video.hls_url_ttl", defaultVideoHLSURLTTL)
 	v.SetDefault("video.hls_segment_ttl", defaultVideoHLSSegmentTTL)
+	v.SetDefault("video.watch_completion_threshold", defaultVideoWatchCompletionThreshold)
+	v.SetDefault("video.watch_heartbeat_interval", defaultVideoWatchHeartbeatInterval)
 }

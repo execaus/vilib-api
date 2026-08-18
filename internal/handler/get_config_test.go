@@ -28,6 +28,8 @@ func TestHandler_GetConfig(t *testing.T) {
 		Profiles:            []string{"360p", "720p"},
 		TokenTTLSeconds:     86400,
 		PasswordMinLength:   8,
+		HeartbeatSeconds:    10,
+		CompletionThreshold: 0.95,
 	}
 
 	mc := minimock.NewController(t)

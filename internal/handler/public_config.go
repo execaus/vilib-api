@@ -21,5 +21,7 @@ func BuildPublicConfig(cfg config.Config) dto.ConfigResponse {
 		Profiles:            cfg.Video.Profiles,
 		TokenTTLSeconds:     int64(service.DefaultJWTExpireDuration.Seconds()),
 		PasswordMinLength:   service.PasswordMinLength,
+		HeartbeatSeconds:    int64(cfg.Video.WatchHeartbeatInterval.Seconds()),
+		CompletionThreshold: cfg.Video.WatchCompletionThreshold,
 	}
 }

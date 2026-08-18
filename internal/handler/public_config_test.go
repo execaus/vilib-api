@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"testing"
+	"time"
 	"vilib-api/config"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/handler"
@@ -18,9 +19,11 @@ func TestBuildPublicConfig(t *testing.T) {
 
 	cfg := config.Config{
 		Video: config.VideoConfig{
-			MaxUploadSizeBytes: 4 << 30,
-			Profiles:           []string{"360p", "720p", "1080p"},
-			HLSURLTTL:          3600 * 1e9,
+			MaxUploadSizeBytes:       4 << 30,
+			Profiles:                 []string{"360p", "720p", "1080p"},
+			HLSURLTTL:                3600 * 1e9,
+			WatchHeartbeatInterval:   10 * time.Second,
+			WatchCompletionThreshold: 0.95,
 		},
 	}
 
@@ -33,4 +36,6 @@ func TestBuildPublicConfig(t *testing.T) {
 	require.Equal(t, []string{"360p", "720p", "1080p"}, got.Profiles)
 	require.Equal(t, int64(service.DefaultJWTExpireDuration.Seconds()), got.TokenTTLSeconds)
 	require.Equal(t, service.PasswordMinLength, got.PasswordMinLength)
+	require.Equal(t, int64(10), got.HeartbeatSeconds)
+	require.InDelta(t, 0.95, got.CompletionThreshold, 0)
 }

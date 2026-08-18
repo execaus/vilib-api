@@ -112,6 +112,12 @@ type VideoConfig struct {
 	HLSURLTTL time.Duration `mapstructure:"hls_url_ttl"`
 	// HLSSegmentTTL — время жизни подписанной ссылки на сегмент HLS.
 	HLSSegmentTTL time.Duration `mapstructure:"hls_segment_ttl"`
+	// WatchCompletionThreshold — доля покрытия видео (0;1], после которой просмотр считается
+	// подтверждённым (В-1 решение владельца, §3 дизайна эпика Э3).
+	WatchCompletionThreshold float64 `mapstructure:"watch_completion_threshold"`
+	// WatchHeartbeatInterval — ожидаемый период отправки heartbeat'ов плеером; используется как
+	// базовый интервал для расчёта допустимой длины первого интервала сессии (§3 дизайна эпика Э3).
+	WatchHeartbeatInterval time.Duration `mapstructure:"watch_heartbeat_interval"`
 }
 
 // LoadConfig собирает конфигурацию из файла (путь — CONFIG_PATH, по умолчанию config/config.yaml)
@@ -189,14 +195,19 @@ func (c Config) Validate() error {
 		missing = append(missing, "video.max_processing_attempts")
 	}
 
+	if c.Video.WatchCompletionThreshold <= 0 || c.Video.WatchCompletionThreshold > 1 {
+		missing = append(missing, "video.watch_completion_threshold")
+	}
+
 	positiveDurations := map[string]time.Duration{
-		"auth.password_reset_ttl":  c.Auth.PasswordResetTTL,
-		"video.upload_timeout":     c.Video.UploadTimeout,
-		"video.queued_timeout":     c.Video.QueuedTimeout,
-		"video.processing_timeout": c.Video.ProcessingTimeout,
-		"video.watchdog_interval":  c.Video.WatchdogInterval,
-		"video.hls_url_ttl":        c.Video.HLSURLTTL,
-		"video.hls_segment_ttl":    c.Video.HLSSegmentTTL,
+		"auth.password_reset_ttl":        c.Auth.PasswordResetTTL,
+		"video.upload_timeout":           c.Video.UploadTimeout,
+		"video.queued_timeout":           c.Video.QueuedTimeout,
+		"video.processing_timeout":       c.Video.ProcessingTimeout,
+		"video.watchdog_interval":        c.Video.WatchdogInterval,
+		"video.hls_url_ttl":              c.Video.HLSURLTTL,
+		"video.hls_segment_ttl":          c.Video.HLSSegmentTTL,
+		"video.watch_heartbeat_interval": c.Video.WatchHeartbeatInterval,
 	}
 	for key, value := range positiveDurations {
 		if value <= 0 {

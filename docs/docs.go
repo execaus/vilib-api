@@ -2553,6 +2553,14 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "completion_threshold": {
+                    "description": "CompletionThreshold — доля покрытия видео (0;1], после которой просмотр считается\nподтверждённым (В-1 решение владельца, §3 дизайна эпика Э3).",
+                    "type": "number"
+                },
+                "heartbeat_seconds": {
+                    "description": "HeartbeatSeconds — ожидаемый период отправки heartbeat'ов плеером, секунды (§3 дизайна\nэпика Э3).",
+                    "type": "integer"
+                },
                 "hls_url_ttl_seconds": {
                     "description": "HLSURLTTLSeconds — время жизни HLS-токена доступа к мастер-плейлисту, секунды.",
                     "type": "integer"

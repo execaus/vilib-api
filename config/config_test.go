@@ -39,6 +39,8 @@ func TestLoadConfig_UsesDefaultsWhenFileIsAbsent(t *testing.T) {
 	require.Equal(t, time.Minute, cfg.Video.WatchdogInterval)
 	require.Equal(t, time.Hour, cfg.Video.HLSURLTTL)
 	require.Equal(t, time.Hour, cfg.Video.HLSSegmentTTL)
+	require.InDelta(t, 0.95, cfg.Video.WatchCompletionThreshold, 0)
+	require.Equal(t, 10*time.Second, cfg.Video.WatchHeartbeatInterval)
 }
 
 // TestLoadConfig_EnvironmentOverridesDefaults проверяет, что переменные окружения переопределяют
@@ -58,6 +60,8 @@ func TestLoadConfig_EnvironmentOverridesDefaults(t *testing.T) {
 	t.Setenv("KAFKA_OUTBOX_POLL_INTERVAL", "750ms")
 	t.Setenv("VIDEO_PROFILES", "360p,720p")
 	t.Setenv("VIDEO_UPLOAD_TIMEOUT", "45m")
+	t.Setenv("VIDEO_WATCH_COMPLETION_THRESHOLD", "0.8")
+	t.Setenv("VIDEO_WATCH_HEARTBEAT_INTERVAL", "15s")
 
 	cfg, err := config.LoadConfig()
 	require.NoError(t, err)
@@ -75,6 +79,8 @@ func TestLoadConfig_EnvironmentOverridesDefaults(t *testing.T) {
 	require.Equal(t, 750*time.Millisecond, cfg.Kafka.OutboxPollInterval)
 	require.Equal(t, []string{"360p", "720p"}, cfg.Video.Profiles)
 	require.Equal(t, 45*time.Minute, cfg.Video.UploadTimeout)
+	require.InDelta(t, 0.8, cfg.Video.WatchCompletionThreshold, 0)
+	require.Equal(t, 15*time.Second, cfg.Video.WatchHeartbeatInterval)
 }
 
 // TestLoadConfig_ReadsValuesFromFile проверяет чтение значений из YAML-файла конфигурации.
@@ -132,14 +138,16 @@ func TestConfig_Validate(t *testing.T) {
 				ConsumerGroup:         "g",
 			},
 			Video: config.VideoConfig{
-				Profiles:              []string{"360p"},
-				MaxProcessingAttempts: 1,
-				UploadTimeout:         time.Hour,
-				QueuedTimeout:         time.Hour,
-				ProcessingTimeout:     time.Hour,
-				WatchdogInterval:      time.Hour,
-				HLSURLTTL:             time.Hour,
-				HLSSegmentTTL:         time.Hour,
+				Profiles:                 []string{"360p"},
+				MaxProcessingAttempts:    1,
+				UploadTimeout:            time.Hour,
+				QueuedTimeout:            time.Hour,
+				ProcessingTimeout:        time.Hour,
+				WatchdogInterval:         time.Hour,
+				HLSURLTTL:                time.Hour,
+				HLSSegmentTTL:            time.Hour,
+				WatchCompletionThreshold: 0.95,
+				WatchHeartbeatInterval:   10 * time.Second,
 			},
 		}
 	}
@@ -208,6 +216,21 @@ func TestConfig_Validate(t *testing.T) {
 			name:    "zero upload timeout",
 			mutate:  func(cfg *config.Config) { cfg.Video.UploadTimeout = 0 },
 			wantErr: "video.upload_timeout",
+		},
+		{
+			name:    "zero watch completion threshold",
+			mutate:  func(cfg *config.Config) { cfg.Video.WatchCompletionThreshold = 0 },
+			wantErr: "video.watch_completion_threshold",
+		},
+		{
+			name:    "watch completion threshold above one",
+			mutate:  func(cfg *config.Config) { cfg.Video.WatchCompletionThreshold = 1.01 },
+			wantErr: "video.watch_completion_threshold",
+		},
+		{
+			name:    "zero watch heartbeat interval",
+			mutate:  func(cfg *config.Config) { cfg.Video.WatchHeartbeatInterval = 0 },
+			wantErr: "video.watch_heartbeat_interval",
 		},
 	}
 
