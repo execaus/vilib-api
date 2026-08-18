@@ -293,6 +293,17 @@ func TestService_GroupRole_GetAll(t *testing.T) {
 			want:    nil,
 			wantErr: errSomeError,
 		},
+		{
+			// Организация без созданных ролей групп — пустой список, а не 404 (В-43).
+			name: "no group roles returns empty list without error",
+			setupMocks: func(account *service_mocks.AccountMock, repo *repository_mocks.GroupRoleMock) {
+				account.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).Return(nil)
+				repo.SelectByAccountMock.Expect(minimock.AnyContext, testAccountID).
+					Return(nil, repository.ErrNotFound)
+			},
+			want:    []domain.GroupRole{},
+			wantErr: nil,
+		},
 	}
 
 	for _, tt := range tests {

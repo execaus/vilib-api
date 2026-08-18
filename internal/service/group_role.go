@@ -161,6 +161,11 @@ func (s *GroupRoleService) GetAll(
 	// Получение всех ролей групп аккаунта
 	roles, err := s.repo.SelectByAccount(ctx, accountID)
 	if err != nil {
+		// Пустой набор ролей групп — не ошибка, а legitimate пустой список (симметрично
+		// GetByAccountID): аккаунт без созданных ролей групп не должен отвечать 404.
+		if errors.Is(err, repository.ErrNotFound) {
+			return []domain.GroupRole{}, nil
+		}
 		zap.L().Error(err.Error())
 		return nil, err
 	}
