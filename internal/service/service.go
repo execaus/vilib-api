@@ -26,6 +26,7 @@ import (
 //go:generate minimock -i Access -o ./service_mocks/access_mock.go
 //go:generate minimock -i Outbox -o ./service_mocks/outbox_mock.go
 //go:generate minimock -i Profile -o ./service_mocks/profile_mock.go
+//go:generate minimock -i WatchProgress -o ./service_mocks/watch_progress_mock.go
 //go:generate minimock -i vilib-api/internal/s3.S3 -o ./service_mocks/s3_mock.go
 
 type Auth interface {
@@ -332,6 +333,25 @@ type Outbox interface {
 	Publish(ctx context.Context, topic, key string, payload []byte) error
 }
 
+// WatchProgress — прогресс просмотра видео пользователем: приём heartbeat'ов плеера, чтение
+// текущего состояния и досчёт зачёта после появления длительности видео (§3 дизайна эпика Э3).
+type WatchProgress interface {
+	// Heartbeat принимает отрезок непрерывного воспроизведения от плеера и обновляет прогресс
+	// просмотра инициатора по видео (шаги 1–8 алгоритма зачёта, §3 дизайна эпика).
+	Heartbeat(
+		ctx context.Context,
+		accountID, groupID, initiatorID, videoID uuid.UUID,
+		in domain.Heartbeat,
+	) (domain.WatchState, error)
+	// Get возвращает текущее состояние прогресса просмотра инициатора по видео без изменений
+	// (нет строки прогресса — нулевое состояние).
+	Get(ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID) (domain.WatchState, error)
+	// OnDurationKnown досчитывает зачёт для пользователей, чей прогресс уже достиг порога до
+	// того, как стала известна длительность видео (§3, «Э3-Т6») — вызывается из
+	// VideoService.ApplyProcessingCompleted при переходе видео в ready.
+	OnDurationKnown(ctx context.Context, videoID uuid.UUID, durationMs int64) error
+}
+
 // Profile агрегирует контекст текущего пользователя для ручки GET /me (§2.3 дизайна эпика Э2).
 type Profile interface {
 	// Get собирает профиль пользователя userID: организацию текущей строки, все организации
@@ -355,6 +375,7 @@ type Service struct {
 	Access
 	Outbox
 	Profile
+	WatchProgress
 }
 
 func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *repository.Repository) *Service {
@@ -377,6 +398,14 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 	s.Access = NewAccessService(s)
 	s.Outbox = NewOutboxService(r.Outbox, s)
 	s.Profile = NewProfileService(s)
+	s.WatchProgress = NewWatchProgressService(
+		r.WatchProgress,
+		r.WatchSession,
+		r.AssignmentParticipant,
+		r.Video,
+		s,
+		cfg.Video,
+	)
 
 	return s
 }

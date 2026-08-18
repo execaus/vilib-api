@@ -569,25 +569,28 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 // videoApplyProcessingMocks собирает моки, используемые Apply* методами обработки событий
 // воркера (§7.2 эпика).
 type videoApplyProcessingMocks struct {
-	Video      *repository_mocks.VideoMock
-	VideoAsset *service_mocks.VideoAssetMock
-	Outbox     *service_mocks.OutboxMock
-	S3         *service_mocks.S3Mock
+	Video         *repository_mocks.VideoMock
+	VideoAsset    *service_mocks.VideoAssetMock
+	Outbox        *service_mocks.OutboxMock
+	S3            *service_mocks.S3Mock
+	WatchProgress *service_mocks.WatchProgressMock
 }
 
 func newVideoApplyProcessingMocks(mc *minimock.Controller) videoApplyProcessingMocks {
 	return videoApplyProcessingMocks{
-		Video:      repository_mocks.NewVideoMock(mc),
-		VideoAsset: service_mocks.NewVideoAssetMock(mc),
-		Outbox:     service_mocks.NewOutboxMock(mc),
-		S3:         service_mocks.NewS3Mock(mc),
+		Video:         repository_mocks.NewVideoMock(mc),
+		VideoAsset:    service_mocks.NewVideoAssetMock(mc),
+		Outbox:        service_mocks.NewOutboxMock(mc),
+		S3:            service_mocks.NewS3Mock(mc),
+		WatchProgress: service_mocks.NewWatchProgressMock(mc),
 	}
 }
 
 // newVideoApplyService собирает VideoService поверх мока репозитория видео и моков
-// межсервисных зависимостей (VideoAsset, Outbox), используемых Apply*-методами.
+// межсервисных зависимостей (VideoAsset, Outbox, WatchProgress — досчёт Э3-Т6), используемых
+// Apply*-методами.
 func newVideoApplyService(m videoApplyProcessingMocks, cfg service.VideoServiceConfig) *service.VideoService {
-	svc := &service.Service{VideoAsset: m.VideoAsset, Outbox: m.Outbox}
+	svc := &service.Service{VideoAsset: m.VideoAsset, Outbox: m.Outbox, WatchProgress: m.WatchProgress}
 	return service.NewVideoService(m.S3, m.Video, svc, cfg)
 }
 
@@ -733,6 +736,10 @@ func TestService_Video_ApplyProcessingCompleted(t *testing.T) {
 			calls = append(calls, string(kind)+":"+string(profile))
 			return domain.VideoAsset{}, nil
 		})
+
+		// Досчёт зачёта для тех, кто уже посмотрел видео на нужную долю до появления
+		// длительности (Э3-Т6, §3 дизайна эпика Э3).
+		m.WatchProgress.OnDurationKnownMock.Expect(minimock.AnyContext, testVideoID, durationMs).Return(nil)
 
 		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Bucket: testBucket, Video: videoConfig(4 << 30)})
 

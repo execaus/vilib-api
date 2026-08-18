@@ -698,7 +698,24 @@ func (s *VideoService) ApplyProcessingCompleted(
 	}
 
 	if updated {
-		return s.registerProcessingResults(ctx, evt.VideoID, p.Results)
+		if resultsErr := s.registerProcessingResults(ctx, evt.VideoID, p.Results); resultsErr != nil {
+			return resultsErr
+		}
+
+		// Досчёт зачёта для тех, кто уже посмотрел видео на нужную долю до появления
+		// длительности (Э3-Т6, §3 дизайна эпика Э3) — только если она пришла в этом событии.
+		if p.Metadata.DurationMs > 0 {
+			if durationErr := s.srv.WatchProgress.OnDurationKnown(
+				ctx,
+				evt.VideoID,
+				p.Metadata.DurationMs,
+			); durationErr != nil {
+				zap.L().Error(durationErr.Error())
+				return durationErr
+			}
+		}
+
+		return nil
 	}
 
 	return s.handleIgnoredProcessingCompleted(ctx, evt)
