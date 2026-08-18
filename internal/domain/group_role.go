@@ -15,6 +15,9 @@ const (
 	GroupPermissionVideoWatch
 	// GroupPermissionManageVideo разрешено ли загружать, редактировать и удалять видео в группе.
 	GroupPermissionManageVideo
+	// GroupPermissionManageAssignments разрешено ли назначать обязательное обучение участникам
+	// группы и видеть отчёт по группе.
+	GroupPermissionManageAssignments
 )
 
 type GroupRole struct {

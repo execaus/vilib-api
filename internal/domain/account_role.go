@@ -24,6 +24,9 @@ const (
 	AccountPermissionVideoWatch
 	// AccountPermissionManageVideo разрешено ли загружать, редактировать и удалять видео.
 	AccountPermissionManageVideo
+	// AccountPermissionManageAssignments разрешено ли назначать обязательное обучение и видеть
+	// отчёты во всей организации.
+	AccountPermissionManageAssignments
 )
 
 type AccountRole struct {
