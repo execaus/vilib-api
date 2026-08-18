@@ -105,16 +105,8 @@ func (s *VideoService) Get(
 	accountID, groupID, initiatorID, videoID uuid.UUID,
 	isPreferOriginal bool,
 ) (domain.VideoAccess, error) {
-	// OR-логика: аккаунтное право ИЛИ групповое право
-	if err := s.srv.Access.IsCheckAccountAction(
-		ctx,
-		accountID,
-		initiatorID,
-		domain.AccountPermissionVideoWatch,
-	); err != nil {
-		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionVideoWatch); err != nil {
-			return domain.VideoAccess{}, ErrForbidden
-		}
+	if err := s.canWatch(ctx, accountID, groupID, initiatorID); err != nil {
+		return domain.VideoAccess{}, err
 	}
 
 	// Получение видео по ID
@@ -954,16 +946,8 @@ func (s *VideoService) GetAll(
 	ctx context.Context,
 	accountID, groupID, initiatorID uuid.UUID,
 ) ([]domain.VideoListItem, error) {
-	// OR-логика: аккаунтное право ИЛИ групповое право
-	if err := s.srv.Access.IsCheckAccountAction(
-		ctx,
-		accountID,
-		initiatorID,
-		domain.AccountPermissionVideoWatch,
-	); err != nil {
-		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionVideoWatch); err != nil {
-			return nil, ErrForbidden
-		}
+	if err := s.canWatch(ctx, accountID, groupID, initiatorID); err != nil {
+		return nil, err
 	}
 
 	canManage := s.canManageVideo(ctx, accountID, groupID, initiatorID)
@@ -1102,6 +1086,35 @@ func newVideoListItem(video domain.Video, assets []domain.VideoAsset, canManage 
 	}
 
 	return item
+}
+
+// canWatch проверяет право инициатора на просмотр видео группы (Get, GetAll и список видео
+// группы): аккаунтное или групповое VideoWatch, а также аккаунтное или групповое ManageVideo —
+// право управления видео включает право его просмотра (решение ведущего по Д-6 ревью эпика Э2).
+// Owner (аккаунта или группы) проходит проверку автоматически внутри IsCheckAccountAction и
+// isCheckGroupAction. Ни одно из прав не выполняется — ErrForbidden.
+func (s *VideoService) canWatch(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) error {
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx, accountID, initiatorID, domain.AccountPermissionVideoWatch,
+	); err == nil {
+		return nil
+	}
+
+	if err := s.srv.Access.IsCheckAccountAction(
+		ctx, accountID, initiatorID, domain.AccountPermissionManageVideo,
+	); err == nil {
+		return nil
+	}
+
+	if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionVideoWatch); err == nil {
+		return nil
+	}
+
+	if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo); err == nil {
+		return nil
+	}
+
+	return ErrForbidden
 }
 
 // canManageVideo определяет, доступно ли инициатору право ManageVideo — аккаунтное или

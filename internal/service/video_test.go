@@ -1515,8 +1515,11 @@ func TestService_Video_Get(t *testing.T) {
 		groupMember := service_mocks.NewGroupMemberMock(mc)
 
 		access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionVideoWatch).
-			Return(service.ErrForbidden)
+			When(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionVideoWatch).
+			Then(service.ErrForbidden)
+		access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
+			Then(service.ErrForbidden)
 		groupMember.GetByUserIDAndGroupIDMock.
 			Expect(minimock.AnyContext, testUserID, testGroupID).
 			Return(domain.GroupMember{}, service.ErrForbidden)
@@ -1527,6 +1530,86 @@ func TestService_Video_Get(t *testing.T) {
 		_, err := videoSvc.Get(minimock.AnyContext, testAccountID, testGroupID, testUserID, testVideoID, false)
 
 		require.ErrorIs(t, err, service.ErrForbidden)
+	})
+
+	t.Run("account manage video right without video watch grants access", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+
+		access := service_mocks.NewAccessMock(mc)
+		videoRepo := repository_mocks.NewVideoMock(mc)
+		videoAsset := service_mocks.NewVideoAssetMock(mc)
+		s3 := service_mocks.NewS3Mock(mc)
+
+		access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionVideoWatch).
+			Then(service.ErrForbidden)
+		access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
+			Then(nil)
+
+		video := domain.Video{ID: testVideoID, GroupID: testGroupID, Status: domain.VideoStatusQueued}
+		videoRepo.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(&video, nil)
+		videoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return([]domain.VideoAsset{originalAsset}, nil)
+		s3.PresignGetObjectMock.
+			Expect(minimock.AnyContext, testBucket, originalAsset.ObjectKey, domain.VideoStreamURLTTL).
+			Return(testOrigURL, nil)
+
+		svc := service.Service{Access: access, VideoAsset: videoAsset}
+		videoSvc := service.NewVideoService(
+			s3, videoRepo, &svc, service.VideoServiceConfig{Bucket: testBucket},
+		)
+
+		got, err := videoSvc.Get(minimock.AnyContext, testAccountID, testGroupID, testUserID, testVideoID, false)
+
+		require.NoError(t, err)
+		require.Equal(t, domain.VideoAccessKindOriginal, got.Kind)
+	})
+
+	t.Run("group manage video right without video watch grants access", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+
+		access := service_mocks.NewAccessMock(mc)
+		groupMember := service_mocks.NewGroupMemberMock(mc)
+		groupRole := service_mocks.NewGroupRoleMock(mc)
+		videoRepo := repository_mocks.NewVideoMock(mc)
+		videoAsset := service_mocks.NewVideoAssetMock(mc)
+		s3 := service_mocks.NewS3Mock(mc)
+
+		access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionVideoWatch).
+			Then(service.ErrForbidden)
+		access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
+			Then(service.ErrForbidden)
+
+		roleID := uuid.New()
+		groupMember.GetByUserIDAndGroupIDMock.
+			Expect(minimock.AnyContext, testUserID, testGroupID).
+			Return(domain.GroupMember{RoleID: roleID}, nil)
+		groupRole.GetByIDMock.
+			When(minimock.AnyContext, roleID).
+			Then([]domain.GroupRole{{PermissionMask: domain.PermissionMask(1 << domain.GroupPermissionManageVideo)}}, nil)
+
+		video := domain.Video{ID: testVideoID, GroupID: testGroupID, Status: domain.VideoStatusQueued}
+		videoRepo.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(&video, nil)
+		videoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return([]domain.VideoAsset{originalAsset}, nil)
+		s3.PresignGetObjectMock.
+			Expect(minimock.AnyContext, testBucket, originalAsset.ObjectKey, domain.VideoStreamURLTTL).
+			Return(testOrigURL, nil)
+
+		svc := service.Service{Access: access, GroupMember: groupMember, GroupRole: groupRole, VideoAsset: videoAsset}
+		videoSvc := service.NewVideoService(
+			s3, videoRepo, &svc, service.VideoServiceConfig{Bucket: testBucket},
+		)
+
+		got, err := videoSvc.Get(minimock.AnyContext, testAccountID, testGroupID, testUserID, testVideoID, false)
+
+		require.NoError(t, err)
+		require.Equal(t, domain.VideoAccessKindOriginal, got.Kind)
 	})
 
 	t.Run("video belongs to another group is forbidden", func(t *testing.T) {
@@ -1631,6 +1714,9 @@ func TestService_Video_GetAll(t *testing.T) {
 		m.Access.IsCheckAccountActionMock.
 			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionVideoWatch).
 			Then(service.ErrForbidden)
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Then(service.ErrForbidden)
 		m.GroupMember.GetByUserIDAndGroupIDMock.
 			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
 			Return(domain.GroupMember{}, service.ErrForbidden)
@@ -1640,6 +1726,74 @@ func TestService_Video_GetAll(t *testing.T) {
 		_, err := videoSvc.GetAll(t.Context(), testAccountID, testGroupID, testInitiatorID)
 
 		require.ErrorIs(t, err, service.ErrForbidden)
+	})
+
+	t.Run("lists videos for initiator with only account manage video right", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoGetAllMocks(mc)
+
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionVideoWatch).
+			Then(service.ErrForbidden)
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Then(nil)
+
+		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA, videoB}, nil)
+		m.VideoAsset.SelectByVideoIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{videoA.ID, videoB.ID}).
+			Return(assets, nil)
+		m.User.GetByIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
+			Return([]domain.User{testAuthor}, nil)
+
+		videoSvc := newVideoGetAllService(m)
+
+		got, err := videoSvc.GetAll(t.Context(), testAccountID, testGroupID, testInitiatorID)
+
+		require.NoError(t, err)
+		require.Len(t, got, 2)
+		require.NotNil(t, got[0].Failure)
+	})
+
+	t.Run("lists videos for initiator with only group manage video right", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoGetAllMocks(mc)
+
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionVideoWatch).
+			Then(service.ErrForbidden)
+		m.Access.IsCheckAccountActionMock.
+			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+			Then(service.ErrForbidden)
+
+		roleID := uuid.New()
+		m.GroupMember.GetByUserIDAndGroupIDMock.
+			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
+			Return(domain.GroupMember{RoleID: roleID}, nil)
+		m.GroupRole.GetByIDMock.
+			When(minimock.AnyContext, roleID).
+			Then([]domain.GroupRole{{PermissionMask: domain.PermissionMask(1 << domain.GroupPermissionManageVideo)}}, nil)
+
+		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA, videoB}, nil)
+		m.VideoAsset.SelectByVideoIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{videoA.ID, videoB.ID}).
+			Return(assets, nil)
+		m.User.GetByIDsMock.
+			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
+			Return([]domain.User{testAuthor}, nil)
+
+		videoSvc := newVideoGetAllService(m)
+
+		got, err := videoSvc.GetAll(t.Context(), testAccountID, testGroupID, testInitiatorID)
+
+		require.NoError(t, err)
+		require.Len(t, got, 2)
+		require.NotNil(t, got[0].Failure)
 	})
 
 	t.Run("hides failure and returns sorted profiles without manage video right", func(t *testing.T) {
