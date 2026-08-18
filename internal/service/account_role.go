@@ -95,7 +95,8 @@ func (s *AccountRoleService) Create(
 		}
 	}
 
-	if _, err := s.repo.Insert(ctx, accountID, name, parentID, permission, isDefault, false); err != nil {
+	role, err := s.repo.Insert(ctx, accountID, name, parentID, permission, isDefault, false)
+	if err != nil {
 		if errors.Is(dberrors.AccountRoleErrors.ErrUniqueUniqueAccountRole, err) {
 			zap.L().Warn(err.Error())
 			return domain.AccountRole{}, ErrAccountRoleNameExists
@@ -104,13 +105,7 @@ func (s *AccountRoleService) Create(
 		return domain.AccountRole{}, err
 	}
 
-	roles, err := s.repo.SelectByAccountID(ctx, accountID)
-	if err != nil {
-		zap.L().Error(err.Error())
-		return domain.AccountRole{}, err
-	}
-
-	return roles[0], nil
+	return role, nil
 }
 
 // Update редактирует роль аккаунта — полная замена всех редактируемых полей (§4 дизайна эпика
@@ -213,6 +208,11 @@ func (s *AccountRoleService) GetAll(
 
 	roles, err := s.repo.SelectByAccountID(ctx, accountID)
 	if err != nil {
+		// Пустой набор ролей аккаунта — не ошибка, а legitimate пустой список (§3.4 дизайна
+		// эпика Э2, П-7): справочник для HR не обязан существовать заранее.
+		if errors.Is(err, repository.ErrNotFound) {
+			return []domain.AccountRole{}, nil
+		}
 		zap.L().Error(err.Error())
 		return nil, err
 	}

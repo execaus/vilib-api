@@ -267,7 +267,10 @@ func TestService_AccountRole_Create(t *testing.T) {
 			wantErr: service.ErrForbidden,
 		},
 		{
-			name: "select error",
+			// Регрессия: Create должен возвращать саму созданную роль (результат Insert), а не
+			// первую роль аккаунта из SelectByAccountID (там могла оказаться системная роль
+			// owner) — созданная роль отличается от неё именем, маской и accountID.
+			name: "success returns the inserted role, not the account's first role",
 			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.AccountRoleMock) {
 				access.IsCheckAccountActionMock.
 					Expect(
@@ -277,31 +280,22 @@ func TestService_AccountRole_Create(t *testing.T) {
 						domain.AccountPermissionManageRoles,
 					).Return(nil)
 				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testName, &testParentID, testPermission, false, false).
-					Return(domain.AccountRole{ID: testRoleID}, nil)
-				repo.SelectByAccountIDMock.Expect(minimock.AnyContext, testAccountID).
-					Return(nil, errSomeError)
+					Return(domain.AccountRole{
+						ID:             testRoleID,
+						Name:           testName,
+						AccountID:      testAccountID,
+						PermissionMask: testPermission,
+						ParentID:       &testParentID,
+					}, nil)
 			},
-			args:    args{testAccountID, testInitiatorID, testName, &testParentID, testPermission, false},
-			want:    domain.AccountRole{},
-			wantErr: errSomeError,
-		},
-		{
-			name: "success",
-			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.AccountRoleMock) {
-				access.IsCheckAccountActionMock.
-					Expect(
-						minimock.AnyContext,
-						testAccountID,
-						testInitiatorID,
-						domain.AccountPermissionManageRoles,
-					).Return(nil)
-				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testName, &testParentID, testPermission, false, false).
-					Return(domain.AccountRole{ID: testRoleID}, nil)
-				repo.SelectByAccountIDMock.Expect(minimock.AnyContext, testAccountID).
-					Return([]domain.AccountRole{{ID: testRoleID}}, nil)
+			args: args{testAccountID, testInitiatorID, testName, &testParentID, testPermission, false},
+			want: domain.AccountRole{
+				ID:             testRoleID,
+				Name:           testName,
+				AccountID:      testAccountID,
+				PermissionMask: testPermission,
+				ParentID:       &testParentID,
 			},
-			args:    args{testAccountID, testInitiatorID, testName, &testParentID, testPermission, false},
-			want:    domain.AccountRole{ID: testRoleID},
 			wantErr: nil,
 		},
 		{
@@ -373,8 +367,6 @@ func TestService_AccountRole_Create(t *testing.T) {
 				repo.ClearDefaultMock.Expect(minimock.AnyContext, testAccountID).Return(nil)
 				repo.InsertMock.Expect(minimock.AnyContext, testAccountID, testName, &testParentID, testPermission, true, false).
 					Return(domain.AccountRole{ID: testRoleID, IsDefault: true}, nil)
-				repo.SelectByAccountIDMock.Expect(minimock.AnyContext, testAccountID).
-					Return([]domain.AccountRole{{ID: testRoleID, IsDefault: true}}, nil)
 			},
 			args:    args{testAccountID, testInitiatorID, testName, &testParentID, testPermission, true},
 			want:    domain.AccountRole{ID: testRoleID, IsDefault: true},
@@ -506,6 +498,19 @@ func TestService_AccountRole_GetAll(t *testing.T) {
 			},
 			want:    nil,
 			wantErr: errSomeError,
+		},
+		{
+			// Аккаунт без созданных дополнительных ролей — пустой список, а не 404 (В-43).
+			name: "no roles returns empty list without error",
+			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.AccountRoleMock) {
+				access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageRoles).
+					Return(nil)
+				repo.SelectByAccountIDMock.Expect(minimock.AnyContext, testAccountID).
+					Return(nil, repository.ErrNotFound)
+			},
+			want:    []domain.AccountRole{},
+			wantErr: nil,
 		},
 	}
 
