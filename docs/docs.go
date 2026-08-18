@@ -1716,6 +1716,169 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}/progress": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает текущее состояние прогресса просмотра инициатора по видео без\nизменений — нет накопленного прогресса означает нулевое состояние (§3 дизайна\nэпика Э3).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watch-progress"
+                ],
+                "summary": "Текущий прогресс просмотра видео",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.WatchProgressResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Принимает отрезок непрерывного воспроизведения от плеера и обновляет прогресс\nпросмотра инициатора по видео — усекает перемотку, ограничивает покрытие\nвременем у стены, отбрасывает интервалы со скоростью выше 1.0 и идемпотентен\nпри повторе (session_id, seq), §3 дизайна эпика Э3.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "watch-progress"
+                ],
+                "summary": "Heartbeat прогресса просмотра видео",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Тело запроса",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.WatchHeartbeatRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.WatchProgressResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        },
         "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/videos": {
             "get": {
                 "security": [
@@ -3339,6 +3502,71 @@ const docTemplate = `{
                 "reason": {
                     "description": "Reason — человекочитаемая причина сбоя.",
                     "type": "string"
+                }
+            }
+        },
+        "dto.WatchHeartbeatRequest": {
+            "type": "object",
+            "required": [
+                "playback_rate",
+                "seq",
+                "session_id"
+            ],
+            "properties": {
+                "client_ts": {
+                    "description": "ClientTS — время клиента на момент отправки, используется только в логе.",
+                    "type": "string"
+                },
+                "from_ms": {
+                    "description": "FromMs — начало присланного отрезка воспроизведения в миллисекундах.",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "playback_rate": {
+                    "description": "PlaybackRate — скорость воспроизведения; выше 1.0 отбрасывает интервал целиком (В-1\nрешение владельца).",
+                    "type": "number"
+                },
+                "position_ms": {
+                    "description": "PositionMs — текущая позиция плеера, используется для «продолжить с».",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "seq": {
+                    "description": "Seq — порядковый номер heartbeat'а в рамках сессии, обеспечивает идемпотентность повторов.",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "session_id": {
+                    "description": "SessionID — идентификатор сессии просмотра, генерируется клиентом при открытии плеера.",
+                    "type": "string"
+                },
+                "to_ms": {
+                    "description": "ToMs — конец присланного отрезка; ToMs == FromMs означает отсутствие воспроизведения\n(пауза или перемотка) с прошлого heartbeat'а.",
+                    "type": "integer",
+                    "minimum": 0
+                }
+            }
+        },
+        "dto.WatchProgressResponse": {
+            "type": "object",
+            "properties": {
+                "accepted": {
+                    "type": "boolean"
+                },
+                "completed": {
+                    "type": "boolean"
+                },
+                "coverage_pct": {
+                    "type": "integer"
+                },
+                "covered_ms": {
+                    "type": "integer"
+                },
+                "duration_ms": {
+                    "type": "integer"
+                },
+                "last_position_ms": {
+                    "type": "integer"
                 }
             }
         }

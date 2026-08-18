@@ -51,6 +51,7 @@ var (
 	CompleteVideoUploadURL = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/complete")
 	GetVideoHLSMasterURL   = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/hls/master.m3u8")
 	GetVideoHLSPlaylistURL = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/hls/%s/playlist.m3u8")
+	VideoProgressURL       = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/progress")
 
 	ListUsersURL         = NewURLSupplier("accounts/%s/users")
 	ReactivateUserURL    = NewURLSupplier("accounts/%s/users/%s/reactivate")
@@ -237,6 +238,18 @@ func (h *Handler) GetRouter() *gin.Engine {
 	v1.GET(
 		GetVideoHLSPlaylistURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID, pathKeyProfile),
 		h.GetVideoHLSPlaylist,
+	)
+
+	// Прогресс просмотра (§3, §5 дизайна эпика Э3).
+	v1.POST(
+		VideoProgressURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		h.RequireAuthMiddleware,
+		h.PostVideoProgress,
+	)
+	v1.GET(
+		VideoProgressURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		h.RequireAuthMiddleware,
+		h.GetVideoProgress,
 	)
 
 	return engine
