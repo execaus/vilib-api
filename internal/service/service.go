@@ -309,6 +309,21 @@ type Access interface {
 		accountID, initiatorID, groupID uuid.UUID,
 		accountAction, groupAction domain.PermissionFlag,
 	) error
+	// CanManageAssignments проверяет право инициатора назначать обучение в области groupID —
+	// группе видео назначения (§2 дизайна эпика Э3, решение В-3): аккаунтное
+	// ManageAssignments (в т.ч. Owner) или групповое ManageAssignments (в т.ч. Owner группы)
+	// при членстве в группе.
+	CanManageAssignments(ctx context.Context, accountID, initiatorID, groupID uuid.UUID) error
+	// CanWatchVideo определяет, может ли userID смотреть видео группы groupID (§2 дизайна
+	// эпика Э3): аккаунтное VideoWatch/ManageVideo ИЛИ, при членстве, групповое
+	// VideoWatch/ManageVideo/Owner. В отличие от IsCheck*Action не возвращает ошибку —
+	// используется там, где отсутствие доступа не единственная причина отказа (В-4, отчёты).
+	CanWatchVideo(ctx context.Context, accountID, userID, groupID uuid.UUID) bool
+	// ManagedAssignmentGroups определяет область чтения отчётов по назначениям инициатора
+	// (В-8): all=true — аккаунтное право ManageAssignments/Owner (видны все назначения
+	// аккаунта); иначе — список групп, где у инициатора Owner/ManageAssignments в групповой
+	// роли (плюс собственные назначения по created_by — проверяется вызывающим сервисом).
+	ManagedAssignmentGroups(ctx context.Context, accountID, initiatorID uuid.UUID) (bool, []uuid.UUID, error)
 }
 
 // Outbox публикует события в очередь Kafka внутри текущей транзакции саги (transactional

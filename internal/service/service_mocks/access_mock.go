@@ -20,6 +20,20 @@ type AccessMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
+	funcCanManageAssignments          func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID) (err error)
+	funcCanManageAssignmentsOrigin    string
+	inspectFuncCanManageAssignments   func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID)
+	afterCanManageAssignmentsCounter  uint64
+	beforeCanManageAssignmentsCounter uint64
+	CanManageAssignmentsMock          mAccessMockCanManageAssignments
+
+	funcCanWatchVideo          func(ctx context.Context, accountID uuid.UUID, userID uuid.UUID, groupID uuid.UUID) (b1 bool)
+	funcCanWatchVideoOrigin    string
+	inspectFuncCanWatchVideo   func(ctx context.Context, accountID uuid.UUID, userID uuid.UUID, groupID uuid.UUID)
+	afterCanWatchVideoCounter  uint64
+	beforeCanWatchVideoCounter uint64
+	CanWatchVideoMock          mAccessMockCanWatchVideo
+
 	funcIsCheckAccountAction          func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, action domain.PermissionFlag) (err error)
 	funcIsCheckAccountActionOrigin    string
 	inspectFuncIsCheckAccountAction   func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, action domain.PermissionFlag)
@@ -33,6 +47,13 @@ type AccessMock struct {
 	afterIsCheckGroupActionCounter  uint64
 	beforeIsCheckGroupActionCounter uint64
 	IsCheckGroupActionMock          mAccessMockIsCheckGroupAction
+
+	funcManagedAssignmentGroups          func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID) (b1 bool, ua1 []uuid.UUID, err error)
+	funcManagedAssignmentGroupsOrigin    string
+	inspectFuncManagedAssignmentGroups   func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID)
+	afterManagedAssignmentGroupsCounter  uint64
+	beforeManagedAssignmentGroupsCounter uint64
+	ManagedAssignmentGroupsMock          mAccessMockManagedAssignmentGroups
 }
 
 // NewAccessMock returns a mock for mm_service.Access
@@ -43,15 +64,832 @@ func NewAccessMock(t minimock.Tester) *AccessMock {
 		controller.RegisterMocker(m)
 	}
 
+	m.CanManageAssignmentsMock = mAccessMockCanManageAssignments{mock: m}
+	m.CanManageAssignmentsMock.callArgs = []*AccessMockCanManageAssignmentsParams{}
+
+	m.CanWatchVideoMock = mAccessMockCanWatchVideo{mock: m}
+	m.CanWatchVideoMock.callArgs = []*AccessMockCanWatchVideoParams{}
+
 	m.IsCheckAccountActionMock = mAccessMockIsCheckAccountAction{mock: m}
 	m.IsCheckAccountActionMock.callArgs = []*AccessMockIsCheckAccountActionParams{}
 
 	m.IsCheckGroupActionMock = mAccessMockIsCheckGroupAction{mock: m}
 	m.IsCheckGroupActionMock.callArgs = []*AccessMockIsCheckGroupActionParams{}
 
+	m.ManagedAssignmentGroupsMock = mAccessMockManagedAssignmentGroups{mock: m}
+	m.ManagedAssignmentGroupsMock.callArgs = []*AccessMockManagedAssignmentGroupsParams{}
+
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mAccessMockCanManageAssignments struct {
+	optional           bool
+	mock               *AccessMock
+	defaultExpectation *AccessMockCanManageAssignmentsExpectation
+	expectations       []*AccessMockCanManageAssignmentsExpectation
+
+	callArgs []*AccessMockCanManageAssignmentsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AccessMockCanManageAssignmentsExpectation specifies expectation struct of the Access.CanManageAssignments
+type AccessMockCanManageAssignmentsExpectation struct {
+	mock               *AccessMock
+	params             *AccessMockCanManageAssignmentsParams
+	paramPtrs          *AccessMockCanManageAssignmentsParamPtrs
+	expectationOrigins AccessMockCanManageAssignmentsExpectationOrigins
+	results            *AccessMockCanManageAssignmentsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AccessMockCanManageAssignmentsParams contains parameters of the Access.CanManageAssignments
+type AccessMockCanManageAssignmentsParams struct {
+	ctx         context.Context
+	accountID   uuid.UUID
+	initiatorID uuid.UUID
+	groupID     uuid.UUID
+}
+
+// AccessMockCanManageAssignmentsParamPtrs contains pointers to parameters of the Access.CanManageAssignments
+type AccessMockCanManageAssignmentsParamPtrs struct {
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	initiatorID *uuid.UUID
+	groupID     *uuid.UUID
+}
+
+// AccessMockCanManageAssignmentsResults contains results of the Access.CanManageAssignments
+type AccessMockCanManageAssignmentsResults struct {
+	err error
+}
+
+// AccessMockCanManageAssignmentsOrigins contains origins of expectations of the Access.CanManageAssignments
+type AccessMockCanManageAssignmentsExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originInitiatorID string
+	originGroupID     string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) Optional() *mAccessMockCanManageAssignments {
+	mmCanManageAssignments.optional = true
+	return mmCanManageAssignments
+}
+
+// Expect sets up expected params for Access.CanManageAssignments
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) Expect(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID) *mAccessMockCanManageAssignments {
+	if mmCanManageAssignments.mock.funcCanManageAssignments != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Set")
+	}
+
+	if mmCanManageAssignments.defaultExpectation == nil {
+		mmCanManageAssignments.defaultExpectation = &AccessMockCanManageAssignmentsExpectation{}
+	}
+
+	if mmCanManageAssignments.defaultExpectation.paramPtrs != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by ExpectParams functions")
+	}
+
+	mmCanManageAssignments.defaultExpectation.params = &AccessMockCanManageAssignmentsParams{ctx, accountID, initiatorID, groupID}
+	mmCanManageAssignments.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCanManageAssignments.expectations {
+		if minimock.Equal(e.params, mmCanManageAssignments.defaultExpectation.params) {
+			mmCanManageAssignments.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCanManageAssignments.defaultExpectation.params)
+		}
+	}
+
+	return mmCanManageAssignments
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Access.CanManageAssignments
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) ExpectCtxParam1(ctx context.Context) *mAccessMockCanManageAssignments {
+	if mmCanManageAssignments.mock.funcCanManageAssignments != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Set")
+	}
+
+	if mmCanManageAssignments.defaultExpectation == nil {
+		mmCanManageAssignments.defaultExpectation = &AccessMockCanManageAssignmentsExpectation{}
+	}
+
+	if mmCanManageAssignments.defaultExpectation.params != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Expect")
+	}
+
+	if mmCanManageAssignments.defaultExpectation.paramPtrs == nil {
+		mmCanManageAssignments.defaultExpectation.paramPtrs = &AccessMockCanManageAssignmentsParamPtrs{}
+	}
+	mmCanManageAssignments.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCanManageAssignments.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmCanManageAssignments
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Access.CanManageAssignments
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) ExpectAccountIDParam2(accountID uuid.UUID) *mAccessMockCanManageAssignments {
+	if mmCanManageAssignments.mock.funcCanManageAssignments != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Set")
+	}
+
+	if mmCanManageAssignments.defaultExpectation == nil {
+		mmCanManageAssignments.defaultExpectation = &AccessMockCanManageAssignmentsExpectation{}
+	}
+
+	if mmCanManageAssignments.defaultExpectation.params != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Expect")
+	}
+
+	if mmCanManageAssignments.defaultExpectation.paramPtrs == nil {
+		mmCanManageAssignments.defaultExpectation.paramPtrs = &AccessMockCanManageAssignmentsParamPtrs{}
+	}
+	mmCanManageAssignments.defaultExpectation.paramPtrs.accountID = &accountID
+	mmCanManageAssignments.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmCanManageAssignments
+}
+
+// ExpectInitiatorIDParam3 sets up expected param initiatorID for Access.CanManageAssignments
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) ExpectInitiatorIDParam3(initiatorID uuid.UUID) *mAccessMockCanManageAssignments {
+	if mmCanManageAssignments.mock.funcCanManageAssignments != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Set")
+	}
+
+	if mmCanManageAssignments.defaultExpectation == nil {
+		mmCanManageAssignments.defaultExpectation = &AccessMockCanManageAssignmentsExpectation{}
+	}
+
+	if mmCanManageAssignments.defaultExpectation.params != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Expect")
+	}
+
+	if mmCanManageAssignments.defaultExpectation.paramPtrs == nil {
+		mmCanManageAssignments.defaultExpectation.paramPtrs = &AccessMockCanManageAssignmentsParamPtrs{}
+	}
+	mmCanManageAssignments.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmCanManageAssignments.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmCanManageAssignments
+}
+
+// ExpectGroupIDParam4 sets up expected param groupID for Access.CanManageAssignments
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) ExpectGroupIDParam4(groupID uuid.UUID) *mAccessMockCanManageAssignments {
+	if mmCanManageAssignments.mock.funcCanManageAssignments != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Set")
+	}
+
+	if mmCanManageAssignments.defaultExpectation == nil {
+		mmCanManageAssignments.defaultExpectation = &AccessMockCanManageAssignmentsExpectation{}
+	}
+
+	if mmCanManageAssignments.defaultExpectation.params != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Expect")
+	}
+
+	if mmCanManageAssignments.defaultExpectation.paramPtrs == nil {
+		mmCanManageAssignments.defaultExpectation.paramPtrs = &AccessMockCanManageAssignmentsParamPtrs{}
+	}
+	mmCanManageAssignments.defaultExpectation.paramPtrs.groupID = &groupID
+	mmCanManageAssignments.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmCanManageAssignments
+}
+
+// Inspect accepts an inspector function that has same arguments as the Access.CanManageAssignments
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) Inspect(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID)) *mAccessMockCanManageAssignments {
+	if mmCanManageAssignments.mock.inspectFuncCanManageAssignments != nil {
+		mmCanManageAssignments.mock.t.Fatalf("Inspect function is already set for AccessMock.CanManageAssignments")
+	}
+
+	mmCanManageAssignments.mock.inspectFuncCanManageAssignments = f
+
+	return mmCanManageAssignments
+}
+
+// Return sets up results that will be returned by Access.CanManageAssignments
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) Return(err error) *AccessMock {
+	if mmCanManageAssignments.mock.funcCanManageAssignments != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Set")
+	}
+
+	if mmCanManageAssignments.defaultExpectation == nil {
+		mmCanManageAssignments.defaultExpectation = &AccessMockCanManageAssignmentsExpectation{mock: mmCanManageAssignments.mock}
+	}
+	mmCanManageAssignments.defaultExpectation.results = &AccessMockCanManageAssignmentsResults{err}
+	mmCanManageAssignments.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCanManageAssignments.mock
+}
+
+// Set uses given function f to mock the Access.CanManageAssignments method
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) Set(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID) (err error)) *AccessMock {
+	if mmCanManageAssignments.defaultExpectation != nil {
+		mmCanManageAssignments.mock.t.Fatalf("Default expectation is already set for the Access.CanManageAssignments method")
+	}
+
+	if len(mmCanManageAssignments.expectations) > 0 {
+		mmCanManageAssignments.mock.t.Fatalf("Some expectations are already set for the Access.CanManageAssignments method")
+	}
+
+	mmCanManageAssignments.mock.funcCanManageAssignments = f
+	mmCanManageAssignments.mock.funcCanManageAssignmentsOrigin = minimock.CallerInfo(1)
+	return mmCanManageAssignments.mock
+}
+
+// When sets expectation for the Access.CanManageAssignments which will trigger the result defined by the following
+// Then helper
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) When(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID) *AccessMockCanManageAssignmentsExpectation {
+	if mmCanManageAssignments.mock.funcCanManageAssignments != nil {
+		mmCanManageAssignments.mock.t.Fatalf("AccessMock.CanManageAssignments mock is already set by Set")
+	}
+
+	expectation := &AccessMockCanManageAssignmentsExpectation{
+		mock:               mmCanManageAssignments.mock,
+		params:             &AccessMockCanManageAssignmentsParams{ctx, accountID, initiatorID, groupID},
+		expectationOrigins: AccessMockCanManageAssignmentsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmCanManageAssignments.expectations = append(mmCanManageAssignments.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Access.CanManageAssignments return parameters for the expectation previously defined by the When method
+func (e *AccessMockCanManageAssignmentsExpectation) Then(err error) *AccessMock {
+	e.results = &AccessMockCanManageAssignmentsResults{err}
+	return e.mock
+}
+
+// Times sets number of times Access.CanManageAssignments should be invoked
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) Times(n uint64) *mAccessMockCanManageAssignments {
+	if n == 0 {
+		mmCanManageAssignments.mock.t.Fatalf("Times of AccessMock.CanManageAssignments mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCanManageAssignments.expectedInvocations, n)
+	mmCanManageAssignments.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCanManageAssignments
+}
+
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) invocationsDone() bool {
+	if len(mmCanManageAssignments.expectations) == 0 && mmCanManageAssignments.defaultExpectation == nil && mmCanManageAssignments.mock.funcCanManageAssignments == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCanManageAssignments.mock.afterCanManageAssignmentsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCanManageAssignments.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CanManageAssignments implements mm_service.Access
+func (mmCanManageAssignments *AccessMock) CanManageAssignments(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, groupID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmCanManageAssignments.beforeCanManageAssignmentsCounter, 1)
+	defer mm_atomic.AddUint64(&mmCanManageAssignments.afterCanManageAssignmentsCounter, 1)
+
+	mmCanManageAssignments.t.Helper()
+
+	if mmCanManageAssignments.inspectFuncCanManageAssignments != nil {
+		mmCanManageAssignments.inspectFuncCanManageAssignments(ctx, accountID, initiatorID, groupID)
+	}
+
+	mm_params := AccessMockCanManageAssignmentsParams{ctx, accountID, initiatorID, groupID}
+
+	// Record call args
+	mmCanManageAssignments.CanManageAssignmentsMock.mutex.Lock()
+	mmCanManageAssignments.CanManageAssignmentsMock.callArgs = append(mmCanManageAssignments.CanManageAssignmentsMock.callArgs, &mm_params)
+	mmCanManageAssignments.CanManageAssignmentsMock.mutex.Unlock()
+
+	for _, e := range mmCanManageAssignments.CanManageAssignmentsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmCanManageAssignments.CanManageAssignmentsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCanManageAssignments.CanManageAssignmentsMock.defaultExpectation.Counter, 1)
+		mm_want := mmCanManageAssignments.CanManageAssignmentsMock.defaultExpectation.params
+		mm_want_ptrs := mmCanManageAssignments.CanManageAssignmentsMock.defaultExpectation.paramPtrs
+
+		mm_got := AccessMockCanManageAssignmentsParams{ctx, accountID, initiatorID, groupID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCanManageAssignments.t.Errorf("AccessMock.CanManageAssignments got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanManageAssignments.CanManageAssignmentsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmCanManageAssignments.t.Errorf("AccessMock.CanManageAssignments got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanManageAssignments.CanManageAssignmentsMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmCanManageAssignments.t.Errorf("AccessMock.CanManageAssignments got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanManageAssignments.CanManageAssignmentsMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmCanManageAssignments.t.Errorf("AccessMock.CanManageAssignments got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanManageAssignments.CanManageAssignmentsMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCanManageAssignments.t.Errorf("AccessMock.CanManageAssignments got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCanManageAssignments.CanManageAssignmentsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCanManageAssignments.CanManageAssignmentsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCanManageAssignments.t.Fatal("No results are set for the AccessMock.CanManageAssignments")
+		}
+		return (*mm_results).err
+	}
+	if mmCanManageAssignments.funcCanManageAssignments != nil {
+		return mmCanManageAssignments.funcCanManageAssignments(ctx, accountID, initiatorID, groupID)
+	}
+	mmCanManageAssignments.t.Fatalf("Unexpected call to AccessMock.CanManageAssignments. %v %v %v %v", ctx, accountID, initiatorID, groupID)
+	return
+}
+
+// CanManageAssignmentsAfterCounter returns a count of finished AccessMock.CanManageAssignments invocations
+func (mmCanManageAssignments *AccessMock) CanManageAssignmentsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCanManageAssignments.afterCanManageAssignmentsCounter)
+}
+
+// CanManageAssignmentsBeforeCounter returns a count of AccessMock.CanManageAssignments invocations
+func (mmCanManageAssignments *AccessMock) CanManageAssignmentsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCanManageAssignments.beforeCanManageAssignmentsCounter)
+}
+
+// Calls returns a list of arguments used in each call to AccessMock.CanManageAssignments.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCanManageAssignments *mAccessMockCanManageAssignments) Calls() []*AccessMockCanManageAssignmentsParams {
+	mmCanManageAssignments.mutex.RLock()
+
+	argCopy := make([]*AccessMockCanManageAssignmentsParams, len(mmCanManageAssignments.callArgs))
+	copy(argCopy, mmCanManageAssignments.callArgs)
+
+	mmCanManageAssignments.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCanManageAssignmentsDone returns true if the count of the CanManageAssignments invocations corresponds
+// the number of defined expectations
+func (m *AccessMock) MinimockCanManageAssignmentsDone() bool {
+	if m.CanManageAssignmentsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CanManageAssignmentsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CanManageAssignmentsMock.invocationsDone()
+}
+
+// MinimockCanManageAssignmentsInspect logs each unmet expectation
+func (m *AccessMock) MinimockCanManageAssignmentsInspect() {
+	for _, e := range m.CanManageAssignmentsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AccessMock.CanManageAssignments at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterCanManageAssignmentsCounter := mm_atomic.LoadUint64(&m.afterCanManageAssignmentsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CanManageAssignmentsMock.defaultExpectation != nil && afterCanManageAssignmentsCounter < 1 {
+		if m.CanManageAssignmentsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AccessMock.CanManageAssignments at\n%s", m.CanManageAssignmentsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AccessMock.CanManageAssignments at\n%s with params: %#v", m.CanManageAssignmentsMock.defaultExpectation.expectationOrigins.origin, *m.CanManageAssignmentsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCanManageAssignments != nil && afterCanManageAssignmentsCounter < 1 {
+		m.t.Errorf("Expected call to AccessMock.CanManageAssignments at\n%s", m.funcCanManageAssignmentsOrigin)
+	}
+
+	if !m.CanManageAssignmentsMock.invocationsDone() && afterCanManageAssignmentsCounter > 0 {
+		m.t.Errorf("Expected %d calls to AccessMock.CanManageAssignments at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CanManageAssignmentsMock.expectedInvocations), m.CanManageAssignmentsMock.expectedInvocationsOrigin, afterCanManageAssignmentsCounter)
+	}
+}
+
+type mAccessMockCanWatchVideo struct {
+	optional           bool
+	mock               *AccessMock
+	defaultExpectation *AccessMockCanWatchVideoExpectation
+	expectations       []*AccessMockCanWatchVideoExpectation
+
+	callArgs []*AccessMockCanWatchVideoParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AccessMockCanWatchVideoExpectation specifies expectation struct of the Access.CanWatchVideo
+type AccessMockCanWatchVideoExpectation struct {
+	mock               *AccessMock
+	params             *AccessMockCanWatchVideoParams
+	paramPtrs          *AccessMockCanWatchVideoParamPtrs
+	expectationOrigins AccessMockCanWatchVideoExpectationOrigins
+	results            *AccessMockCanWatchVideoResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AccessMockCanWatchVideoParams contains parameters of the Access.CanWatchVideo
+type AccessMockCanWatchVideoParams struct {
+	ctx       context.Context
+	accountID uuid.UUID
+	userID    uuid.UUID
+	groupID   uuid.UUID
+}
+
+// AccessMockCanWatchVideoParamPtrs contains pointers to parameters of the Access.CanWatchVideo
+type AccessMockCanWatchVideoParamPtrs struct {
+	ctx       *context.Context
+	accountID *uuid.UUID
+	userID    *uuid.UUID
+	groupID   *uuid.UUID
+}
+
+// AccessMockCanWatchVideoResults contains results of the Access.CanWatchVideo
+type AccessMockCanWatchVideoResults struct {
+	b1 bool
+}
+
+// AccessMockCanWatchVideoOrigins contains origins of expectations of the Access.CanWatchVideo
+type AccessMockCanWatchVideoExpectationOrigins struct {
+	origin          string
+	originCtx       string
+	originAccountID string
+	originUserID    string
+	originGroupID   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) Optional() *mAccessMockCanWatchVideo {
+	mmCanWatchVideo.optional = true
+	return mmCanWatchVideo
+}
+
+// Expect sets up expected params for Access.CanWatchVideo
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) Expect(ctx context.Context, accountID uuid.UUID, userID uuid.UUID, groupID uuid.UUID) *mAccessMockCanWatchVideo {
+	if mmCanWatchVideo.mock.funcCanWatchVideo != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Set")
+	}
+
+	if mmCanWatchVideo.defaultExpectation == nil {
+		mmCanWatchVideo.defaultExpectation = &AccessMockCanWatchVideoExpectation{}
+	}
+
+	if mmCanWatchVideo.defaultExpectation.paramPtrs != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by ExpectParams functions")
+	}
+
+	mmCanWatchVideo.defaultExpectation.params = &AccessMockCanWatchVideoParams{ctx, accountID, userID, groupID}
+	mmCanWatchVideo.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCanWatchVideo.expectations {
+		if minimock.Equal(e.params, mmCanWatchVideo.defaultExpectation.params) {
+			mmCanWatchVideo.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCanWatchVideo.defaultExpectation.params)
+		}
+	}
+
+	return mmCanWatchVideo
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Access.CanWatchVideo
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) ExpectCtxParam1(ctx context.Context) *mAccessMockCanWatchVideo {
+	if mmCanWatchVideo.mock.funcCanWatchVideo != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Set")
+	}
+
+	if mmCanWatchVideo.defaultExpectation == nil {
+		mmCanWatchVideo.defaultExpectation = &AccessMockCanWatchVideoExpectation{}
+	}
+
+	if mmCanWatchVideo.defaultExpectation.params != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Expect")
+	}
+
+	if mmCanWatchVideo.defaultExpectation.paramPtrs == nil {
+		mmCanWatchVideo.defaultExpectation.paramPtrs = &AccessMockCanWatchVideoParamPtrs{}
+	}
+	mmCanWatchVideo.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCanWatchVideo.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmCanWatchVideo
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Access.CanWatchVideo
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) ExpectAccountIDParam2(accountID uuid.UUID) *mAccessMockCanWatchVideo {
+	if mmCanWatchVideo.mock.funcCanWatchVideo != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Set")
+	}
+
+	if mmCanWatchVideo.defaultExpectation == nil {
+		mmCanWatchVideo.defaultExpectation = &AccessMockCanWatchVideoExpectation{}
+	}
+
+	if mmCanWatchVideo.defaultExpectation.params != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Expect")
+	}
+
+	if mmCanWatchVideo.defaultExpectation.paramPtrs == nil {
+		mmCanWatchVideo.defaultExpectation.paramPtrs = &AccessMockCanWatchVideoParamPtrs{}
+	}
+	mmCanWatchVideo.defaultExpectation.paramPtrs.accountID = &accountID
+	mmCanWatchVideo.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmCanWatchVideo
+}
+
+// ExpectUserIDParam3 sets up expected param userID for Access.CanWatchVideo
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) ExpectUserIDParam3(userID uuid.UUID) *mAccessMockCanWatchVideo {
+	if mmCanWatchVideo.mock.funcCanWatchVideo != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Set")
+	}
+
+	if mmCanWatchVideo.defaultExpectation == nil {
+		mmCanWatchVideo.defaultExpectation = &AccessMockCanWatchVideoExpectation{}
+	}
+
+	if mmCanWatchVideo.defaultExpectation.params != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Expect")
+	}
+
+	if mmCanWatchVideo.defaultExpectation.paramPtrs == nil {
+		mmCanWatchVideo.defaultExpectation.paramPtrs = &AccessMockCanWatchVideoParamPtrs{}
+	}
+	mmCanWatchVideo.defaultExpectation.paramPtrs.userID = &userID
+	mmCanWatchVideo.defaultExpectation.expectationOrigins.originUserID = minimock.CallerInfo(1)
+
+	return mmCanWatchVideo
+}
+
+// ExpectGroupIDParam4 sets up expected param groupID for Access.CanWatchVideo
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) ExpectGroupIDParam4(groupID uuid.UUID) *mAccessMockCanWatchVideo {
+	if mmCanWatchVideo.mock.funcCanWatchVideo != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Set")
+	}
+
+	if mmCanWatchVideo.defaultExpectation == nil {
+		mmCanWatchVideo.defaultExpectation = &AccessMockCanWatchVideoExpectation{}
+	}
+
+	if mmCanWatchVideo.defaultExpectation.params != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Expect")
+	}
+
+	if mmCanWatchVideo.defaultExpectation.paramPtrs == nil {
+		mmCanWatchVideo.defaultExpectation.paramPtrs = &AccessMockCanWatchVideoParamPtrs{}
+	}
+	mmCanWatchVideo.defaultExpectation.paramPtrs.groupID = &groupID
+	mmCanWatchVideo.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmCanWatchVideo
+}
+
+// Inspect accepts an inspector function that has same arguments as the Access.CanWatchVideo
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) Inspect(f func(ctx context.Context, accountID uuid.UUID, userID uuid.UUID, groupID uuid.UUID)) *mAccessMockCanWatchVideo {
+	if mmCanWatchVideo.mock.inspectFuncCanWatchVideo != nil {
+		mmCanWatchVideo.mock.t.Fatalf("Inspect function is already set for AccessMock.CanWatchVideo")
+	}
+
+	mmCanWatchVideo.mock.inspectFuncCanWatchVideo = f
+
+	return mmCanWatchVideo
+}
+
+// Return sets up results that will be returned by Access.CanWatchVideo
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) Return(b1 bool) *AccessMock {
+	if mmCanWatchVideo.mock.funcCanWatchVideo != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Set")
+	}
+
+	if mmCanWatchVideo.defaultExpectation == nil {
+		mmCanWatchVideo.defaultExpectation = &AccessMockCanWatchVideoExpectation{mock: mmCanWatchVideo.mock}
+	}
+	mmCanWatchVideo.defaultExpectation.results = &AccessMockCanWatchVideoResults{b1}
+	mmCanWatchVideo.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCanWatchVideo.mock
+}
+
+// Set uses given function f to mock the Access.CanWatchVideo method
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) Set(f func(ctx context.Context, accountID uuid.UUID, userID uuid.UUID, groupID uuid.UUID) (b1 bool)) *AccessMock {
+	if mmCanWatchVideo.defaultExpectation != nil {
+		mmCanWatchVideo.mock.t.Fatalf("Default expectation is already set for the Access.CanWatchVideo method")
+	}
+
+	if len(mmCanWatchVideo.expectations) > 0 {
+		mmCanWatchVideo.mock.t.Fatalf("Some expectations are already set for the Access.CanWatchVideo method")
+	}
+
+	mmCanWatchVideo.mock.funcCanWatchVideo = f
+	mmCanWatchVideo.mock.funcCanWatchVideoOrigin = minimock.CallerInfo(1)
+	return mmCanWatchVideo.mock
+}
+
+// When sets expectation for the Access.CanWatchVideo which will trigger the result defined by the following
+// Then helper
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) When(ctx context.Context, accountID uuid.UUID, userID uuid.UUID, groupID uuid.UUID) *AccessMockCanWatchVideoExpectation {
+	if mmCanWatchVideo.mock.funcCanWatchVideo != nil {
+		mmCanWatchVideo.mock.t.Fatalf("AccessMock.CanWatchVideo mock is already set by Set")
+	}
+
+	expectation := &AccessMockCanWatchVideoExpectation{
+		mock:               mmCanWatchVideo.mock,
+		params:             &AccessMockCanWatchVideoParams{ctx, accountID, userID, groupID},
+		expectationOrigins: AccessMockCanWatchVideoExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmCanWatchVideo.expectations = append(mmCanWatchVideo.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Access.CanWatchVideo return parameters for the expectation previously defined by the When method
+func (e *AccessMockCanWatchVideoExpectation) Then(b1 bool) *AccessMock {
+	e.results = &AccessMockCanWatchVideoResults{b1}
+	return e.mock
+}
+
+// Times sets number of times Access.CanWatchVideo should be invoked
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) Times(n uint64) *mAccessMockCanWatchVideo {
+	if n == 0 {
+		mmCanWatchVideo.mock.t.Fatalf("Times of AccessMock.CanWatchVideo mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCanWatchVideo.expectedInvocations, n)
+	mmCanWatchVideo.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCanWatchVideo
+}
+
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) invocationsDone() bool {
+	if len(mmCanWatchVideo.expectations) == 0 && mmCanWatchVideo.defaultExpectation == nil && mmCanWatchVideo.mock.funcCanWatchVideo == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCanWatchVideo.mock.afterCanWatchVideoCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCanWatchVideo.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CanWatchVideo implements mm_service.Access
+func (mmCanWatchVideo *AccessMock) CanWatchVideo(ctx context.Context, accountID uuid.UUID, userID uuid.UUID, groupID uuid.UUID) (b1 bool) {
+	mm_atomic.AddUint64(&mmCanWatchVideo.beforeCanWatchVideoCounter, 1)
+	defer mm_atomic.AddUint64(&mmCanWatchVideo.afterCanWatchVideoCounter, 1)
+
+	mmCanWatchVideo.t.Helper()
+
+	if mmCanWatchVideo.inspectFuncCanWatchVideo != nil {
+		mmCanWatchVideo.inspectFuncCanWatchVideo(ctx, accountID, userID, groupID)
+	}
+
+	mm_params := AccessMockCanWatchVideoParams{ctx, accountID, userID, groupID}
+
+	// Record call args
+	mmCanWatchVideo.CanWatchVideoMock.mutex.Lock()
+	mmCanWatchVideo.CanWatchVideoMock.callArgs = append(mmCanWatchVideo.CanWatchVideoMock.callArgs, &mm_params)
+	mmCanWatchVideo.CanWatchVideoMock.mutex.Unlock()
+
+	for _, e := range mmCanWatchVideo.CanWatchVideoMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.b1
+		}
+	}
+
+	if mmCanWatchVideo.CanWatchVideoMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCanWatchVideo.CanWatchVideoMock.defaultExpectation.Counter, 1)
+		mm_want := mmCanWatchVideo.CanWatchVideoMock.defaultExpectation.params
+		mm_want_ptrs := mmCanWatchVideo.CanWatchVideoMock.defaultExpectation.paramPtrs
+
+		mm_got := AccessMockCanWatchVideoParams{ctx, accountID, userID, groupID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCanWatchVideo.t.Errorf("AccessMock.CanWatchVideo got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanWatchVideo.CanWatchVideoMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmCanWatchVideo.t.Errorf("AccessMock.CanWatchVideo got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanWatchVideo.CanWatchVideoMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.userID != nil && !minimock.Equal(*mm_want_ptrs.userID, mm_got.userID) {
+				mmCanWatchVideo.t.Errorf("AccessMock.CanWatchVideo got unexpected parameter userID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanWatchVideo.CanWatchVideoMock.defaultExpectation.expectationOrigins.originUserID, *mm_want_ptrs.userID, mm_got.userID, minimock.Diff(*mm_want_ptrs.userID, mm_got.userID))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmCanWatchVideo.t.Errorf("AccessMock.CanWatchVideo got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanWatchVideo.CanWatchVideoMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCanWatchVideo.t.Errorf("AccessMock.CanWatchVideo got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCanWatchVideo.CanWatchVideoMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCanWatchVideo.CanWatchVideoMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCanWatchVideo.t.Fatal("No results are set for the AccessMock.CanWatchVideo")
+		}
+		return (*mm_results).b1
+	}
+	if mmCanWatchVideo.funcCanWatchVideo != nil {
+		return mmCanWatchVideo.funcCanWatchVideo(ctx, accountID, userID, groupID)
+	}
+	mmCanWatchVideo.t.Fatalf("Unexpected call to AccessMock.CanWatchVideo. %v %v %v %v", ctx, accountID, userID, groupID)
+	return
+}
+
+// CanWatchVideoAfterCounter returns a count of finished AccessMock.CanWatchVideo invocations
+func (mmCanWatchVideo *AccessMock) CanWatchVideoAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCanWatchVideo.afterCanWatchVideoCounter)
+}
+
+// CanWatchVideoBeforeCounter returns a count of AccessMock.CanWatchVideo invocations
+func (mmCanWatchVideo *AccessMock) CanWatchVideoBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCanWatchVideo.beforeCanWatchVideoCounter)
+}
+
+// Calls returns a list of arguments used in each call to AccessMock.CanWatchVideo.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCanWatchVideo *mAccessMockCanWatchVideo) Calls() []*AccessMockCanWatchVideoParams {
+	mmCanWatchVideo.mutex.RLock()
+
+	argCopy := make([]*AccessMockCanWatchVideoParams, len(mmCanWatchVideo.callArgs))
+	copy(argCopy, mmCanWatchVideo.callArgs)
+
+	mmCanWatchVideo.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCanWatchVideoDone returns true if the count of the CanWatchVideo invocations corresponds
+// the number of defined expectations
+func (m *AccessMock) MinimockCanWatchVideoDone() bool {
+	if m.CanWatchVideoMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CanWatchVideoMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CanWatchVideoMock.invocationsDone()
+}
+
+// MinimockCanWatchVideoInspect logs each unmet expectation
+func (m *AccessMock) MinimockCanWatchVideoInspect() {
+	for _, e := range m.CanWatchVideoMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AccessMock.CanWatchVideo at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterCanWatchVideoCounter := mm_atomic.LoadUint64(&m.afterCanWatchVideoCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CanWatchVideoMock.defaultExpectation != nil && afterCanWatchVideoCounter < 1 {
+		if m.CanWatchVideoMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AccessMock.CanWatchVideo at\n%s", m.CanWatchVideoMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AccessMock.CanWatchVideo at\n%s with params: %#v", m.CanWatchVideoMock.defaultExpectation.expectationOrigins.origin, *m.CanWatchVideoMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCanWatchVideo != nil && afterCanWatchVideoCounter < 1 {
+		m.t.Errorf("Expected call to AccessMock.CanWatchVideo at\n%s", m.funcCanWatchVideoOrigin)
+	}
+
+	if !m.CanWatchVideoMock.invocationsDone() && afterCanWatchVideoCounter > 0 {
+		m.t.Errorf("Expected %d calls to AccessMock.CanWatchVideo at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CanWatchVideoMock.expectedInvocations), m.CanWatchVideoMock.expectedInvocationsOrigin, afterCanWatchVideoCounter)
+	}
 }
 
 type mAccessMockIsCheckAccountAction struct {
@@ -924,13 +1762,394 @@ func (m *AccessMock) MinimockIsCheckGroupActionInspect() {
 	}
 }
 
+type mAccessMockManagedAssignmentGroups struct {
+	optional           bool
+	mock               *AccessMock
+	defaultExpectation *AccessMockManagedAssignmentGroupsExpectation
+	expectations       []*AccessMockManagedAssignmentGroupsExpectation
+
+	callArgs []*AccessMockManagedAssignmentGroupsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AccessMockManagedAssignmentGroupsExpectation specifies expectation struct of the Access.ManagedAssignmentGroups
+type AccessMockManagedAssignmentGroupsExpectation struct {
+	mock               *AccessMock
+	params             *AccessMockManagedAssignmentGroupsParams
+	paramPtrs          *AccessMockManagedAssignmentGroupsParamPtrs
+	expectationOrigins AccessMockManagedAssignmentGroupsExpectationOrigins
+	results            *AccessMockManagedAssignmentGroupsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AccessMockManagedAssignmentGroupsParams contains parameters of the Access.ManagedAssignmentGroups
+type AccessMockManagedAssignmentGroupsParams struct {
+	ctx         context.Context
+	accountID   uuid.UUID
+	initiatorID uuid.UUID
+}
+
+// AccessMockManagedAssignmentGroupsParamPtrs contains pointers to parameters of the Access.ManagedAssignmentGroups
+type AccessMockManagedAssignmentGroupsParamPtrs struct {
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	initiatorID *uuid.UUID
+}
+
+// AccessMockManagedAssignmentGroupsResults contains results of the Access.ManagedAssignmentGroups
+type AccessMockManagedAssignmentGroupsResults struct {
+	b1  bool
+	ua1 []uuid.UUID
+	err error
+}
+
+// AccessMockManagedAssignmentGroupsOrigins contains origins of expectations of the Access.ManagedAssignmentGroups
+type AccessMockManagedAssignmentGroupsExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originInitiatorID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) Optional() *mAccessMockManagedAssignmentGroups {
+	mmManagedAssignmentGroups.optional = true
+	return mmManagedAssignmentGroups
+}
+
+// Expect sets up expected params for Access.ManagedAssignmentGroups
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) Expect(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID) *mAccessMockManagedAssignmentGroups {
+	if mmManagedAssignmentGroups.mock.funcManagedAssignmentGroups != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("AccessMock.ManagedAssignmentGroups mock is already set by Set")
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation == nil {
+		mmManagedAssignmentGroups.defaultExpectation = &AccessMockManagedAssignmentGroupsExpectation{}
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation.paramPtrs != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("AccessMock.ManagedAssignmentGroups mock is already set by ExpectParams functions")
+	}
+
+	mmManagedAssignmentGroups.defaultExpectation.params = &AccessMockManagedAssignmentGroupsParams{ctx, accountID, initiatorID}
+	mmManagedAssignmentGroups.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmManagedAssignmentGroups.expectations {
+		if minimock.Equal(e.params, mmManagedAssignmentGroups.defaultExpectation.params) {
+			mmManagedAssignmentGroups.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmManagedAssignmentGroups.defaultExpectation.params)
+		}
+	}
+
+	return mmManagedAssignmentGroups
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Access.ManagedAssignmentGroups
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) ExpectCtxParam1(ctx context.Context) *mAccessMockManagedAssignmentGroups {
+	if mmManagedAssignmentGroups.mock.funcManagedAssignmentGroups != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("AccessMock.ManagedAssignmentGroups mock is already set by Set")
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation == nil {
+		mmManagedAssignmentGroups.defaultExpectation = &AccessMockManagedAssignmentGroupsExpectation{}
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation.params != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("AccessMock.ManagedAssignmentGroups mock is already set by Expect")
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation.paramPtrs == nil {
+		mmManagedAssignmentGroups.defaultExpectation.paramPtrs = &AccessMockManagedAssignmentGroupsParamPtrs{}
+	}
+	mmManagedAssignmentGroups.defaultExpectation.paramPtrs.ctx = &ctx
+	mmManagedAssignmentGroups.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmManagedAssignmentGroups
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Access.ManagedAssignmentGroups
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) ExpectAccountIDParam2(accountID uuid.UUID) *mAccessMockManagedAssignmentGroups {
+	if mmManagedAssignmentGroups.mock.funcManagedAssignmentGroups != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("AccessMock.ManagedAssignmentGroups mock is already set by Set")
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation == nil {
+		mmManagedAssignmentGroups.defaultExpectation = &AccessMockManagedAssignmentGroupsExpectation{}
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation.params != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("AccessMock.ManagedAssignmentGroups mock is already set by Expect")
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation.paramPtrs == nil {
+		mmManagedAssignmentGroups.defaultExpectation.paramPtrs = &AccessMockManagedAssignmentGroupsParamPtrs{}
+	}
+	mmManagedAssignmentGroups.defaultExpectation.paramPtrs.accountID = &accountID
+	mmManagedAssignmentGroups.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmManagedAssignmentGroups
+}
+
+// ExpectInitiatorIDParam3 sets up expected param initiatorID for Access.ManagedAssignmentGroups
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) ExpectInitiatorIDParam3(initiatorID uuid.UUID) *mAccessMockManagedAssignmentGroups {
+	if mmManagedAssignmentGroups.mock.funcManagedAssignmentGroups != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("AccessMock.ManagedAssignmentGroups mock is already set by Set")
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation == nil {
+		mmManagedAssignmentGroups.defaultExpectation = &AccessMockManagedAssignmentGroupsExpectation{}
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation.params != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("AccessMock.ManagedAssignmentGroups mock is already set by Expect")
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation.paramPtrs == nil {
+		mmManagedAssignmentGroups.defaultExpectation.paramPtrs = &AccessMockManagedAssignmentGroupsParamPtrs{}
+	}
+	mmManagedAssignmentGroups.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmManagedAssignmentGroups.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmManagedAssignmentGroups
+}
+
+// Inspect accepts an inspector function that has same arguments as the Access.ManagedAssignmentGroups
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) Inspect(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID)) *mAccessMockManagedAssignmentGroups {
+	if mmManagedAssignmentGroups.mock.inspectFuncManagedAssignmentGroups != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("Inspect function is already set for AccessMock.ManagedAssignmentGroups")
+	}
+
+	mmManagedAssignmentGroups.mock.inspectFuncManagedAssignmentGroups = f
+
+	return mmManagedAssignmentGroups
+}
+
+// Return sets up results that will be returned by Access.ManagedAssignmentGroups
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) Return(b1 bool, ua1 []uuid.UUID, err error) *AccessMock {
+	if mmManagedAssignmentGroups.mock.funcManagedAssignmentGroups != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("AccessMock.ManagedAssignmentGroups mock is already set by Set")
+	}
+
+	if mmManagedAssignmentGroups.defaultExpectation == nil {
+		mmManagedAssignmentGroups.defaultExpectation = &AccessMockManagedAssignmentGroupsExpectation{mock: mmManagedAssignmentGroups.mock}
+	}
+	mmManagedAssignmentGroups.defaultExpectation.results = &AccessMockManagedAssignmentGroupsResults{b1, ua1, err}
+	mmManagedAssignmentGroups.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmManagedAssignmentGroups.mock
+}
+
+// Set uses given function f to mock the Access.ManagedAssignmentGroups method
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) Set(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID) (b1 bool, ua1 []uuid.UUID, err error)) *AccessMock {
+	if mmManagedAssignmentGroups.defaultExpectation != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("Default expectation is already set for the Access.ManagedAssignmentGroups method")
+	}
+
+	if len(mmManagedAssignmentGroups.expectations) > 0 {
+		mmManagedAssignmentGroups.mock.t.Fatalf("Some expectations are already set for the Access.ManagedAssignmentGroups method")
+	}
+
+	mmManagedAssignmentGroups.mock.funcManagedAssignmentGroups = f
+	mmManagedAssignmentGroups.mock.funcManagedAssignmentGroupsOrigin = minimock.CallerInfo(1)
+	return mmManagedAssignmentGroups.mock
+}
+
+// When sets expectation for the Access.ManagedAssignmentGroups which will trigger the result defined by the following
+// Then helper
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) When(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID) *AccessMockManagedAssignmentGroupsExpectation {
+	if mmManagedAssignmentGroups.mock.funcManagedAssignmentGroups != nil {
+		mmManagedAssignmentGroups.mock.t.Fatalf("AccessMock.ManagedAssignmentGroups mock is already set by Set")
+	}
+
+	expectation := &AccessMockManagedAssignmentGroupsExpectation{
+		mock:               mmManagedAssignmentGroups.mock,
+		params:             &AccessMockManagedAssignmentGroupsParams{ctx, accountID, initiatorID},
+		expectationOrigins: AccessMockManagedAssignmentGroupsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmManagedAssignmentGroups.expectations = append(mmManagedAssignmentGroups.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Access.ManagedAssignmentGroups return parameters for the expectation previously defined by the When method
+func (e *AccessMockManagedAssignmentGroupsExpectation) Then(b1 bool, ua1 []uuid.UUID, err error) *AccessMock {
+	e.results = &AccessMockManagedAssignmentGroupsResults{b1, ua1, err}
+	return e.mock
+}
+
+// Times sets number of times Access.ManagedAssignmentGroups should be invoked
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) Times(n uint64) *mAccessMockManagedAssignmentGroups {
+	if n == 0 {
+		mmManagedAssignmentGroups.mock.t.Fatalf("Times of AccessMock.ManagedAssignmentGroups mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmManagedAssignmentGroups.expectedInvocations, n)
+	mmManagedAssignmentGroups.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmManagedAssignmentGroups
+}
+
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) invocationsDone() bool {
+	if len(mmManagedAssignmentGroups.expectations) == 0 && mmManagedAssignmentGroups.defaultExpectation == nil && mmManagedAssignmentGroups.mock.funcManagedAssignmentGroups == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmManagedAssignmentGroups.mock.afterManagedAssignmentGroupsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmManagedAssignmentGroups.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ManagedAssignmentGroups implements mm_service.Access
+func (mmManagedAssignmentGroups *AccessMock) ManagedAssignmentGroups(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID) (b1 bool, ua1 []uuid.UUID, err error) {
+	mm_atomic.AddUint64(&mmManagedAssignmentGroups.beforeManagedAssignmentGroupsCounter, 1)
+	defer mm_atomic.AddUint64(&mmManagedAssignmentGroups.afterManagedAssignmentGroupsCounter, 1)
+
+	mmManagedAssignmentGroups.t.Helper()
+
+	if mmManagedAssignmentGroups.inspectFuncManagedAssignmentGroups != nil {
+		mmManagedAssignmentGroups.inspectFuncManagedAssignmentGroups(ctx, accountID, initiatorID)
+	}
+
+	mm_params := AccessMockManagedAssignmentGroupsParams{ctx, accountID, initiatorID}
+
+	// Record call args
+	mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.mutex.Lock()
+	mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.callArgs = append(mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.callArgs, &mm_params)
+	mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.mutex.Unlock()
+
+	for _, e := range mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.b1, e.results.ua1, e.results.err
+		}
+	}
+
+	if mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.defaultExpectation.Counter, 1)
+		mm_want := mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.defaultExpectation.params
+		mm_want_ptrs := mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.defaultExpectation.paramPtrs
+
+		mm_got := AccessMockManagedAssignmentGroupsParams{ctx, accountID, initiatorID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmManagedAssignmentGroups.t.Errorf("AccessMock.ManagedAssignmentGroups got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmManagedAssignmentGroups.t.Errorf("AccessMock.ManagedAssignmentGroups got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmManagedAssignmentGroups.t.Errorf("AccessMock.ManagedAssignmentGroups got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmManagedAssignmentGroups.t.Errorf("AccessMock.ManagedAssignmentGroups got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmManagedAssignmentGroups.ManagedAssignmentGroupsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmManagedAssignmentGroups.t.Fatal("No results are set for the AccessMock.ManagedAssignmentGroups")
+		}
+		return (*mm_results).b1, (*mm_results).ua1, (*mm_results).err
+	}
+	if mmManagedAssignmentGroups.funcManagedAssignmentGroups != nil {
+		return mmManagedAssignmentGroups.funcManagedAssignmentGroups(ctx, accountID, initiatorID)
+	}
+	mmManagedAssignmentGroups.t.Fatalf("Unexpected call to AccessMock.ManagedAssignmentGroups. %v %v %v", ctx, accountID, initiatorID)
+	return
+}
+
+// ManagedAssignmentGroupsAfterCounter returns a count of finished AccessMock.ManagedAssignmentGroups invocations
+func (mmManagedAssignmentGroups *AccessMock) ManagedAssignmentGroupsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmManagedAssignmentGroups.afterManagedAssignmentGroupsCounter)
+}
+
+// ManagedAssignmentGroupsBeforeCounter returns a count of AccessMock.ManagedAssignmentGroups invocations
+func (mmManagedAssignmentGroups *AccessMock) ManagedAssignmentGroupsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmManagedAssignmentGroups.beforeManagedAssignmentGroupsCounter)
+}
+
+// Calls returns a list of arguments used in each call to AccessMock.ManagedAssignmentGroups.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmManagedAssignmentGroups *mAccessMockManagedAssignmentGroups) Calls() []*AccessMockManagedAssignmentGroupsParams {
+	mmManagedAssignmentGroups.mutex.RLock()
+
+	argCopy := make([]*AccessMockManagedAssignmentGroupsParams, len(mmManagedAssignmentGroups.callArgs))
+	copy(argCopy, mmManagedAssignmentGroups.callArgs)
+
+	mmManagedAssignmentGroups.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockManagedAssignmentGroupsDone returns true if the count of the ManagedAssignmentGroups invocations corresponds
+// the number of defined expectations
+func (m *AccessMock) MinimockManagedAssignmentGroupsDone() bool {
+	if m.ManagedAssignmentGroupsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ManagedAssignmentGroupsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ManagedAssignmentGroupsMock.invocationsDone()
+}
+
+// MinimockManagedAssignmentGroupsInspect logs each unmet expectation
+func (m *AccessMock) MinimockManagedAssignmentGroupsInspect() {
+	for _, e := range m.ManagedAssignmentGroupsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AccessMock.ManagedAssignmentGroups at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterManagedAssignmentGroupsCounter := mm_atomic.LoadUint64(&m.afterManagedAssignmentGroupsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ManagedAssignmentGroupsMock.defaultExpectation != nil && afterManagedAssignmentGroupsCounter < 1 {
+		if m.ManagedAssignmentGroupsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AccessMock.ManagedAssignmentGroups at\n%s", m.ManagedAssignmentGroupsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AccessMock.ManagedAssignmentGroups at\n%s with params: %#v", m.ManagedAssignmentGroupsMock.defaultExpectation.expectationOrigins.origin, *m.ManagedAssignmentGroupsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcManagedAssignmentGroups != nil && afterManagedAssignmentGroupsCounter < 1 {
+		m.t.Errorf("Expected call to AccessMock.ManagedAssignmentGroups at\n%s", m.funcManagedAssignmentGroupsOrigin)
+	}
+
+	if !m.ManagedAssignmentGroupsMock.invocationsDone() && afterManagedAssignmentGroupsCounter > 0 {
+		m.t.Errorf("Expected %d calls to AccessMock.ManagedAssignmentGroups at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ManagedAssignmentGroupsMock.expectedInvocations), m.ManagedAssignmentGroupsMock.expectedInvocationsOrigin, afterManagedAssignmentGroupsCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *AccessMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockCanManageAssignmentsInspect()
+
+			m.MinimockCanWatchVideoInspect()
+
 			m.MinimockIsCheckAccountActionInspect()
 
 			m.MinimockIsCheckGroupActionInspect()
+
+			m.MinimockManagedAssignmentGroupsInspect()
 		}
 	})
 }
@@ -954,6 +2173,9 @@ func (m *AccessMock) MinimockWait(timeout mm_time.Duration) {
 func (m *AccessMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockCanManageAssignmentsDone() &&
+		m.MinimockCanWatchVideoDone() &&
 		m.MinimockIsCheckAccountActionDone() &&
-		m.MinimockIsCheckGroupActionDone()
+		m.MinimockIsCheckGroupActionDone() &&
+		m.MinimockManagedAssignmentGroupsDone()
 }

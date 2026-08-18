@@ -112,3 +112,109 @@ func (s *AccessService) IsCheckGroupAction(
 
 	return ErrForbidden
 }
+
+// CanManageAssignments проверяет право инициатора назначать обучение в области groupID —
+// группе видео на момент создания назначения (§2 дизайна эпика Э3, решение В-3): аккаунтное
+// AccountPermissionManageAssignments (в т.ч. Owner) или групповое GroupPermissionManageAssignments
+// (в т.ч. Owner группы) при членстве в группе. OR-логика — как у IsCheckGroupAction.
+func (s *AccessService) CanManageAssignments(ctx context.Context, accountID, initiatorID, groupID uuid.UUID) error {
+	return s.IsCheckGroupAction(
+		ctx, accountID, initiatorID, groupID,
+		domain.AccountPermissionManageAssignments, domain.GroupPermissionManageAssignments,
+	)
+}
+
+// CanWatchVideo определяет, может ли userID смотреть видео группы groupID: аккаунтное право
+// VideoWatch/ManageVideo ИЛИ, при членстве в группе, групповое VideoWatch/ManageVideo/Owner
+// (§0 дизайна эпика Э3 — вынесенная логика VideoService.canWatch для произвольного
+// пользователя, а не только инициатора запроса). Ошибки доступа к данным (в т.ч. отсутствие
+// членства) не поднимаются — при любой из них считается, что доступа нет.
+func (s *AccessService) CanWatchVideo(ctx context.Context, accountID, userID, groupID uuid.UUID) bool {
+	if err := s.IsCheckAccountAction(ctx, accountID, userID, domain.AccountPermissionVideoWatch); err == nil {
+		return true
+	}
+
+	if err := s.IsCheckAccountAction(ctx, accountID, userID, domain.AccountPermissionManageVideo); err == nil {
+		return true
+	}
+
+	if s.hasGroupPermission(ctx, groupID, userID, domain.GroupPermissionVideoWatch) {
+		return true
+	}
+
+	return s.hasGroupPermission(ctx, groupID, userID, domain.GroupPermissionManageVideo)
+}
+
+// hasGroupPermission проверяет только групповое право пользователя (Owner либо конкретное
+// действие в маске его роли в группе) без учёта права уровня аккаунта — вспомогательный метод
+// CanWatchVideo. Отсутствие членства или ошибка чтения роли — false, а не паника/500.
+func (s *AccessService) hasGroupPermission(
+	ctx context.Context,
+	groupID, userID uuid.UUID, action domain.PermissionFlag,
+) bool {
+	member, err := s.srv.GroupMember.GetByUserIDAndGroupID(ctx, userID, groupID)
+	if err != nil {
+		return false
+	}
+
+	roles, err := s.srv.GroupRole.GetByID(ctx, member.RoleID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return false
+	}
+	if len(roles) == 0 {
+		return false
+	}
+
+	return domain.HasBit(roles[0].PermissionMask, domain.GroupPermissionOwner) ||
+		domain.HasBit(roles[0].PermissionMask, action)
+}
+
+// ManagedAssignmentGroups определяет область чтения отчётов по назначениям инициатора (В-8
+// решение владельца): all=true — аккаунтное право ManageAssignments или Owner (видны все
+// назначения аккаунта); иначе — список групп, где у инициатора роль с битом Owner или
+// GroupPermissionManageAssignments (видны назначения только этих групп плюс собственные,
+// проверяется вызывающим сервисом по created_by).
+func (s *AccessService) ManagedAssignmentGroups(
+	ctx context.Context,
+	accountID, initiatorID uuid.UUID,
+) (bool, []uuid.UUID, error) {
+	err := s.IsCheckAccountAction(ctx, accountID, initiatorID, domain.AccountPermissionManageAssignments)
+	if err == nil {
+		return true, nil, nil
+	}
+
+	members, err := s.srv.GroupMember.GetByUserID(ctx, initiatorID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return false, nil, err
+	}
+	if len(members) == 0 {
+		return false, nil, nil
+	}
+
+	groupRoles, err := s.srv.GroupRole.GetByAccountID(ctx, accountID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return false, nil, err
+	}
+	groupRoleByID := make(map[uuid.UUID]domain.GroupRole, len(groupRoles))
+	for _, role := range groupRoles {
+		groupRoleByID[role.ID] = role
+	}
+
+	groups := make([]uuid.UUID, 0, len(members))
+	for _, member := range members {
+		role, ok := groupRoleByID[member.RoleID]
+		if !ok {
+			continue
+		}
+
+		if domain.HasBit(role.PermissionMask, domain.GroupPermissionOwner) ||
+			domain.HasBit(role.PermissionMask, domain.GroupPermissionManageAssignments) {
+			groups = append(groups, member.GroupID)
+		}
+	}
+
+	return false, groups, nil
+}

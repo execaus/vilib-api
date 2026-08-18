@@ -1091,26 +1091,11 @@ func newVideoListItem(video domain.Video, assets []domain.VideoAsset, canManage 
 // canWatch проверяет право инициатора на просмотр видео группы (Get, GetAll и список видео
 // группы): аккаунтное или групповое VideoWatch, а также аккаунтное или групповое ManageVideo —
 // право управления видео включает право его просмотра (решение ведущего по Д-6 ревью эпика Э2).
-// Owner (аккаунта или группы) проходит проверку автоматически внутри IsCheckAccountAction и
-// isCheckGroupAction. Ни одно из прав не выполняется — ErrForbidden.
+// Owner (аккаунта или группы) проходит проверку автоматически. Логика вынесена в
+// Access.CanWatchVideo (§0 дизайна эпика Э3) — используется и для проверки доступа
+// произвольного пользователя (не только инициатора запроса), например при назначении обучения.
 func (s *VideoService) canWatch(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) error {
-	if err := s.srv.Access.IsCheckAccountAction(
-		ctx, accountID, initiatorID, domain.AccountPermissionVideoWatch,
-	); err == nil {
-		return nil
-	}
-
-	if err := s.srv.Access.IsCheckAccountAction(
-		ctx, accountID, initiatorID, domain.AccountPermissionManageVideo,
-	); err == nil {
-		return nil
-	}
-
-	if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionVideoWatch); err == nil {
-		return nil
-	}
-
-	if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo); err == nil {
+	if s.srv.Access.CanWatchVideo(ctx, accountID, initiatorID, groupID) {
 		return nil
 	}
 
