@@ -55,10 +55,15 @@ type UsersQuery = *psql.ViewQuery[*User, UserSlice]
 
 // userR is where relationships are stored.
 type userR struct {
-	GroupMembers           GroupMemberSlice        // group_members.fk_group_members_user_id
-	PasswordResetTokens    PasswordResetTokenSlice // password_reset_tokens.fk_password_reset_tokens_user_id
-	AuthorUserGroupVideos  UserGroupVideoSlice     // user_group_videos.user_group_videos_author_fkey
-	AccountRoleAccountRole *AccountRole            // users.fk_role
+	AssignmentParticipants AssignmentParticipantSlice // assignment_participants.fk_assignment_participants_user_id
+	CancelledByAssignments AssignmentSlice            // assignments.fk_assignments_cancelled_by
+	CreatedByAssignments   AssignmentSlice            // assignments.fk_assignments_created_by
+	GroupMembers           GroupMemberSlice           // group_members.fk_group_members_user_id
+	PasswordResetTokens    PasswordResetTokenSlice    // password_reset_tokens.fk_password_reset_tokens_user_id
+	AuthorUserGroupVideos  UserGroupVideoSlice        // user_group_videos.user_group_videos_author_fkey
+	AccountRoleAccountRole *AccountRole               // users.fk_role
+	WatchProgresses        WatchProgressSlice         // watch_progress.fk_watch_progress_user_id
+	WatchSessions          WatchSessionSlice          // watch_sessions.fk_watch_sessions_user_id
 }
 
 func buildUserColumns(alias string) userColumns {
@@ -517,6 +522,78 @@ func (o UserSlice) ReloadAll(ctx context.Context, exec bob.Executor) error {
 	return nil
 }
 
+// AssignmentParticipants starts a query for related objects on assignment_participants
+func (o *User) AssignmentParticipants(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentParticipantsQuery {
+	return AssignmentParticipants.Query(append(mods,
+		sm.Where(AssignmentParticipants.Columns.UserID.EQ(psql.Arg(o.UserID))),
+	)...)
+}
+
+func (os UserSlice) AssignmentParticipants(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentParticipantsQuery {
+	pkUserID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkUserID = append(pkUserID, o.UserID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkUserID), "uuid[]")),
+	))
+
+	return AssignmentParticipants.Query(append(mods,
+		sm.Where(psql.Group(AssignmentParticipants.Columns.UserID).OP("IN", PKArgExpr)),
+	)...)
+}
+
+// CancelledByAssignments starts a query for related objects on assignments
+func (o *User) CancelledByAssignments(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentsQuery {
+	return Assignments.Query(append(mods,
+		sm.Where(Assignments.Columns.CancelledBy.EQ(psql.Arg(o.UserID))),
+	)...)
+}
+
+func (os UserSlice) CancelledByAssignments(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentsQuery {
+	pkUserID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkUserID = append(pkUserID, o.UserID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkUserID), "uuid[]")),
+	))
+
+	return Assignments.Query(append(mods,
+		sm.Where(psql.Group(Assignments.Columns.CancelledBy).OP("IN", PKArgExpr)),
+	)...)
+}
+
+// CreatedByAssignments starts a query for related objects on assignments
+func (o *User) CreatedByAssignments(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentsQuery {
+	return Assignments.Query(append(mods,
+		sm.Where(Assignments.Columns.CreatedBy.EQ(psql.Arg(o.UserID))),
+	)...)
+}
+
+func (os UserSlice) CreatedByAssignments(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentsQuery {
+	pkUserID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkUserID = append(pkUserID, o.UserID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkUserID), "uuid[]")),
+	))
+
+	return Assignments.Query(append(mods,
+		sm.Where(psql.Group(Assignments.Columns.CreatedBy).OP("IN", PKArgExpr)),
+	)...)
+}
+
 // GroupMembers starts a query for related objects on group_members
 func (o *User) GroupMembers(mods ...bob.Mod[*dialect.SelectQuery]) GroupMembersQuery {
 	return GroupMembers.Query(append(mods,
@@ -611,6 +688,258 @@ func (os UserSlice) AccountRoleAccountRole(mods ...bob.Mod[*dialect.SelectQuery]
 	return AccountRoles.Query(append(mods,
 		sm.Where(psql.Group(AccountRoles.Columns.AccountRoleID).OP("IN", PKArgExpr)),
 	)...)
+}
+
+// WatchProgresses starts a query for related objects on watch_progress
+func (o *User) WatchProgresses(mods ...bob.Mod[*dialect.SelectQuery]) WatchProgressesQuery {
+	return WatchProgresses.Query(append(mods,
+		sm.Where(WatchProgresses.Columns.UserID.EQ(psql.Arg(o.UserID))),
+	)...)
+}
+
+func (os UserSlice) WatchProgresses(mods ...bob.Mod[*dialect.SelectQuery]) WatchProgressesQuery {
+	pkUserID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkUserID = append(pkUserID, o.UserID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkUserID), "uuid[]")),
+	))
+
+	return WatchProgresses.Query(append(mods,
+		sm.Where(psql.Group(WatchProgresses.Columns.UserID).OP("IN", PKArgExpr)),
+	)...)
+}
+
+// WatchSessions starts a query for related objects on watch_sessions
+func (o *User) WatchSessions(mods ...bob.Mod[*dialect.SelectQuery]) WatchSessionsQuery {
+	return WatchSessions.Query(append(mods,
+		sm.Where(WatchSessions.Columns.UserID.EQ(psql.Arg(o.UserID))),
+	)...)
+}
+
+func (os UserSlice) WatchSessions(mods ...bob.Mod[*dialect.SelectQuery]) WatchSessionsQuery {
+	pkUserID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkUserID = append(pkUserID, o.UserID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkUserID), "uuid[]")),
+	))
+
+	return WatchSessions.Query(append(mods,
+		sm.Where(psql.Group(WatchSessions.Columns.UserID).OP("IN", PKArgExpr)),
+	)...)
+}
+
+func insertUserAssignmentParticipants0(ctx context.Context, exec bob.Executor, assignmentParticipants1 []*AssignmentParticipantSetter, user0 *User) (AssignmentParticipantSlice, error) {
+	for i := range assignmentParticipants1 {
+		assignmentParticipants1[i].UserID = omit.From(user0.UserID)
+	}
+
+	ret, err := AssignmentParticipants.Insert(bob.ToMods(assignmentParticipants1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserAssignmentParticipants0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserAssignmentParticipants0(ctx context.Context, exec bob.Executor, count int, assignmentParticipants1 AssignmentParticipantSlice, user0 *User) (AssignmentParticipantSlice, error) {
+	setter := &AssignmentParticipantSetter{
+		UserID: omit.From(user0.UserID),
+	}
+
+	err := assignmentParticipants1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserAssignmentParticipants0: %w", err)
+	}
+
+	return assignmentParticipants1, nil
+}
+
+func (user0 *User) InsertAssignmentParticipants(ctx context.Context, exec bob.Executor, related ...*AssignmentParticipantSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	assignmentParticipants1, err := insertUserAssignmentParticipants0(ctx, exec, related, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.AssignmentParticipants = append(user0.R.AssignmentParticipants, assignmentParticipants1...)
+
+	for _, rel := range assignmentParticipants1 {
+		rel.R.User = user0
+	}
+	return nil
+}
+
+func (user0 *User) AttachAssignmentParticipants(ctx context.Context, exec bob.Executor, related ...*AssignmentParticipant) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	assignmentParticipants1 := AssignmentParticipantSlice(related)
+
+	_, err = attachUserAssignmentParticipants0(ctx, exec, len(related), assignmentParticipants1, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.AssignmentParticipants = append(user0.R.AssignmentParticipants, assignmentParticipants1...)
+
+	for _, rel := range related {
+		rel.R.User = user0
+	}
+
+	return nil
+}
+
+func insertUserCancelledByAssignments0(ctx context.Context, exec bob.Executor, assignments1 []*AssignmentSetter, user0 *User) (AssignmentSlice, error) {
+	for i := range assignments1 {
+		assignments1[i].CancelledBy = omitnull.From(user0.UserID)
+	}
+
+	ret, err := Assignments.Insert(bob.ToMods(assignments1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserCancelledByAssignments0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserCancelledByAssignments0(ctx context.Context, exec bob.Executor, count int, assignments1 AssignmentSlice, user0 *User) (AssignmentSlice, error) {
+	setter := &AssignmentSetter{
+		CancelledBy: omitnull.From(user0.UserID),
+	}
+
+	err := assignments1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserCancelledByAssignments0: %w", err)
+	}
+
+	return assignments1, nil
+}
+
+func (user0 *User) InsertCancelledByAssignments(ctx context.Context, exec bob.Executor, related ...*AssignmentSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	assignments1, err := insertUserCancelledByAssignments0(ctx, exec, related, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.CancelledByAssignments = append(user0.R.CancelledByAssignments, assignments1...)
+
+	for _, rel := range assignments1 {
+		rel.R.CancelledByUser = user0
+	}
+	return nil
+}
+
+func (user0 *User) AttachCancelledByAssignments(ctx context.Context, exec bob.Executor, related ...*Assignment) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	assignments1 := AssignmentSlice(related)
+
+	_, err = attachUserCancelledByAssignments0(ctx, exec, len(related), assignments1, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.CancelledByAssignments = append(user0.R.CancelledByAssignments, assignments1...)
+
+	for _, rel := range related {
+		rel.R.CancelledByUser = user0
+	}
+
+	return nil
+}
+
+func insertUserCreatedByAssignments0(ctx context.Context, exec bob.Executor, assignments1 []*AssignmentSetter, user0 *User) (AssignmentSlice, error) {
+	for i := range assignments1 {
+		assignments1[i].CreatedBy = omit.From(user0.UserID)
+	}
+
+	ret, err := Assignments.Insert(bob.ToMods(assignments1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserCreatedByAssignments0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserCreatedByAssignments0(ctx context.Context, exec bob.Executor, count int, assignments1 AssignmentSlice, user0 *User) (AssignmentSlice, error) {
+	setter := &AssignmentSetter{
+		CreatedBy: omit.From(user0.UserID),
+	}
+
+	err := assignments1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserCreatedByAssignments0: %w", err)
+	}
+
+	return assignments1, nil
+}
+
+func (user0 *User) InsertCreatedByAssignments(ctx context.Context, exec bob.Executor, related ...*AssignmentSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	assignments1, err := insertUserCreatedByAssignments0(ctx, exec, related, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.CreatedByAssignments = append(user0.R.CreatedByAssignments, assignments1...)
+
+	for _, rel := range assignments1 {
+		rel.R.CreatedByUser = user0
+	}
+	return nil
+}
+
+func (user0 *User) AttachCreatedByAssignments(ctx context.Context, exec bob.Executor, related ...*Assignment) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	assignments1 := AssignmentSlice(related)
+
+	_, err = attachUserCreatedByAssignments0(ctx, exec, len(related), assignments1, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.CreatedByAssignments = append(user0.R.CreatedByAssignments, assignments1...)
+
+	for _, rel := range related {
+		rel.R.CreatedByUser = user0
+	}
+
+	return nil
 }
 
 func insertUserGroupMembers0(ctx context.Context, exec bob.Executor, groupMembers1 []*GroupMemberSetter, user0 *User) (GroupMemberSlice, error) {
@@ -861,6 +1190,142 @@ func (user0 *User) AttachAccountRoleAccountRole(ctx context.Context, exec bob.Ex
 	user0.R.AccountRoleAccountRole = accountRole1
 
 	accountRole1.R.AccountRoleUsers = append(accountRole1.R.AccountRoleUsers, user0)
+
+	return nil
+}
+
+func insertUserWatchProgresses0(ctx context.Context, exec bob.Executor, watchProgresses1 []*WatchProgressSetter, user0 *User) (WatchProgressSlice, error) {
+	for i := range watchProgresses1 {
+		watchProgresses1[i].UserID = omit.From(user0.UserID)
+	}
+
+	ret, err := WatchProgresses.Insert(bob.ToMods(watchProgresses1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserWatchProgresses0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserWatchProgresses0(ctx context.Context, exec bob.Executor, count int, watchProgresses1 WatchProgressSlice, user0 *User) (WatchProgressSlice, error) {
+	setter := &WatchProgressSetter{
+		UserID: omit.From(user0.UserID),
+	}
+
+	err := watchProgresses1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserWatchProgresses0: %w", err)
+	}
+
+	return watchProgresses1, nil
+}
+
+func (user0 *User) InsertWatchProgresses(ctx context.Context, exec bob.Executor, related ...*WatchProgressSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	watchProgresses1, err := insertUserWatchProgresses0(ctx, exec, related, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.WatchProgresses = append(user0.R.WatchProgresses, watchProgresses1...)
+
+	for _, rel := range watchProgresses1 {
+		rel.R.User = user0
+	}
+	return nil
+}
+
+func (user0 *User) AttachWatchProgresses(ctx context.Context, exec bob.Executor, related ...*WatchProgress) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	watchProgresses1 := WatchProgressSlice(related)
+
+	_, err = attachUserWatchProgresses0(ctx, exec, len(related), watchProgresses1, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.WatchProgresses = append(user0.R.WatchProgresses, watchProgresses1...)
+
+	for _, rel := range related {
+		rel.R.User = user0
+	}
+
+	return nil
+}
+
+func insertUserWatchSessions0(ctx context.Context, exec bob.Executor, watchSessions1 []*WatchSessionSetter, user0 *User) (WatchSessionSlice, error) {
+	for i := range watchSessions1 {
+		watchSessions1[i].UserID = omit.From(user0.UserID)
+	}
+
+	ret, err := WatchSessions.Insert(bob.ToMods(watchSessions1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserWatchSessions0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserWatchSessions0(ctx context.Context, exec bob.Executor, count int, watchSessions1 WatchSessionSlice, user0 *User) (WatchSessionSlice, error) {
+	setter := &WatchSessionSetter{
+		UserID: omit.From(user0.UserID),
+	}
+
+	err := watchSessions1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserWatchSessions0: %w", err)
+	}
+
+	return watchSessions1, nil
+}
+
+func (user0 *User) InsertWatchSessions(ctx context.Context, exec bob.Executor, related ...*WatchSessionSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	watchSessions1, err := insertUserWatchSessions0(ctx, exec, related, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.WatchSessions = append(user0.R.WatchSessions, watchSessions1...)
+
+	for _, rel := range watchSessions1 {
+		rel.R.User = user0
+	}
+	return nil
+}
+
+func (user0 *User) AttachWatchSessions(ctx context.Context, exec bob.Executor, related ...*WatchSession) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	watchSessions1 := WatchSessionSlice(related)
+
+	_, err = attachUserWatchSessions0(ctx, exec, len(related), watchSessions1, user0)
+	if err != nil {
+		return err
+	}
+
+	user0.R.WatchSessions = append(user0.R.WatchSessions, watchSessions1...)
+
+	for _, rel := range related {
+		rel.R.User = user0
+	}
 
 	return nil
 }

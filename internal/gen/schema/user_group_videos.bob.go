@@ -67,8 +67,11 @@ type UserGroupVideosQuery = *psql.ViewQuery[*UserGroupVideo, UserGroupVideoSlice
 
 // userGroupVideoR is where relationships are stored.
 type userGroupVideoR struct {
-	AuthorUser       *User           // user_group_videos.user_group_videos_author_fkey
-	VideoVideoAssets VideoAssetSlice // video_assets.video_assets_video_id_fkey
+	VideoAssignments     AssignmentSlice    // assignments.fk_assignments_video_id
+	AuthorUser           *User              // user_group_videos.user_group_videos_author_fkey
+	VideoVideoAssets     VideoAssetSlice    // video_assets.video_assets_video_id_fkey
+	VideoWatchProgresses WatchProgressSlice // watch_progress.fk_watch_progress_video_id
+	VideoWatchSessions   WatchSessionSlice  // watch_sessions.fk_watch_sessions_video_id
 }
 
 func buildUserGroupVideoColumns(alias string) userGroupVideoColumns {
@@ -637,6 +640,30 @@ func (o UserGroupVideoSlice) ReloadAll(ctx context.Context, exec bob.Executor) e
 	return nil
 }
 
+// VideoAssignments starts a query for related objects on assignments
+func (o *UserGroupVideo) VideoAssignments(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentsQuery {
+	return Assignments.Query(append(mods,
+		sm.Where(Assignments.Columns.VideoID.EQ(psql.Arg(o.ID))),
+	)...)
+}
+
+func (os UserGroupVideoSlice) VideoAssignments(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentsQuery {
+	pkID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkID = append(pkID, o.ID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkID), "uuid[]")),
+	))
+
+	return Assignments.Query(append(mods,
+		sm.Where(psql.Group(Assignments.Columns.VideoID).OP("IN", PKArgExpr)),
+	)...)
+}
+
 // AuthorUser starts a query for related objects on users
 func (o *UserGroupVideo) AuthorUser(mods ...bob.Mod[*dialect.SelectQuery]) UsersQuery {
 	return Users.Query(append(mods,
@@ -683,6 +710,122 @@ func (os UserGroupVideoSlice) VideoVideoAssets(mods ...bob.Mod[*dialect.SelectQu
 	return VideoAssets.Query(append(mods,
 		sm.Where(psql.Group(VideoAssets.Columns.VideoID).OP("IN", PKArgExpr)),
 	)...)
+}
+
+// VideoWatchProgresses starts a query for related objects on watch_progress
+func (o *UserGroupVideo) VideoWatchProgresses(mods ...bob.Mod[*dialect.SelectQuery]) WatchProgressesQuery {
+	return WatchProgresses.Query(append(mods,
+		sm.Where(WatchProgresses.Columns.VideoID.EQ(psql.Arg(o.ID))),
+	)...)
+}
+
+func (os UserGroupVideoSlice) VideoWatchProgresses(mods ...bob.Mod[*dialect.SelectQuery]) WatchProgressesQuery {
+	pkID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkID = append(pkID, o.ID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkID), "uuid[]")),
+	))
+
+	return WatchProgresses.Query(append(mods,
+		sm.Where(psql.Group(WatchProgresses.Columns.VideoID).OP("IN", PKArgExpr)),
+	)...)
+}
+
+// VideoWatchSessions starts a query for related objects on watch_sessions
+func (o *UserGroupVideo) VideoWatchSessions(mods ...bob.Mod[*dialect.SelectQuery]) WatchSessionsQuery {
+	return WatchSessions.Query(append(mods,
+		sm.Where(WatchSessions.Columns.VideoID.EQ(psql.Arg(o.ID))),
+	)...)
+}
+
+func (os UserGroupVideoSlice) VideoWatchSessions(mods ...bob.Mod[*dialect.SelectQuery]) WatchSessionsQuery {
+	pkID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkID = append(pkID, o.ID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkID), "uuid[]")),
+	))
+
+	return WatchSessions.Query(append(mods,
+		sm.Where(psql.Group(WatchSessions.Columns.VideoID).OP("IN", PKArgExpr)),
+	)...)
+}
+
+func insertUserGroupVideoVideoAssignments0(ctx context.Context, exec bob.Executor, assignments1 []*AssignmentSetter, userGroupVideo0 *UserGroupVideo) (AssignmentSlice, error) {
+	for i := range assignments1 {
+		assignments1[i].VideoID = omitnull.From(userGroupVideo0.ID)
+	}
+
+	ret, err := Assignments.Insert(bob.ToMods(assignments1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserGroupVideoVideoAssignments0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserGroupVideoVideoAssignments0(ctx context.Context, exec bob.Executor, count int, assignments1 AssignmentSlice, userGroupVideo0 *UserGroupVideo) (AssignmentSlice, error) {
+	setter := &AssignmentSetter{
+		VideoID: omitnull.From(userGroupVideo0.ID),
+	}
+
+	err := assignments1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserGroupVideoVideoAssignments0: %w", err)
+	}
+
+	return assignments1, nil
+}
+
+func (userGroupVideo0 *UserGroupVideo) InsertVideoAssignments(ctx context.Context, exec bob.Executor, related ...*AssignmentSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	assignments1, err := insertUserGroupVideoVideoAssignments0(ctx, exec, related, userGroupVideo0)
+	if err != nil {
+		return err
+	}
+
+	userGroupVideo0.R.VideoAssignments = append(userGroupVideo0.R.VideoAssignments, assignments1...)
+
+	for _, rel := range assignments1 {
+		rel.R.VideoUserGroupVideo = userGroupVideo0
+	}
+	return nil
+}
+
+func (userGroupVideo0 *UserGroupVideo) AttachVideoAssignments(ctx context.Context, exec bob.Executor, related ...*Assignment) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	assignments1 := AssignmentSlice(related)
+
+	_, err = attachUserGroupVideoVideoAssignments0(ctx, exec, len(related), assignments1, userGroupVideo0)
+	if err != nil {
+		return err
+	}
+
+	userGroupVideo0.R.VideoAssignments = append(userGroupVideo0.R.VideoAssignments, assignments1...)
+
+	for _, rel := range related {
+		rel.R.VideoUserGroupVideo = userGroupVideo0
+	}
+
+	return nil
 }
 
 func attachUserGroupVideoAuthorUser0(ctx context.Context, exec bob.Executor, count int, userGroupVideo0 *UserGroupVideo, user1 *User) (*UserGroupVideo, error) {
@@ -793,6 +936,142 @@ func (userGroupVideo0 *UserGroupVideo) AttachVideoVideoAssets(ctx context.Contex
 	}
 
 	userGroupVideo0.R.VideoVideoAssets = append(userGroupVideo0.R.VideoVideoAssets, videoAssets1...)
+
+	for _, rel := range related {
+		rel.R.VideoUserGroupVideo = userGroupVideo0
+	}
+
+	return nil
+}
+
+func insertUserGroupVideoVideoWatchProgresses0(ctx context.Context, exec bob.Executor, watchProgresses1 []*WatchProgressSetter, userGroupVideo0 *UserGroupVideo) (WatchProgressSlice, error) {
+	for i := range watchProgresses1 {
+		watchProgresses1[i].VideoID = omit.From(userGroupVideo0.ID)
+	}
+
+	ret, err := WatchProgresses.Insert(bob.ToMods(watchProgresses1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserGroupVideoVideoWatchProgresses0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserGroupVideoVideoWatchProgresses0(ctx context.Context, exec bob.Executor, count int, watchProgresses1 WatchProgressSlice, userGroupVideo0 *UserGroupVideo) (WatchProgressSlice, error) {
+	setter := &WatchProgressSetter{
+		VideoID: omit.From(userGroupVideo0.ID),
+	}
+
+	err := watchProgresses1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserGroupVideoVideoWatchProgresses0: %w", err)
+	}
+
+	return watchProgresses1, nil
+}
+
+func (userGroupVideo0 *UserGroupVideo) InsertVideoWatchProgresses(ctx context.Context, exec bob.Executor, related ...*WatchProgressSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	watchProgresses1, err := insertUserGroupVideoVideoWatchProgresses0(ctx, exec, related, userGroupVideo0)
+	if err != nil {
+		return err
+	}
+
+	userGroupVideo0.R.VideoWatchProgresses = append(userGroupVideo0.R.VideoWatchProgresses, watchProgresses1...)
+
+	for _, rel := range watchProgresses1 {
+		rel.R.VideoUserGroupVideo = userGroupVideo0
+	}
+	return nil
+}
+
+func (userGroupVideo0 *UserGroupVideo) AttachVideoWatchProgresses(ctx context.Context, exec bob.Executor, related ...*WatchProgress) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	watchProgresses1 := WatchProgressSlice(related)
+
+	_, err = attachUserGroupVideoVideoWatchProgresses0(ctx, exec, len(related), watchProgresses1, userGroupVideo0)
+	if err != nil {
+		return err
+	}
+
+	userGroupVideo0.R.VideoWatchProgresses = append(userGroupVideo0.R.VideoWatchProgresses, watchProgresses1...)
+
+	for _, rel := range related {
+		rel.R.VideoUserGroupVideo = userGroupVideo0
+	}
+
+	return nil
+}
+
+func insertUserGroupVideoVideoWatchSessions0(ctx context.Context, exec bob.Executor, watchSessions1 []*WatchSessionSetter, userGroupVideo0 *UserGroupVideo) (WatchSessionSlice, error) {
+	for i := range watchSessions1 {
+		watchSessions1[i].VideoID = omit.From(userGroupVideo0.ID)
+	}
+
+	ret, err := WatchSessions.Insert(bob.ToMods(watchSessions1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserGroupVideoVideoWatchSessions0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserGroupVideoVideoWatchSessions0(ctx context.Context, exec bob.Executor, count int, watchSessions1 WatchSessionSlice, userGroupVideo0 *UserGroupVideo) (WatchSessionSlice, error) {
+	setter := &WatchSessionSetter{
+		VideoID: omit.From(userGroupVideo0.ID),
+	}
+
+	err := watchSessions1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserGroupVideoVideoWatchSessions0: %w", err)
+	}
+
+	return watchSessions1, nil
+}
+
+func (userGroupVideo0 *UserGroupVideo) InsertVideoWatchSessions(ctx context.Context, exec bob.Executor, related ...*WatchSessionSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	watchSessions1, err := insertUserGroupVideoVideoWatchSessions0(ctx, exec, related, userGroupVideo0)
+	if err != nil {
+		return err
+	}
+
+	userGroupVideo0.R.VideoWatchSessions = append(userGroupVideo0.R.VideoWatchSessions, watchSessions1...)
+
+	for _, rel := range watchSessions1 {
+		rel.R.VideoUserGroupVideo = userGroupVideo0
+	}
+	return nil
+}
+
+func (userGroupVideo0 *UserGroupVideo) AttachVideoWatchSessions(ctx context.Context, exec bob.Executor, related ...*WatchSession) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	watchSessions1 := WatchSessionSlice(related)
+
+	_, err = attachUserGroupVideoVideoWatchSessions0(ctx, exec, len(related), watchSessions1, userGroupVideo0)
+	if err != nil {
+		return err
+	}
+
+	userGroupVideo0.R.VideoWatchSessions = append(userGroupVideo0.R.VideoWatchSessions, watchSessions1...)
 
 	for _, rel := range related {
 		rel.R.VideoUserGroupVideo = userGroupVideo0

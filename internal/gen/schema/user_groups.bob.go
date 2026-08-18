@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"github.com/aarondl/opt/omit"
+	"github.com/aarondl/opt/omitnull"
 	"github.com/google/uuid"
 	"github.com/stephenafamo/bob"
 	"github.com/stephenafamo/bob/dialect/psql"
@@ -44,6 +45,7 @@ type UserGroupsQuery = *psql.ViewQuery[*UserGroup, UserGroupSlice]
 
 // userGroupR is where relationships are stored.
 type userGroupR struct {
+	GroupAssignments  AssignmentSlice  // assignments.fk_assignments_group_id
 	GroupGroupMembers GroupMemberSlice // group_members.fk_group_members_group_id
 	Account           *Account         // user_groups.fk_user_groups_account_id
 }
@@ -394,6 +396,30 @@ func (o UserGroupSlice) ReloadAll(ctx context.Context, exec bob.Executor) error 
 	return nil
 }
 
+// GroupAssignments starts a query for related objects on assignments
+func (o *UserGroup) GroupAssignments(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentsQuery {
+	return Assignments.Query(append(mods,
+		sm.Where(Assignments.Columns.GroupID.EQ(psql.Arg(o.GroupID))),
+	)...)
+}
+
+func (os UserGroupSlice) GroupAssignments(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentsQuery {
+	pkGroupID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkGroupID = append(pkGroupID, o.GroupID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkGroupID), "uuid[]")),
+	))
+
+	return Assignments.Query(append(mods,
+		sm.Where(psql.Group(Assignments.Columns.GroupID).OP("IN", PKArgExpr)),
+	)...)
+}
+
 // GroupGroupMembers starts a query for related objects on group_members
 func (o *UserGroup) GroupGroupMembers(mods ...bob.Mod[*dialect.SelectQuery]) GroupMembersQuery {
 	return GroupMembers.Query(append(mods,
@@ -440,6 +466,74 @@ func (os UserGroupSlice) Account(mods ...bob.Mod[*dialect.SelectQuery]) Accounts
 	return Accounts.Query(append(mods,
 		sm.Where(psql.Group(Accounts.Columns.AccountID).OP("IN", PKArgExpr)),
 	)...)
+}
+
+func insertUserGroupGroupAssignments0(ctx context.Context, exec bob.Executor, assignments1 []*AssignmentSetter, userGroup0 *UserGroup) (AssignmentSlice, error) {
+	for i := range assignments1 {
+		assignments1[i].GroupID = omitnull.From(userGroup0.GroupID)
+	}
+
+	ret, err := Assignments.Insert(bob.ToMods(assignments1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserGroupGroupAssignments0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserGroupGroupAssignments0(ctx context.Context, exec bob.Executor, count int, assignments1 AssignmentSlice, userGroup0 *UserGroup) (AssignmentSlice, error) {
+	setter := &AssignmentSetter{
+		GroupID: omitnull.From(userGroup0.GroupID),
+	}
+
+	err := assignments1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserGroupGroupAssignments0: %w", err)
+	}
+
+	return assignments1, nil
+}
+
+func (userGroup0 *UserGroup) InsertGroupAssignments(ctx context.Context, exec bob.Executor, related ...*AssignmentSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	assignments1, err := insertUserGroupGroupAssignments0(ctx, exec, related, userGroup0)
+	if err != nil {
+		return err
+	}
+
+	userGroup0.R.GroupAssignments = append(userGroup0.R.GroupAssignments, assignments1...)
+
+	for _, rel := range assignments1 {
+		rel.R.GroupUserGroup = userGroup0
+	}
+	return nil
+}
+
+func (userGroup0 *UserGroup) AttachGroupAssignments(ctx context.Context, exec bob.Executor, related ...*Assignment) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	assignments1 := AssignmentSlice(related)
+
+	_, err = attachUserGroupGroupAssignments0(ctx, exec, len(related), assignments1, userGroup0)
+	if err != nil {
+		return err
+	}
+
+	userGroup0.R.GroupAssignments = append(userGroup0.R.GroupAssignments, assignments1...)
+
+	for _, rel := range related {
+		rel.R.GroupUserGroup = userGroup0
+	}
+
+	return nil
 }
 
 func insertUserGroupGroupGroupMembers0(ctx context.Context, exec bob.Executor, groupMembers1 []*GroupMemberSetter, userGroup0 *UserGroup) (GroupMemberSlice, error) {

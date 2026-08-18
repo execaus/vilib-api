@@ -48,6 +48,7 @@ type AccountsQuery = *psql.ViewQuery[*Account, AccountSlice]
 // accountR is where relationships are stored.
 type accountR struct {
 	AccountRoles AccountRoleSlice // account_roles.fk_account
+	Assignments  AssignmentSlice  // assignments.fk_assignments_account_id
 	GroupRoles   GroupRoleSlice   // group_roles.fk_group_role_account_id
 	UserGroups   UserGroupSlice   // user_groups.fk_user_groups_account_id
 }
@@ -444,6 +445,30 @@ func (os AccountSlice) AccountRoles(mods ...bob.Mod[*dialect.SelectQuery]) Accou
 	)...)
 }
 
+// Assignments starts a query for related objects on assignments
+func (o *Account) Assignments(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentsQuery {
+	return Assignments.Query(append(mods,
+		sm.Where(Assignments.Columns.AccountID.EQ(psql.Arg(o.AccountID))),
+	)...)
+}
+
+func (os AccountSlice) Assignments(mods ...bob.Mod[*dialect.SelectQuery]) AssignmentsQuery {
+	pkAccountID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkAccountID = append(pkAccountID, o.AccountID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkAccountID), "uuid[]")),
+	))
+
+	return Assignments.Query(append(mods,
+		sm.Where(psql.Group(Assignments.Columns.AccountID).OP("IN", PKArgExpr)),
+	)...)
+}
+
 // GroupRoles starts a query for related objects on group_roles
 func (o *Account) GroupRoles(mods ...bob.Mod[*dialect.SelectQuery]) GroupRolesQuery {
 	return GroupRoles.Query(append(mods,
@@ -552,6 +577,74 @@ func (account0 *Account) AttachAccountRoles(ctx context.Context, exec bob.Execut
 	}
 
 	account0.R.AccountRoles = append(account0.R.AccountRoles, accountRoles1...)
+
+	for _, rel := range related {
+		rel.R.Account = account0
+	}
+
+	return nil
+}
+
+func insertAccountAssignments0(ctx context.Context, exec bob.Executor, assignments1 []*AssignmentSetter, account0 *Account) (AssignmentSlice, error) {
+	for i := range assignments1 {
+		assignments1[i].AccountID = omit.From(account0.AccountID)
+	}
+
+	ret, err := Assignments.Insert(bob.ToMods(assignments1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertAccountAssignments0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachAccountAssignments0(ctx context.Context, exec bob.Executor, count int, assignments1 AssignmentSlice, account0 *Account) (AssignmentSlice, error) {
+	setter := &AssignmentSetter{
+		AccountID: omit.From(account0.AccountID),
+	}
+
+	err := assignments1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachAccountAssignments0: %w", err)
+	}
+
+	return assignments1, nil
+}
+
+func (account0 *Account) InsertAssignments(ctx context.Context, exec bob.Executor, related ...*AssignmentSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	assignments1, err := insertAccountAssignments0(ctx, exec, related, account0)
+	if err != nil {
+		return err
+	}
+
+	account0.R.Assignments = append(account0.R.Assignments, assignments1...)
+
+	for _, rel := range assignments1 {
+		rel.R.Account = account0
+	}
+	return nil
+}
+
+func (account0 *Account) AttachAssignments(ctx context.Context, exec bob.Executor, related ...*Assignment) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	assignments1 := AssignmentSlice(related)
+
+	_, err = attachAccountAssignments0(ctx, exec, len(related), assignments1, account0)
+	if err != nil {
+		return err
+	}
+
+	account0.R.Assignments = append(account0.R.Assignments, assignments1...)
 
 	for _, rel := range related {
 		rel.R.Account = account0

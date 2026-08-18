@@ -22,6 +22,18 @@ var _ bob.HookableType = &AccountRole{}
 // Make sure the type Account runs hooks after queries
 var _ bob.HookableType = &Account{}
 
+// Make sure the type AssignmentEvent runs hooks after queries
+var _ bob.HookableType = &AssignmentEvent{}
+
+// Make sure the type AssignmentParticipant runs hooks after queries
+var _ bob.HookableType = &AssignmentParticipant{}
+
+// Make sure the type AssignmentTarget runs hooks after queries
+var _ bob.HookableType = &AssignmentTarget{}
+
+// Make sure the type Assignment runs hooks after queries
+var _ bob.HookableType = &Assignment{}
+
 // Make sure the type File runs hooks after queries
 var _ bob.HookableType = &File{}
 
@@ -48,6 +60,12 @@ var _ bob.HookableType = &User{}
 
 // Make sure the type VideoAsset runs hooks after queries
 var _ bob.HookableType = &VideoAsset{}
+
+// Make sure the type WatchProgress runs hooks after queries
+var _ bob.HookableType = &WatchProgress{}
+
+// Make sure the type WatchSession runs hooks after queries
+var _ bob.HookableType = &WatchSession{}
 
 // Make sure the type uuid.UUID satisfies database/sql.Scanner
 var _ sql.Scanner = (*uuid.UUID)(nil)
