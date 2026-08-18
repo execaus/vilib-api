@@ -196,7 +196,7 @@ func TestService_Auth_Login(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "user not found",
+			name: "get user error propagates",
 			setupMocks: func(
 				user *service_mocks.UserMock, _ *service_mocks.AccountMock,
 				_ *service_mocks.AccountRoleMock, _ *service_mocks.AuthMock,
@@ -207,6 +207,32 @@ func TestService_Auth_Login(t *testing.T) {
 			args:    args{testEmail, testPassword},
 			want:    "",
 			wantErr: errSomeError,
+		},
+		{
+			name: "unknown email returns invalid credentials, not not found",
+			setupMocks: func(
+				user *service_mocks.UserMock, _ *service_mocks.AccountMock,
+				_ *service_mocks.AccountRoleMock, _ *service_mocks.AuthMock,
+			) {
+				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
+					Return(nil, repository.ErrNotFound)
+			},
+			args:    args{testEmail, testPassword},
+			want:    "",
+			wantErr: service.ErrInvalidCredentials,
+		},
+		{
+			name: "empty user list returns invalid credentials",
+			setupMocks: func(
+				user *service_mocks.UserMock, _ *service_mocks.AccountMock,
+				_ *service_mocks.AccountRoleMock, _ *service_mocks.AuthMock,
+			) {
+				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
+					Return([]domain.User{}, nil)
+			},
+			args:    args{testEmail, testPassword},
+			want:    "",
+			wantErr: service.ErrInvalidCredentials,
 		},
 		{
 			name: "invalid password",
@@ -238,6 +264,39 @@ func TestService_Auth_Login(t *testing.T) {
 			args:    args{testEmail, testPassword},
 			want:    "",
 			wantErr: service.ErrUserDeactivated,
+		},
+		{
+			name: "prefers active row over deactivated when both rows match the password",
+			setupMocks: func(
+				user *service_mocks.UserMock, acc *service_mocks.AccountMock,
+				role *service_mocks.AccountRoleMock, auth *service_mocks.AuthMock,
+			) {
+				deactivatedAt := time.Now()
+				testDeactivatedUserID := uuid.New()
+				testDeactivatedHash := testutil.Faker.Hash().MD5()
+				// Деактивированная строка идёт первой в выборке — проверяет, что порядок не влияет
+				// на выбор активной строки (Д-6/Д-7 примечание ревью).
+				user.GetByEmailMock.Expect(minimock.AnyContext, testEmail).
+					Return([]domain.User{
+						{
+							ID: testDeactivatedUserID, RoleID: uuid.New(),
+							PasswordHash: testDeactivatedHash, DeactivatedAt: &deactivatedAt,
+						},
+						{ID: testUserID, RoleID: testRoleID, PasswordHash: testPasswordHash},
+					}, nil)
+				auth.ComparePasswordMock.When(testDeactivatedHash, testPassword).Then(true)
+				auth.ComparePasswordMock.When(testPasswordHash, testPassword).Then(true)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{ID: testRoleID, AccountID: testCurrentAccountID}}, nil)
+				acc.GetByUserEmailMock.Expect(minimock.AnyContext, testEmail).
+					Return([]domain.Account{{ID: testCurrentAccountID}}, nil)
+				auth.GenerateTokenMock.Expect(
+					testUserID, []uuid.UUID{testCurrentAccountID}, testCurrentAccountID,
+				).Return("test-token", nil)
+			},
+			args:    args{testEmail, testPassword},
+			want:    "test-token",
+			wantErr: nil,
 		},
 		{
 			name: "get current role error",
@@ -943,6 +1002,41 @@ func TestService_Auth_ResetPassword(t *testing.T) {
 			wantErr: errSomeError,
 		},
 		{
+			name: "get user error propagates",
+			setupMocks: func(
+				user *service_mocks.UserMock, _ *service_mocks.AuthMock, token *repository_mocks.PasswordResetTokenMock,
+			) {
+				token.SelectByHashMock.Set(func(_ context.Context, _ string) (domain.PasswordResetToken, error) {
+					return domain.PasswordResetToken{
+						ID: testTokenID, UserID: testUserID, Email: testEmail,
+						ExpiresAt: time.Now().Add(time.Hour),
+					}, nil
+				})
+				user.GetByIDMock.Expect(minimock.AnyContext, testUserID).
+					Return(nil, errSomeError)
+			},
+			args:    args{token: "raw-token", newPassword: "new-password"},
+			wantErr: errSomeError,
+		},
+		{
+			name: "token belongs to a deactivated row",
+			setupMocks: func(
+				user *service_mocks.UserMock, _ *service_mocks.AuthMock, token *repository_mocks.PasswordResetTokenMock,
+			) {
+				deactivatedAt := time.Now()
+				token.SelectByHashMock.Set(func(_ context.Context, _ string) (domain.PasswordResetToken, error) {
+					return domain.PasswordResetToken{
+						ID: testTokenID, UserID: testUserID, Email: testEmail,
+						ExpiresAt: time.Now().Add(time.Hour),
+					}, nil
+				})
+				user.GetByIDMock.Expect(minimock.AnyContext, testUserID).
+					Return([]domain.User{{ID: testUserID, DeactivatedAt: &deactivatedAt}}, nil)
+			},
+			args:    args{token: "raw-token", newPassword: "new-password"},
+			wantErr: service.ErrResetTokenInvalid,
+		},
+		{
 			name: "success marks token used and deletes the rest",
 			setupMocks: func(
 				user *service_mocks.UserMock, auth *service_mocks.AuthMock, token *repository_mocks.PasswordResetTokenMock,
@@ -953,6 +1047,8 @@ func TestService_Auth_ResetPassword(t *testing.T) {
 						ExpiresAt: time.Now().Add(time.Hour),
 					}, nil
 				})
+				user.GetByIDMock.Expect(minimock.AnyContext, testUserID).
+					Return([]domain.User{{ID: testUserID}}, nil)
 				auth.HashPasswordMock.Expect("new-password").Return(testNewHash, nil)
 				user.UpdatePasswordHashMock.Expect(minimock.AnyContext, testUserID, testNewHash).
 					Return(domain.User{ID: testUserID, PasswordHash: testNewHash}, nil)

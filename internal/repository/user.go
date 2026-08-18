@@ -36,7 +36,7 @@ func (r *UserRepository) SelectByEmail(ctx context.Context, email string) ([]dom
 	).All(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())
-		return nil, nil
+		return nil, err
 	}
 
 	if usersDB == nil {

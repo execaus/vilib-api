@@ -60,29 +60,29 @@ func NewAuthService(
 }
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, error) {
-	// Получение всех пользователей с таким email
+	// Получение всех пользователей с таким email. Неизвестный email — те же 401
+	// invalid_credentials, что и неверный пароль (без утечки существования email, Д-7 ревью).
 	users, err := s.srv.User.GetByEmail(ctx, email)
 	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			zap.L().Warn(ErrInvalidCredentials.Error())
+			return "", ErrInvalidCredentials
+		}
 		zap.L().Error(err.Error())
 		return "", err
 	}
 
-	// Поиск совпадений пароля хотя бы в одном
-	var userID uuid.UUID
-	isValid := false
-	var matchedUser domain.User
-	for _, user := range users {
-		if ok := s.srv.Auth.ComparePassword(user.PasswordHash, password); ok {
-			isValid = true
-			userID = user.ID
-			matchedUser = user
-			break
-		}
-	}
-	if !isValid {
+	// Поиск совпадений пароля среди строк email: если совпало несколько (пользователь
+	// деактивирован в одной организации и активен в другой), предпочитается активная строка,
+	// а не первая по порядку выборки (Д-6/примечание ревью).
+	matchedUser, ok := matchLoginUser(users, func(hash string) bool {
+		return s.srv.Auth.ComparePassword(hash, password)
+	})
+	if !ok {
 		zap.L().Warn(ErrInvalidCredentials.Error())
 		return "", ErrInvalidCredentials
 	}
+	userID := matchedUser.ID
 
 	// Проверка, что пользователь активен
 	if !matchedUser.IsActive() {
@@ -125,6 +125,32 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 	}
 
 	return token, nil
+}
+
+// matchLoginUser ищет среди строк email первую, чей хеш пароля проходит passwordMatches, и
+// возвращает её. Если совпало несколько строк, активная предпочитается деактивированной
+// независимо от порядка выборки; если активных совпадений нет — берётся первая деактивированная
+// (Login затем вернёт по ней ErrUserDeactivated). Совпадений нет — второе значение false.
+func matchLoginUser(users []domain.User, passwordMatches func(hash string) bool) (domain.User, bool) {
+	var deactivatedMatch domain.User
+	hasDeactivatedMatch := false
+
+	for _, user := range users {
+		if !passwordMatches(user.PasswordHash) {
+			continue
+		}
+
+		if user.IsActive() {
+			return user, true
+		}
+
+		if !hasDeactivatedMatch {
+			deactivatedMatch = user
+			hasDeactivatedMatch = true
+		}
+	}
+
+	return deactivatedMatch, hasDeactivatedMatch
 }
 
 // SwitchAccount выпускает новый токен с current_account_id, переключённым на accountID —
@@ -481,6 +507,18 @@ func (s *AuthService) ResetPassword(ctx context.Context, token, newPassword stri
 	}
 
 	if !resetToken.IsUsable(time.Now()) {
+		zap.L().Warn(ErrResetTokenInvalid.Error())
+		return ErrResetTokenInvalid
+	}
+
+	// Строка пользователя могла быть деактивирована уже после выдачи токена — сброс пароля
+	// деактивированной строки запрещён (примечание ревью по Д-6/Д-7).
+	users, err := s.srv.User.GetByID(ctx, resetToken.UserID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+	if !users[0].IsActive() {
 		zap.L().Warn(ErrResetTokenInvalid.Error())
 		return ErrResetTokenInvalid
 	}
