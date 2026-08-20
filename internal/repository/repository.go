@@ -289,6 +289,32 @@ type Assignment interface {
 	// SelectByIDs батчем выбирает назначения по списку идентификаторов (AssignmentService.
 	// ListMine). Отсутствие строки для части id — не ошибка.
 	SelectByIDs(ctx context.Context, ids []uuid.UUID) ([]domain.Assignment, error)
+	// UpdateDue меняет режим и значение срока назначения (AssignmentService.UpdateDue).
+	// Заполняется поле режима, противоположное — обнуляется.
+	UpdateDue(
+		ctx context.Context,
+		id uuid.UUID,
+		dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int,
+	) (domain.Assignment, error)
+	// UpdateComment меняет комментарий назначения; пустая строка очищает его.
+	UpdateComment(ctx context.Context, id uuid.UUID, comment string) (domain.Assignment, error)
+	// Cancel переводит назначение в статус cancelled. Условие status='active' в запросе
+	// защищает от повторной отмены: уже отменённое назначение возвращает false.
+	// cancelledBy — nil для системных отмен (удаление видео или группы).
+	Cancel(
+		ctx context.Context,
+		id uuid.UUID, cancelledBy *uuid.UUID,
+		reason domain.AssignmentCancelReason, at time.Time,
+	) (bool, error)
+	// SelectActiveByTargetGroup выбирает действующие назначения, адресованные группе как цели
+	// (каскад OnMembersAdded — зачисление новых участников группы).
+	SelectActiveByTargetGroup(ctx context.Context, groupID uuid.UUID) ([]domain.Assignment, error)
+	// SelectActiveByVideoIDs выбирает действующие назначения перечисленных видео (каскад
+	// OnVideoDeleted). Пустой список идентификаторов не порождает запроса к БД.
+	SelectActiveByVideoIDs(ctx context.Context, videoIDs []uuid.UUID) ([]domain.Assignment, error)
+	// SelectActiveByGroupID выбирает действующие назначения видео указанной группы (каскад
+	// OnGroupDeleted).
+	SelectActiveByGroupID(ctx context.Context, groupID uuid.UUID) ([]domain.Assignment, error)
 }
 
 // AssignmentTarget — репозиторий целей назначения: конкретный пользователь или группа
@@ -339,6 +365,43 @@ type AssignmentParticipant interface {
 		userID, videoID uuid.UUID,
 		completedAt time.Time, coveragePct, thresholdPct int,
 		sessionID *uuid.UUID,
+	) ([]uuid.UUID, error)
+	// SelectByAssignmentIDAndUserID выбирает персональную запись участника назначения
+	// (AssignmentService.RemoveParticipant). Строка не найдена — ErrNotFound.
+	SelectByAssignmentIDAndUserID(
+		ctx context.Context, assignmentID, userID uuid.UUID,
+	) (domain.AssignmentParticipant, error)
+	// UpdateDueByAssignment пересчитывает персональные сроки незавершённых участников
+	// назначения: режим date ставит общий срок, режим days — enrolled_at + dueDays.
+	// Завершённые и отменённые записи не затрагиваются (Э3-Н1). Возвращает id пользователей,
+	// чей срок изменился.
+	UpdateDueByAssignment(
+		ctx context.Context,
+		assignmentID uuid.UUID,
+		dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int,
+	) ([]uuid.UUID, error)
+	// CancelByAssignment отменяет незавершённых участников назначения (отмена назначения,
+	// удаление видео или группы). Возвращает id отменённых пользователей.
+	CancelByAssignment(
+		ctx context.Context,
+		assignmentID uuid.UUID,
+		reason domain.AssignmentParticipantCancelReason, at time.Time,
+	) ([]uuid.UUID, error)
+	// CancelOne отменяет участие одного пользователя в назначении (снятие участника
+	// менеджером). Завершённая запись не затрагивается — возвращает false.
+	CancelOne(
+		ctx context.Context,
+		assignmentID, userID uuid.UUID,
+		reason domain.AssignmentParticipantCancelReason, at time.Time,
+	) (bool, error)
+	// CancelBySourceGroupAndUser отменяет участия пользователя, полученные через членство в
+	// группе (source=group), во всех действующих назначениях — каскад исключения из группы.
+	// Личные назначения (source=personal) не затрагиваются (Э3-Т30). Возвращает id назначений,
+	// в которых участие отменено.
+	CancelBySourceGroupAndUser(
+		ctx context.Context,
+		groupID, userID uuid.UUID,
+		reason domain.AssignmentParticipantCancelReason, at time.Time,
 	) ([]uuid.UUID, error)
 }
 

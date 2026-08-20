@@ -21,12 +21,40 @@ type AssignmentMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
+	funcCancel          func(ctx context.Context, id uuid.UUID, cancelledBy *uuid.UUID, reason domain.AssignmentCancelReason, at time.Time) (b1 bool, err error)
+	funcCancelOrigin    string
+	inspectFuncCancel   func(ctx context.Context, id uuid.UUID, cancelledBy *uuid.UUID, reason domain.AssignmentCancelReason, at time.Time)
+	afterCancelCounter  uint64
+	beforeCancelCounter uint64
+	CancelMock          mAssignmentMockCancel
+
 	funcInsert          func(ctx context.Context, accountID uuid.UUID, videoID uuid.UUID, videoName string, groupID uuid.UUID, groupName string, createdBy uuid.UUID, dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int, comment string) (a1 domain.Assignment, err error)
 	funcInsertOrigin    string
 	inspectFuncInsert   func(ctx context.Context, accountID uuid.UUID, videoID uuid.UUID, videoName string, groupID uuid.UUID, groupName string, createdBy uuid.UUID, dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int, comment string)
 	afterInsertCounter  uint64
 	beforeInsertCounter uint64
 	InsertMock          mAssignmentMockInsert
+
+	funcSelectActiveByGroupID          func(ctx context.Context, groupID uuid.UUID) (aa1 []domain.Assignment, err error)
+	funcSelectActiveByGroupIDOrigin    string
+	inspectFuncSelectActiveByGroupID   func(ctx context.Context, groupID uuid.UUID)
+	afterSelectActiveByGroupIDCounter  uint64
+	beforeSelectActiveByGroupIDCounter uint64
+	SelectActiveByGroupIDMock          mAssignmentMockSelectActiveByGroupID
+
+	funcSelectActiveByTargetGroup          func(ctx context.Context, groupID uuid.UUID) (aa1 []domain.Assignment, err error)
+	funcSelectActiveByTargetGroupOrigin    string
+	inspectFuncSelectActiveByTargetGroup   func(ctx context.Context, groupID uuid.UUID)
+	afterSelectActiveByTargetGroupCounter  uint64
+	beforeSelectActiveByTargetGroupCounter uint64
+	SelectActiveByTargetGroupMock          mAssignmentMockSelectActiveByTargetGroup
+
+	funcSelectActiveByVideoIDs          func(ctx context.Context, videoIDs []uuid.UUID) (aa1 []domain.Assignment, err error)
+	funcSelectActiveByVideoIDsOrigin    string
+	inspectFuncSelectActiveByVideoIDs   func(ctx context.Context, videoIDs []uuid.UUID)
+	afterSelectActiveByVideoIDsCounter  uint64
+	beforeSelectActiveByVideoIDsCounter uint64
+	SelectActiveByVideoIDsMock          mAssignmentMockSelectActiveByVideoIDs
 
 	funcSelectByID          func(ctx context.Context, id uuid.UUID) (a1 domain.Assignment, err error)
 	funcSelectByIDOrigin    string
@@ -41,6 +69,20 @@ type AssignmentMock struct {
 	afterSelectByIDsCounter  uint64
 	beforeSelectByIDsCounter uint64
 	SelectByIDsMock          mAssignmentMockSelectByIDs
+
+	funcUpdateComment          func(ctx context.Context, id uuid.UUID, comment string) (a1 domain.Assignment, err error)
+	funcUpdateCommentOrigin    string
+	inspectFuncUpdateComment   func(ctx context.Context, id uuid.UUID, comment string)
+	afterUpdateCommentCounter  uint64
+	beforeUpdateCommentCounter uint64
+	UpdateCommentMock          mAssignmentMockUpdateComment
+
+	funcUpdateDue          func(ctx context.Context, id uuid.UUID, dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int) (a1 domain.Assignment, err error)
+	funcUpdateDueOrigin    string
+	inspectFuncUpdateDue   func(ctx context.Context, id uuid.UUID, dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int)
+	afterUpdateDueCounter  uint64
+	beforeUpdateDueCounter uint64
+	UpdateDueMock          mAssignmentMockUpdateDue
 }
 
 // NewAssignmentMock returns a mock for mm_repository.Assignment
@@ -51,8 +93,20 @@ func NewAssignmentMock(t minimock.Tester) *AssignmentMock {
 		controller.RegisterMocker(m)
 	}
 
+	m.CancelMock = mAssignmentMockCancel{mock: m}
+	m.CancelMock.callArgs = []*AssignmentMockCancelParams{}
+
 	m.InsertMock = mAssignmentMockInsert{mock: m}
 	m.InsertMock.callArgs = []*AssignmentMockInsertParams{}
+
+	m.SelectActiveByGroupIDMock = mAssignmentMockSelectActiveByGroupID{mock: m}
+	m.SelectActiveByGroupIDMock.callArgs = []*AssignmentMockSelectActiveByGroupIDParams{}
+
+	m.SelectActiveByTargetGroupMock = mAssignmentMockSelectActiveByTargetGroup{mock: m}
+	m.SelectActiveByTargetGroupMock.callArgs = []*AssignmentMockSelectActiveByTargetGroupParams{}
+
+	m.SelectActiveByVideoIDsMock = mAssignmentMockSelectActiveByVideoIDs{mock: m}
+	m.SelectActiveByVideoIDsMock.callArgs = []*AssignmentMockSelectActiveByVideoIDsParams{}
 
 	m.SelectByIDMock = mAssignmentMockSelectByID{mock: m}
 	m.SelectByIDMock.callArgs = []*AssignmentMockSelectByIDParams{}
@@ -60,9 +114,451 @@ func NewAssignmentMock(t minimock.Tester) *AssignmentMock {
 	m.SelectByIDsMock = mAssignmentMockSelectByIDs{mock: m}
 	m.SelectByIDsMock.callArgs = []*AssignmentMockSelectByIDsParams{}
 
+	m.UpdateCommentMock = mAssignmentMockUpdateComment{mock: m}
+	m.UpdateCommentMock.callArgs = []*AssignmentMockUpdateCommentParams{}
+
+	m.UpdateDueMock = mAssignmentMockUpdateDue{mock: m}
+	m.UpdateDueMock.callArgs = []*AssignmentMockUpdateDueParams{}
+
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mAssignmentMockCancel struct {
+	optional           bool
+	mock               *AssignmentMock
+	defaultExpectation *AssignmentMockCancelExpectation
+	expectations       []*AssignmentMockCancelExpectation
+
+	callArgs []*AssignmentMockCancelParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AssignmentMockCancelExpectation specifies expectation struct of the Assignment.Cancel
+type AssignmentMockCancelExpectation struct {
+	mock               *AssignmentMock
+	params             *AssignmentMockCancelParams
+	paramPtrs          *AssignmentMockCancelParamPtrs
+	expectationOrigins AssignmentMockCancelExpectationOrigins
+	results            *AssignmentMockCancelResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AssignmentMockCancelParams contains parameters of the Assignment.Cancel
+type AssignmentMockCancelParams struct {
+	ctx         context.Context
+	id          uuid.UUID
+	cancelledBy *uuid.UUID
+	reason      domain.AssignmentCancelReason
+	at          time.Time
+}
+
+// AssignmentMockCancelParamPtrs contains pointers to parameters of the Assignment.Cancel
+type AssignmentMockCancelParamPtrs struct {
+	ctx         *context.Context
+	id          *uuid.UUID
+	cancelledBy **uuid.UUID
+	reason      *domain.AssignmentCancelReason
+	at          *time.Time
+}
+
+// AssignmentMockCancelResults contains results of the Assignment.Cancel
+type AssignmentMockCancelResults struct {
+	b1  bool
+	err error
+}
+
+// AssignmentMockCancelOrigins contains origins of expectations of the Assignment.Cancel
+type AssignmentMockCancelExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originId          string
+	originCancelledBy string
+	originReason      string
+	originAt          string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmCancel *mAssignmentMockCancel) Optional() *mAssignmentMockCancel {
+	mmCancel.optional = true
+	return mmCancel
+}
+
+// Expect sets up expected params for Assignment.Cancel
+func (mmCancel *mAssignmentMockCancel) Expect(ctx context.Context, id uuid.UUID, cancelledBy *uuid.UUID, reason domain.AssignmentCancelReason, at time.Time) *mAssignmentMockCancel {
+	if mmCancel.mock.funcCancel != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Set")
+	}
+
+	if mmCancel.defaultExpectation == nil {
+		mmCancel.defaultExpectation = &AssignmentMockCancelExpectation{}
+	}
+
+	if mmCancel.defaultExpectation.paramPtrs != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by ExpectParams functions")
+	}
+
+	mmCancel.defaultExpectation.params = &AssignmentMockCancelParams{ctx, id, cancelledBy, reason, at}
+	mmCancel.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCancel.expectations {
+		if minimock.Equal(e.params, mmCancel.defaultExpectation.params) {
+			mmCancel.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCancel.defaultExpectation.params)
+		}
+	}
+
+	return mmCancel
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Assignment.Cancel
+func (mmCancel *mAssignmentMockCancel) ExpectCtxParam1(ctx context.Context) *mAssignmentMockCancel {
+	if mmCancel.mock.funcCancel != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Set")
+	}
+
+	if mmCancel.defaultExpectation == nil {
+		mmCancel.defaultExpectation = &AssignmentMockCancelExpectation{}
+	}
+
+	if mmCancel.defaultExpectation.params != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Expect")
+	}
+
+	if mmCancel.defaultExpectation.paramPtrs == nil {
+		mmCancel.defaultExpectation.paramPtrs = &AssignmentMockCancelParamPtrs{}
+	}
+	mmCancel.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCancel.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmCancel
+}
+
+// ExpectIdParam2 sets up expected param id for Assignment.Cancel
+func (mmCancel *mAssignmentMockCancel) ExpectIdParam2(id uuid.UUID) *mAssignmentMockCancel {
+	if mmCancel.mock.funcCancel != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Set")
+	}
+
+	if mmCancel.defaultExpectation == nil {
+		mmCancel.defaultExpectation = &AssignmentMockCancelExpectation{}
+	}
+
+	if mmCancel.defaultExpectation.params != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Expect")
+	}
+
+	if mmCancel.defaultExpectation.paramPtrs == nil {
+		mmCancel.defaultExpectation.paramPtrs = &AssignmentMockCancelParamPtrs{}
+	}
+	mmCancel.defaultExpectation.paramPtrs.id = &id
+	mmCancel.defaultExpectation.expectationOrigins.originId = minimock.CallerInfo(1)
+
+	return mmCancel
+}
+
+// ExpectCancelledByParam3 sets up expected param cancelledBy for Assignment.Cancel
+func (mmCancel *mAssignmentMockCancel) ExpectCancelledByParam3(cancelledBy *uuid.UUID) *mAssignmentMockCancel {
+	if mmCancel.mock.funcCancel != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Set")
+	}
+
+	if mmCancel.defaultExpectation == nil {
+		mmCancel.defaultExpectation = &AssignmentMockCancelExpectation{}
+	}
+
+	if mmCancel.defaultExpectation.params != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Expect")
+	}
+
+	if mmCancel.defaultExpectation.paramPtrs == nil {
+		mmCancel.defaultExpectation.paramPtrs = &AssignmentMockCancelParamPtrs{}
+	}
+	mmCancel.defaultExpectation.paramPtrs.cancelledBy = &cancelledBy
+	mmCancel.defaultExpectation.expectationOrigins.originCancelledBy = minimock.CallerInfo(1)
+
+	return mmCancel
+}
+
+// ExpectReasonParam4 sets up expected param reason for Assignment.Cancel
+func (mmCancel *mAssignmentMockCancel) ExpectReasonParam4(reason domain.AssignmentCancelReason) *mAssignmentMockCancel {
+	if mmCancel.mock.funcCancel != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Set")
+	}
+
+	if mmCancel.defaultExpectation == nil {
+		mmCancel.defaultExpectation = &AssignmentMockCancelExpectation{}
+	}
+
+	if mmCancel.defaultExpectation.params != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Expect")
+	}
+
+	if mmCancel.defaultExpectation.paramPtrs == nil {
+		mmCancel.defaultExpectation.paramPtrs = &AssignmentMockCancelParamPtrs{}
+	}
+	mmCancel.defaultExpectation.paramPtrs.reason = &reason
+	mmCancel.defaultExpectation.expectationOrigins.originReason = minimock.CallerInfo(1)
+
+	return mmCancel
+}
+
+// ExpectAtParam5 sets up expected param at for Assignment.Cancel
+func (mmCancel *mAssignmentMockCancel) ExpectAtParam5(at time.Time) *mAssignmentMockCancel {
+	if mmCancel.mock.funcCancel != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Set")
+	}
+
+	if mmCancel.defaultExpectation == nil {
+		mmCancel.defaultExpectation = &AssignmentMockCancelExpectation{}
+	}
+
+	if mmCancel.defaultExpectation.params != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Expect")
+	}
+
+	if mmCancel.defaultExpectation.paramPtrs == nil {
+		mmCancel.defaultExpectation.paramPtrs = &AssignmentMockCancelParamPtrs{}
+	}
+	mmCancel.defaultExpectation.paramPtrs.at = &at
+	mmCancel.defaultExpectation.expectationOrigins.originAt = minimock.CallerInfo(1)
+
+	return mmCancel
+}
+
+// Inspect accepts an inspector function that has same arguments as the Assignment.Cancel
+func (mmCancel *mAssignmentMockCancel) Inspect(f func(ctx context.Context, id uuid.UUID, cancelledBy *uuid.UUID, reason domain.AssignmentCancelReason, at time.Time)) *mAssignmentMockCancel {
+	if mmCancel.mock.inspectFuncCancel != nil {
+		mmCancel.mock.t.Fatalf("Inspect function is already set for AssignmentMock.Cancel")
+	}
+
+	mmCancel.mock.inspectFuncCancel = f
+
+	return mmCancel
+}
+
+// Return sets up results that will be returned by Assignment.Cancel
+func (mmCancel *mAssignmentMockCancel) Return(b1 bool, err error) *AssignmentMock {
+	if mmCancel.mock.funcCancel != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Set")
+	}
+
+	if mmCancel.defaultExpectation == nil {
+		mmCancel.defaultExpectation = &AssignmentMockCancelExpectation{mock: mmCancel.mock}
+	}
+	mmCancel.defaultExpectation.results = &AssignmentMockCancelResults{b1, err}
+	mmCancel.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCancel.mock
+}
+
+// Set uses given function f to mock the Assignment.Cancel method
+func (mmCancel *mAssignmentMockCancel) Set(f func(ctx context.Context, id uuid.UUID, cancelledBy *uuid.UUID, reason domain.AssignmentCancelReason, at time.Time) (b1 bool, err error)) *AssignmentMock {
+	if mmCancel.defaultExpectation != nil {
+		mmCancel.mock.t.Fatalf("Default expectation is already set for the Assignment.Cancel method")
+	}
+
+	if len(mmCancel.expectations) > 0 {
+		mmCancel.mock.t.Fatalf("Some expectations are already set for the Assignment.Cancel method")
+	}
+
+	mmCancel.mock.funcCancel = f
+	mmCancel.mock.funcCancelOrigin = minimock.CallerInfo(1)
+	return mmCancel.mock
+}
+
+// When sets expectation for the Assignment.Cancel which will trigger the result defined by the following
+// Then helper
+func (mmCancel *mAssignmentMockCancel) When(ctx context.Context, id uuid.UUID, cancelledBy *uuid.UUID, reason domain.AssignmentCancelReason, at time.Time) *AssignmentMockCancelExpectation {
+	if mmCancel.mock.funcCancel != nil {
+		mmCancel.mock.t.Fatalf("AssignmentMock.Cancel mock is already set by Set")
+	}
+
+	expectation := &AssignmentMockCancelExpectation{
+		mock:               mmCancel.mock,
+		params:             &AssignmentMockCancelParams{ctx, id, cancelledBy, reason, at},
+		expectationOrigins: AssignmentMockCancelExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmCancel.expectations = append(mmCancel.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Assignment.Cancel return parameters for the expectation previously defined by the When method
+func (e *AssignmentMockCancelExpectation) Then(b1 bool, err error) *AssignmentMock {
+	e.results = &AssignmentMockCancelResults{b1, err}
+	return e.mock
+}
+
+// Times sets number of times Assignment.Cancel should be invoked
+func (mmCancel *mAssignmentMockCancel) Times(n uint64) *mAssignmentMockCancel {
+	if n == 0 {
+		mmCancel.mock.t.Fatalf("Times of AssignmentMock.Cancel mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCancel.expectedInvocations, n)
+	mmCancel.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCancel
+}
+
+func (mmCancel *mAssignmentMockCancel) invocationsDone() bool {
+	if len(mmCancel.expectations) == 0 && mmCancel.defaultExpectation == nil && mmCancel.mock.funcCancel == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCancel.mock.afterCancelCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCancel.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// Cancel implements mm_repository.Assignment
+func (mmCancel *AssignmentMock) Cancel(ctx context.Context, id uuid.UUID, cancelledBy *uuid.UUID, reason domain.AssignmentCancelReason, at time.Time) (b1 bool, err error) {
+	mm_atomic.AddUint64(&mmCancel.beforeCancelCounter, 1)
+	defer mm_atomic.AddUint64(&mmCancel.afterCancelCounter, 1)
+
+	mmCancel.t.Helper()
+
+	if mmCancel.inspectFuncCancel != nil {
+		mmCancel.inspectFuncCancel(ctx, id, cancelledBy, reason, at)
+	}
+
+	mm_params := AssignmentMockCancelParams{ctx, id, cancelledBy, reason, at}
+
+	// Record call args
+	mmCancel.CancelMock.mutex.Lock()
+	mmCancel.CancelMock.callArgs = append(mmCancel.CancelMock.callArgs, &mm_params)
+	mmCancel.CancelMock.mutex.Unlock()
+
+	for _, e := range mmCancel.CancelMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.b1, e.results.err
+		}
+	}
+
+	if mmCancel.CancelMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCancel.CancelMock.defaultExpectation.Counter, 1)
+		mm_want := mmCancel.CancelMock.defaultExpectation.params
+		mm_want_ptrs := mmCancel.CancelMock.defaultExpectation.paramPtrs
+
+		mm_got := AssignmentMockCancelParams{ctx, id, cancelledBy, reason, at}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCancel.t.Errorf("AssignmentMock.Cancel got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCancel.CancelMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.id != nil && !minimock.Equal(*mm_want_ptrs.id, mm_got.id) {
+				mmCancel.t.Errorf("AssignmentMock.Cancel got unexpected parameter id, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCancel.CancelMock.defaultExpectation.expectationOrigins.originId, *mm_want_ptrs.id, mm_got.id, minimock.Diff(*mm_want_ptrs.id, mm_got.id))
+			}
+
+			if mm_want_ptrs.cancelledBy != nil && !minimock.Equal(*mm_want_ptrs.cancelledBy, mm_got.cancelledBy) {
+				mmCancel.t.Errorf("AssignmentMock.Cancel got unexpected parameter cancelledBy, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCancel.CancelMock.defaultExpectation.expectationOrigins.originCancelledBy, *mm_want_ptrs.cancelledBy, mm_got.cancelledBy, minimock.Diff(*mm_want_ptrs.cancelledBy, mm_got.cancelledBy))
+			}
+
+			if mm_want_ptrs.reason != nil && !minimock.Equal(*mm_want_ptrs.reason, mm_got.reason) {
+				mmCancel.t.Errorf("AssignmentMock.Cancel got unexpected parameter reason, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCancel.CancelMock.defaultExpectation.expectationOrigins.originReason, *mm_want_ptrs.reason, mm_got.reason, minimock.Diff(*mm_want_ptrs.reason, mm_got.reason))
+			}
+
+			if mm_want_ptrs.at != nil && !minimock.Equal(*mm_want_ptrs.at, mm_got.at) {
+				mmCancel.t.Errorf("AssignmentMock.Cancel got unexpected parameter at, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCancel.CancelMock.defaultExpectation.expectationOrigins.originAt, *mm_want_ptrs.at, mm_got.at, minimock.Diff(*mm_want_ptrs.at, mm_got.at))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCancel.t.Errorf("AssignmentMock.Cancel got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCancel.CancelMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCancel.CancelMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCancel.t.Fatal("No results are set for the AssignmentMock.Cancel")
+		}
+		return (*mm_results).b1, (*mm_results).err
+	}
+	if mmCancel.funcCancel != nil {
+		return mmCancel.funcCancel(ctx, id, cancelledBy, reason, at)
+	}
+	mmCancel.t.Fatalf("Unexpected call to AssignmentMock.Cancel. %v %v %v %v %v", ctx, id, cancelledBy, reason, at)
+	return
+}
+
+// CancelAfterCounter returns a count of finished AssignmentMock.Cancel invocations
+func (mmCancel *AssignmentMock) CancelAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCancel.afterCancelCounter)
+}
+
+// CancelBeforeCounter returns a count of AssignmentMock.Cancel invocations
+func (mmCancel *AssignmentMock) CancelBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCancel.beforeCancelCounter)
+}
+
+// Calls returns a list of arguments used in each call to AssignmentMock.Cancel.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCancel *mAssignmentMockCancel) Calls() []*AssignmentMockCancelParams {
+	mmCancel.mutex.RLock()
+
+	argCopy := make([]*AssignmentMockCancelParams, len(mmCancel.callArgs))
+	copy(argCopy, mmCancel.callArgs)
+
+	mmCancel.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCancelDone returns true if the count of the Cancel invocations corresponds
+// the number of defined expectations
+func (m *AssignmentMock) MinimockCancelDone() bool {
+	if m.CancelMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CancelMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CancelMock.invocationsDone()
+}
+
+// MinimockCancelInspect logs each unmet expectation
+func (m *AssignmentMock) MinimockCancelInspect() {
+	for _, e := range m.CancelMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AssignmentMock.Cancel at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterCancelCounter := mm_atomic.LoadUint64(&m.afterCancelCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CancelMock.defaultExpectation != nil && afterCancelCounter < 1 {
+		if m.CancelMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AssignmentMock.Cancel at\n%s", m.CancelMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AssignmentMock.Cancel at\n%s with params: %#v", m.CancelMock.defaultExpectation.expectationOrigins.origin, *m.CancelMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCancel != nil && afterCancelCounter < 1 {
+		m.t.Errorf("Expected call to AssignmentMock.Cancel at\n%s", m.funcCancelOrigin)
+	}
+
+	if !m.CancelMock.invocationsDone() && afterCancelCounter > 0 {
+		m.t.Errorf("Expected %d calls to AssignmentMock.Cancel at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CancelMock.expectedInvocations), m.CancelMock.expectedInvocationsOrigin, afterCancelCounter)
+	}
 }
 
 type mAssignmentMockInsert struct {
@@ -684,6 +1180,1035 @@ func (m *AssignmentMock) MinimockInsertInspect() {
 	if !m.InsertMock.invocationsDone() && afterInsertCounter > 0 {
 		m.t.Errorf("Expected %d calls to AssignmentMock.Insert at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.InsertMock.expectedInvocations), m.InsertMock.expectedInvocationsOrigin, afterInsertCounter)
+	}
+}
+
+type mAssignmentMockSelectActiveByGroupID struct {
+	optional           bool
+	mock               *AssignmentMock
+	defaultExpectation *AssignmentMockSelectActiveByGroupIDExpectation
+	expectations       []*AssignmentMockSelectActiveByGroupIDExpectation
+
+	callArgs []*AssignmentMockSelectActiveByGroupIDParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AssignmentMockSelectActiveByGroupIDExpectation specifies expectation struct of the Assignment.SelectActiveByGroupID
+type AssignmentMockSelectActiveByGroupIDExpectation struct {
+	mock               *AssignmentMock
+	params             *AssignmentMockSelectActiveByGroupIDParams
+	paramPtrs          *AssignmentMockSelectActiveByGroupIDParamPtrs
+	expectationOrigins AssignmentMockSelectActiveByGroupIDExpectationOrigins
+	results            *AssignmentMockSelectActiveByGroupIDResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AssignmentMockSelectActiveByGroupIDParams contains parameters of the Assignment.SelectActiveByGroupID
+type AssignmentMockSelectActiveByGroupIDParams struct {
+	ctx     context.Context
+	groupID uuid.UUID
+}
+
+// AssignmentMockSelectActiveByGroupIDParamPtrs contains pointers to parameters of the Assignment.SelectActiveByGroupID
+type AssignmentMockSelectActiveByGroupIDParamPtrs struct {
+	ctx     *context.Context
+	groupID *uuid.UUID
+}
+
+// AssignmentMockSelectActiveByGroupIDResults contains results of the Assignment.SelectActiveByGroupID
+type AssignmentMockSelectActiveByGroupIDResults struct {
+	aa1 []domain.Assignment
+	err error
+}
+
+// AssignmentMockSelectActiveByGroupIDOrigins contains origins of expectations of the Assignment.SelectActiveByGroupID
+type AssignmentMockSelectActiveByGroupIDExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originGroupID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) Optional() *mAssignmentMockSelectActiveByGroupID {
+	mmSelectActiveByGroupID.optional = true
+	return mmSelectActiveByGroupID
+}
+
+// Expect sets up expected params for Assignment.SelectActiveByGroupID
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) Expect(ctx context.Context, groupID uuid.UUID) *mAssignmentMockSelectActiveByGroupID {
+	if mmSelectActiveByGroupID.mock.funcSelectActiveByGroupID != nil {
+		mmSelectActiveByGroupID.mock.t.Fatalf("AssignmentMock.SelectActiveByGroupID mock is already set by Set")
+	}
+
+	if mmSelectActiveByGroupID.defaultExpectation == nil {
+		mmSelectActiveByGroupID.defaultExpectation = &AssignmentMockSelectActiveByGroupIDExpectation{}
+	}
+
+	if mmSelectActiveByGroupID.defaultExpectation.paramPtrs != nil {
+		mmSelectActiveByGroupID.mock.t.Fatalf("AssignmentMock.SelectActiveByGroupID mock is already set by ExpectParams functions")
+	}
+
+	mmSelectActiveByGroupID.defaultExpectation.params = &AssignmentMockSelectActiveByGroupIDParams{ctx, groupID}
+	mmSelectActiveByGroupID.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSelectActiveByGroupID.expectations {
+		if minimock.Equal(e.params, mmSelectActiveByGroupID.defaultExpectation.params) {
+			mmSelectActiveByGroupID.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSelectActiveByGroupID.defaultExpectation.params)
+		}
+	}
+
+	return mmSelectActiveByGroupID
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Assignment.SelectActiveByGroupID
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) ExpectCtxParam1(ctx context.Context) *mAssignmentMockSelectActiveByGroupID {
+	if mmSelectActiveByGroupID.mock.funcSelectActiveByGroupID != nil {
+		mmSelectActiveByGroupID.mock.t.Fatalf("AssignmentMock.SelectActiveByGroupID mock is already set by Set")
+	}
+
+	if mmSelectActiveByGroupID.defaultExpectation == nil {
+		mmSelectActiveByGroupID.defaultExpectation = &AssignmentMockSelectActiveByGroupIDExpectation{}
+	}
+
+	if mmSelectActiveByGroupID.defaultExpectation.params != nil {
+		mmSelectActiveByGroupID.mock.t.Fatalf("AssignmentMock.SelectActiveByGroupID mock is already set by Expect")
+	}
+
+	if mmSelectActiveByGroupID.defaultExpectation.paramPtrs == nil {
+		mmSelectActiveByGroupID.defaultExpectation.paramPtrs = &AssignmentMockSelectActiveByGroupIDParamPtrs{}
+	}
+	mmSelectActiveByGroupID.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSelectActiveByGroupID.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSelectActiveByGroupID
+}
+
+// ExpectGroupIDParam2 sets up expected param groupID for Assignment.SelectActiveByGroupID
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) ExpectGroupIDParam2(groupID uuid.UUID) *mAssignmentMockSelectActiveByGroupID {
+	if mmSelectActiveByGroupID.mock.funcSelectActiveByGroupID != nil {
+		mmSelectActiveByGroupID.mock.t.Fatalf("AssignmentMock.SelectActiveByGroupID mock is already set by Set")
+	}
+
+	if mmSelectActiveByGroupID.defaultExpectation == nil {
+		mmSelectActiveByGroupID.defaultExpectation = &AssignmentMockSelectActiveByGroupIDExpectation{}
+	}
+
+	if mmSelectActiveByGroupID.defaultExpectation.params != nil {
+		mmSelectActiveByGroupID.mock.t.Fatalf("AssignmentMock.SelectActiveByGroupID mock is already set by Expect")
+	}
+
+	if mmSelectActiveByGroupID.defaultExpectation.paramPtrs == nil {
+		mmSelectActiveByGroupID.defaultExpectation.paramPtrs = &AssignmentMockSelectActiveByGroupIDParamPtrs{}
+	}
+	mmSelectActiveByGroupID.defaultExpectation.paramPtrs.groupID = &groupID
+	mmSelectActiveByGroupID.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmSelectActiveByGroupID
+}
+
+// Inspect accepts an inspector function that has same arguments as the Assignment.SelectActiveByGroupID
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) Inspect(f func(ctx context.Context, groupID uuid.UUID)) *mAssignmentMockSelectActiveByGroupID {
+	if mmSelectActiveByGroupID.mock.inspectFuncSelectActiveByGroupID != nil {
+		mmSelectActiveByGroupID.mock.t.Fatalf("Inspect function is already set for AssignmentMock.SelectActiveByGroupID")
+	}
+
+	mmSelectActiveByGroupID.mock.inspectFuncSelectActiveByGroupID = f
+
+	return mmSelectActiveByGroupID
+}
+
+// Return sets up results that will be returned by Assignment.SelectActiveByGroupID
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) Return(aa1 []domain.Assignment, err error) *AssignmentMock {
+	if mmSelectActiveByGroupID.mock.funcSelectActiveByGroupID != nil {
+		mmSelectActiveByGroupID.mock.t.Fatalf("AssignmentMock.SelectActiveByGroupID mock is already set by Set")
+	}
+
+	if mmSelectActiveByGroupID.defaultExpectation == nil {
+		mmSelectActiveByGroupID.defaultExpectation = &AssignmentMockSelectActiveByGroupIDExpectation{mock: mmSelectActiveByGroupID.mock}
+	}
+	mmSelectActiveByGroupID.defaultExpectation.results = &AssignmentMockSelectActiveByGroupIDResults{aa1, err}
+	mmSelectActiveByGroupID.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSelectActiveByGroupID.mock
+}
+
+// Set uses given function f to mock the Assignment.SelectActiveByGroupID method
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) Set(f func(ctx context.Context, groupID uuid.UUID) (aa1 []domain.Assignment, err error)) *AssignmentMock {
+	if mmSelectActiveByGroupID.defaultExpectation != nil {
+		mmSelectActiveByGroupID.mock.t.Fatalf("Default expectation is already set for the Assignment.SelectActiveByGroupID method")
+	}
+
+	if len(mmSelectActiveByGroupID.expectations) > 0 {
+		mmSelectActiveByGroupID.mock.t.Fatalf("Some expectations are already set for the Assignment.SelectActiveByGroupID method")
+	}
+
+	mmSelectActiveByGroupID.mock.funcSelectActiveByGroupID = f
+	mmSelectActiveByGroupID.mock.funcSelectActiveByGroupIDOrigin = minimock.CallerInfo(1)
+	return mmSelectActiveByGroupID.mock
+}
+
+// When sets expectation for the Assignment.SelectActiveByGroupID which will trigger the result defined by the following
+// Then helper
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) When(ctx context.Context, groupID uuid.UUID) *AssignmentMockSelectActiveByGroupIDExpectation {
+	if mmSelectActiveByGroupID.mock.funcSelectActiveByGroupID != nil {
+		mmSelectActiveByGroupID.mock.t.Fatalf("AssignmentMock.SelectActiveByGroupID mock is already set by Set")
+	}
+
+	expectation := &AssignmentMockSelectActiveByGroupIDExpectation{
+		mock:               mmSelectActiveByGroupID.mock,
+		params:             &AssignmentMockSelectActiveByGroupIDParams{ctx, groupID},
+		expectationOrigins: AssignmentMockSelectActiveByGroupIDExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSelectActiveByGroupID.expectations = append(mmSelectActiveByGroupID.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Assignment.SelectActiveByGroupID return parameters for the expectation previously defined by the When method
+func (e *AssignmentMockSelectActiveByGroupIDExpectation) Then(aa1 []domain.Assignment, err error) *AssignmentMock {
+	e.results = &AssignmentMockSelectActiveByGroupIDResults{aa1, err}
+	return e.mock
+}
+
+// Times sets number of times Assignment.SelectActiveByGroupID should be invoked
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) Times(n uint64) *mAssignmentMockSelectActiveByGroupID {
+	if n == 0 {
+		mmSelectActiveByGroupID.mock.t.Fatalf("Times of AssignmentMock.SelectActiveByGroupID mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSelectActiveByGroupID.expectedInvocations, n)
+	mmSelectActiveByGroupID.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSelectActiveByGroupID
+}
+
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) invocationsDone() bool {
+	if len(mmSelectActiveByGroupID.expectations) == 0 && mmSelectActiveByGroupID.defaultExpectation == nil && mmSelectActiveByGroupID.mock.funcSelectActiveByGroupID == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSelectActiveByGroupID.mock.afterSelectActiveByGroupIDCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSelectActiveByGroupID.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SelectActiveByGroupID implements mm_repository.Assignment
+func (mmSelectActiveByGroupID *AssignmentMock) SelectActiveByGroupID(ctx context.Context, groupID uuid.UUID) (aa1 []domain.Assignment, err error) {
+	mm_atomic.AddUint64(&mmSelectActiveByGroupID.beforeSelectActiveByGroupIDCounter, 1)
+	defer mm_atomic.AddUint64(&mmSelectActiveByGroupID.afterSelectActiveByGroupIDCounter, 1)
+
+	mmSelectActiveByGroupID.t.Helper()
+
+	if mmSelectActiveByGroupID.inspectFuncSelectActiveByGroupID != nil {
+		mmSelectActiveByGroupID.inspectFuncSelectActiveByGroupID(ctx, groupID)
+	}
+
+	mm_params := AssignmentMockSelectActiveByGroupIDParams{ctx, groupID}
+
+	// Record call args
+	mmSelectActiveByGroupID.SelectActiveByGroupIDMock.mutex.Lock()
+	mmSelectActiveByGroupID.SelectActiveByGroupIDMock.callArgs = append(mmSelectActiveByGroupID.SelectActiveByGroupIDMock.callArgs, &mm_params)
+	mmSelectActiveByGroupID.SelectActiveByGroupIDMock.mutex.Unlock()
+
+	for _, e := range mmSelectActiveByGroupID.SelectActiveByGroupIDMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.aa1, e.results.err
+		}
+	}
+
+	if mmSelectActiveByGroupID.SelectActiveByGroupIDMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSelectActiveByGroupID.SelectActiveByGroupIDMock.defaultExpectation.Counter, 1)
+		mm_want := mmSelectActiveByGroupID.SelectActiveByGroupIDMock.defaultExpectation.params
+		mm_want_ptrs := mmSelectActiveByGroupID.SelectActiveByGroupIDMock.defaultExpectation.paramPtrs
+
+		mm_got := AssignmentMockSelectActiveByGroupIDParams{ctx, groupID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSelectActiveByGroupID.t.Errorf("AssignmentMock.SelectActiveByGroupID got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectActiveByGroupID.SelectActiveByGroupIDMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmSelectActiveByGroupID.t.Errorf("AssignmentMock.SelectActiveByGroupID got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectActiveByGroupID.SelectActiveByGroupIDMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSelectActiveByGroupID.t.Errorf("AssignmentMock.SelectActiveByGroupID got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSelectActiveByGroupID.SelectActiveByGroupIDMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSelectActiveByGroupID.SelectActiveByGroupIDMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSelectActiveByGroupID.t.Fatal("No results are set for the AssignmentMock.SelectActiveByGroupID")
+		}
+		return (*mm_results).aa1, (*mm_results).err
+	}
+	if mmSelectActiveByGroupID.funcSelectActiveByGroupID != nil {
+		return mmSelectActiveByGroupID.funcSelectActiveByGroupID(ctx, groupID)
+	}
+	mmSelectActiveByGroupID.t.Fatalf("Unexpected call to AssignmentMock.SelectActiveByGroupID. %v %v", ctx, groupID)
+	return
+}
+
+// SelectActiveByGroupIDAfterCounter returns a count of finished AssignmentMock.SelectActiveByGroupID invocations
+func (mmSelectActiveByGroupID *AssignmentMock) SelectActiveByGroupIDAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectActiveByGroupID.afterSelectActiveByGroupIDCounter)
+}
+
+// SelectActiveByGroupIDBeforeCounter returns a count of AssignmentMock.SelectActiveByGroupID invocations
+func (mmSelectActiveByGroupID *AssignmentMock) SelectActiveByGroupIDBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectActiveByGroupID.beforeSelectActiveByGroupIDCounter)
+}
+
+// Calls returns a list of arguments used in each call to AssignmentMock.SelectActiveByGroupID.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSelectActiveByGroupID *mAssignmentMockSelectActiveByGroupID) Calls() []*AssignmentMockSelectActiveByGroupIDParams {
+	mmSelectActiveByGroupID.mutex.RLock()
+
+	argCopy := make([]*AssignmentMockSelectActiveByGroupIDParams, len(mmSelectActiveByGroupID.callArgs))
+	copy(argCopy, mmSelectActiveByGroupID.callArgs)
+
+	mmSelectActiveByGroupID.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSelectActiveByGroupIDDone returns true if the count of the SelectActiveByGroupID invocations corresponds
+// the number of defined expectations
+func (m *AssignmentMock) MinimockSelectActiveByGroupIDDone() bool {
+	if m.SelectActiveByGroupIDMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SelectActiveByGroupIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SelectActiveByGroupIDMock.invocationsDone()
+}
+
+// MinimockSelectActiveByGroupIDInspect logs each unmet expectation
+func (m *AssignmentMock) MinimockSelectActiveByGroupIDInspect() {
+	for _, e := range m.SelectActiveByGroupIDMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AssignmentMock.SelectActiveByGroupID at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSelectActiveByGroupIDCounter := mm_atomic.LoadUint64(&m.afterSelectActiveByGroupIDCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SelectActiveByGroupIDMock.defaultExpectation != nil && afterSelectActiveByGroupIDCounter < 1 {
+		if m.SelectActiveByGroupIDMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AssignmentMock.SelectActiveByGroupID at\n%s", m.SelectActiveByGroupIDMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AssignmentMock.SelectActiveByGroupID at\n%s with params: %#v", m.SelectActiveByGroupIDMock.defaultExpectation.expectationOrigins.origin, *m.SelectActiveByGroupIDMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSelectActiveByGroupID != nil && afterSelectActiveByGroupIDCounter < 1 {
+		m.t.Errorf("Expected call to AssignmentMock.SelectActiveByGroupID at\n%s", m.funcSelectActiveByGroupIDOrigin)
+	}
+
+	if !m.SelectActiveByGroupIDMock.invocationsDone() && afterSelectActiveByGroupIDCounter > 0 {
+		m.t.Errorf("Expected %d calls to AssignmentMock.SelectActiveByGroupID at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SelectActiveByGroupIDMock.expectedInvocations), m.SelectActiveByGroupIDMock.expectedInvocationsOrigin, afterSelectActiveByGroupIDCounter)
+	}
+}
+
+type mAssignmentMockSelectActiveByTargetGroup struct {
+	optional           bool
+	mock               *AssignmentMock
+	defaultExpectation *AssignmentMockSelectActiveByTargetGroupExpectation
+	expectations       []*AssignmentMockSelectActiveByTargetGroupExpectation
+
+	callArgs []*AssignmentMockSelectActiveByTargetGroupParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AssignmentMockSelectActiveByTargetGroupExpectation specifies expectation struct of the Assignment.SelectActiveByTargetGroup
+type AssignmentMockSelectActiveByTargetGroupExpectation struct {
+	mock               *AssignmentMock
+	params             *AssignmentMockSelectActiveByTargetGroupParams
+	paramPtrs          *AssignmentMockSelectActiveByTargetGroupParamPtrs
+	expectationOrigins AssignmentMockSelectActiveByTargetGroupExpectationOrigins
+	results            *AssignmentMockSelectActiveByTargetGroupResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AssignmentMockSelectActiveByTargetGroupParams contains parameters of the Assignment.SelectActiveByTargetGroup
+type AssignmentMockSelectActiveByTargetGroupParams struct {
+	ctx     context.Context
+	groupID uuid.UUID
+}
+
+// AssignmentMockSelectActiveByTargetGroupParamPtrs contains pointers to parameters of the Assignment.SelectActiveByTargetGroup
+type AssignmentMockSelectActiveByTargetGroupParamPtrs struct {
+	ctx     *context.Context
+	groupID *uuid.UUID
+}
+
+// AssignmentMockSelectActiveByTargetGroupResults contains results of the Assignment.SelectActiveByTargetGroup
+type AssignmentMockSelectActiveByTargetGroupResults struct {
+	aa1 []domain.Assignment
+	err error
+}
+
+// AssignmentMockSelectActiveByTargetGroupOrigins contains origins of expectations of the Assignment.SelectActiveByTargetGroup
+type AssignmentMockSelectActiveByTargetGroupExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originGroupID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) Optional() *mAssignmentMockSelectActiveByTargetGroup {
+	mmSelectActiveByTargetGroup.optional = true
+	return mmSelectActiveByTargetGroup
+}
+
+// Expect sets up expected params for Assignment.SelectActiveByTargetGroup
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) Expect(ctx context.Context, groupID uuid.UUID) *mAssignmentMockSelectActiveByTargetGroup {
+	if mmSelectActiveByTargetGroup.mock.funcSelectActiveByTargetGroup != nil {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("AssignmentMock.SelectActiveByTargetGroup mock is already set by Set")
+	}
+
+	if mmSelectActiveByTargetGroup.defaultExpectation == nil {
+		mmSelectActiveByTargetGroup.defaultExpectation = &AssignmentMockSelectActiveByTargetGroupExpectation{}
+	}
+
+	if mmSelectActiveByTargetGroup.defaultExpectation.paramPtrs != nil {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("AssignmentMock.SelectActiveByTargetGroup mock is already set by ExpectParams functions")
+	}
+
+	mmSelectActiveByTargetGroup.defaultExpectation.params = &AssignmentMockSelectActiveByTargetGroupParams{ctx, groupID}
+	mmSelectActiveByTargetGroup.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSelectActiveByTargetGroup.expectations {
+		if minimock.Equal(e.params, mmSelectActiveByTargetGroup.defaultExpectation.params) {
+			mmSelectActiveByTargetGroup.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSelectActiveByTargetGroup.defaultExpectation.params)
+		}
+	}
+
+	return mmSelectActiveByTargetGroup
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Assignment.SelectActiveByTargetGroup
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) ExpectCtxParam1(ctx context.Context) *mAssignmentMockSelectActiveByTargetGroup {
+	if mmSelectActiveByTargetGroup.mock.funcSelectActiveByTargetGroup != nil {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("AssignmentMock.SelectActiveByTargetGroup mock is already set by Set")
+	}
+
+	if mmSelectActiveByTargetGroup.defaultExpectation == nil {
+		mmSelectActiveByTargetGroup.defaultExpectation = &AssignmentMockSelectActiveByTargetGroupExpectation{}
+	}
+
+	if mmSelectActiveByTargetGroup.defaultExpectation.params != nil {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("AssignmentMock.SelectActiveByTargetGroup mock is already set by Expect")
+	}
+
+	if mmSelectActiveByTargetGroup.defaultExpectation.paramPtrs == nil {
+		mmSelectActiveByTargetGroup.defaultExpectation.paramPtrs = &AssignmentMockSelectActiveByTargetGroupParamPtrs{}
+	}
+	mmSelectActiveByTargetGroup.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSelectActiveByTargetGroup.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSelectActiveByTargetGroup
+}
+
+// ExpectGroupIDParam2 sets up expected param groupID for Assignment.SelectActiveByTargetGroup
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) ExpectGroupIDParam2(groupID uuid.UUID) *mAssignmentMockSelectActiveByTargetGroup {
+	if mmSelectActiveByTargetGroup.mock.funcSelectActiveByTargetGroup != nil {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("AssignmentMock.SelectActiveByTargetGroup mock is already set by Set")
+	}
+
+	if mmSelectActiveByTargetGroup.defaultExpectation == nil {
+		mmSelectActiveByTargetGroup.defaultExpectation = &AssignmentMockSelectActiveByTargetGroupExpectation{}
+	}
+
+	if mmSelectActiveByTargetGroup.defaultExpectation.params != nil {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("AssignmentMock.SelectActiveByTargetGroup mock is already set by Expect")
+	}
+
+	if mmSelectActiveByTargetGroup.defaultExpectation.paramPtrs == nil {
+		mmSelectActiveByTargetGroup.defaultExpectation.paramPtrs = &AssignmentMockSelectActiveByTargetGroupParamPtrs{}
+	}
+	mmSelectActiveByTargetGroup.defaultExpectation.paramPtrs.groupID = &groupID
+	mmSelectActiveByTargetGroup.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmSelectActiveByTargetGroup
+}
+
+// Inspect accepts an inspector function that has same arguments as the Assignment.SelectActiveByTargetGroup
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) Inspect(f func(ctx context.Context, groupID uuid.UUID)) *mAssignmentMockSelectActiveByTargetGroup {
+	if mmSelectActiveByTargetGroup.mock.inspectFuncSelectActiveByTargetGroup != nil {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("Inspect function is already set for AssignmentMock.SelectActiveByTargetGroup")
+	}
+
+	mmSelectActiveByTargetGroup.mock.inspectFuncSelectActiveByTargetGroup = f
+
+	return mmSelectActiveByTargetGroup
+}
+
+// Return sets up results that will be returned by Assignment.SelectActiveByTargetGroup
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) Return(aa1 []domain.Assignment, err error) *AssignmentMock {
+	if mmSelectActiveByTargetGroup.mock.funcSelectActiveByTargetGroup != nil {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("AssignmentMock.SelectActiveByTargetGroup mock is already set by Set")
+	}
+
+	if mmSelectActiveByTargetGroup.defaultExpectation == nil {
+		mmSelectActiveByTargetGroup.defaultExpectation = &AssignmentMockSelectActiveByTargetGroupExpectation{mock: mmSelectActiveByTargetGroup.mock}
+	}
+	mmSelectActiveByTargetGroup.defaultExpectation.results = &AssignmentMockSelectActiveByTargetGroupResults{aa1, err}
+	mmSelectActiveByTargetGroup.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSelectActiveByTargetGroup.mock
+}
+
+// Set uses given function f to mock the Assignment.SelectActiveByTargetGroup method
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) Set(f func(ctx context.Context, groupID uuid.UUID) (aa1 []domain.Assignment, err error)) *AssignmentMock {
+	if mmSelectActiveByTargetGroup.defaultExpectation != nil {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("Default expectation is already set for the Assignment.SelectActiveByTargetGroup method")
+	}
+
+	if len(mmSelectActiveByTargetGroup.expectations) > 0 {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("Some expectations are already set for the Assignment.SelectActiveByTargetGroup method")
+	}
+
+	mmSelectActiveByTargetGroup.mock.funcSelectActiveByTargetGroup = f
+	mmSelectActiveByTargetGroup.mock.funcSelectActiveByTargetGroupOrigin = minimock.CallerInfo(1)
+	return mmSelectActiveByTargetGroup.mock
+}
+
+// When sets expectation for the Assignment.SelectActiveByTargetGroup which will trigger the result defined by the following
+// Then helper
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) When(ctx context.Context, groupID uuid.UUID) *AssignmentMockSelectActiveByTargetGroupExpectation {
+	if mmSelectActiveByTargetGroup.mock.funcSelectActiveByTargetGroup != nil {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("AssignmentMock.SelectActiveByTargetGroup mock is already set by Set")
+	}
+
+	expectation := &AssignmentMockSelectActiveByTargetGroupExpectation{
+		mock:               mmSelectActiveByTargetGroup.mock,
+		params:             &AssignmentMockSelectActiveByTargetGroupParams{ctx, groupID},
+		expectationOrigins: AssignmentMockSelectActiveByTargetGroupExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSelectActiveByTargetGroup.expectations = append(mmSelectActiveByTargetGroup.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Assignment.SelectActiveByTargetGroup return parameters for the expectation previously defined by the When method
+func (e *AssignmentMockSelectActiveByTargetGroupExpectation) Then(aa1 []domain.Assignment, err error) *AssignmentMock {
+	e.results = &AssignmentMockSelectActiveByTargetGroupResults{aa1, err}
+	return e.mock
+}
+
+// Times sets number of times Assignment.SelectActiveByTargetGroup should be invoked
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) Times(n uint64) *mAssignmentMockSelectActiveByTargetGroup {
+	if n == 0 {
+		mmSelectActiveByTargetGroup.mock.t.Fatalf("Times of AssignmentMock.SelectActiveByTargetGroup mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSelectActiveByTargetGroup.expectedInvocations, n)
+	mmSelectActiveByTargetGroup.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSelectActiveByTargetGroup
+}
+
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) invocationsDone() bool {
+	if len(mmSelectActiveByTargetGroup.expectations) == 0 && mmSelectActiveByTargetGroup.defaultExpectation == nil && mmSelectActiveByTargetGroup.mock.funcSelectActiveByTargetGroup == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSelectActiveByTargetGroup.mock.afterSelectActiveByTargetGroupCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSelectActiveByTargetGroup.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SelectActiveByTargetGroup implements mm_repository.Assignment
+func (mmSelectActiveByTargetGroup *AssignmentMock) SelectActiveByTargetGroup(ctx context.Context, groupID uuid.UUID) (aa1 []domain.Assignment, err error) {
+	mm_atomic.AddUint64(&mmSelectActiveByTargetGroup.beforeSelectActiveByTargetGroupCounter, 1)
+	defer mm_atomic.AddUint64(&mmSelectActiveByTargetGroup.afterSelectActiveByTargetGroupCounter, 1)
+
+	mmSelectActiveByTargetGroup.t.Helper()
+
+	if mmSelectActiveByTargetGroup.inspectFuncSelectActiveByTargetGroup != nil {
+		mmSelectActiveByTargetGroup.inspectFuncSelectActiveByTargetGroup(ctx, groupID)
+	}
+
+	mm_params := AssignmentMockSelectActiveByTargetGroupParams{ctx, groupID}
+
+	// Record call args
+	mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.mutex.Lock()
+	mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.callArgs = append(mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.callArgs, &mm_params)
+	mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.mutex.Unlock()
+
+	for _, e := range mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.aa1, e.results.err
+		}
+	}
+
+	if mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.defaultExpectation.Counter, 1)
+		mm_want := mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.defaultExpectation.params
+		mm_want_ptrs := mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.defaultExpectation.paramPtrs
+
+		mm_got := AssignmentMockSelectActiveByTargetGroupParams{ctx, groupID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSelectActiveByTargetGroup.t.Errorf("AssignmentMock.SelectActiveByTargetGroup got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmSelectActiveByTargetGroup.t.Errorf("AssignmentMock.SelectActiveByTargetGroup got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSelectActiveByTargetGroup.t.Errorf("AssignmentMock.SelectActiveByTargetGroup got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSelectActiveByTargetGroup.SelectActiveByTargetGroupMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSelectActiveByTargetGroup.t.Fatal("No results are set for the AssignmentMock.SelectActiveByTargetGroup")
+		}
+		return (*mm_results).aa1, (*mm_results).err
+	}
+	if mmSelectActiveByTargetGroup.funcSelectActiveByTargetGroup != nil {
+		return mmSelectActiveByTargetGroup.funcSelectActiveByTargetGroup(ctx, groupID)
+	}
+	mmSelectActiveByTargetGroup.t.Fatalf("Unexpected call to AssignmentMock.SelectActiveByTargetGroup. %v %v", ctx, groupID)
+	return
+}
+
+// SelectActiveByTargetGroupAfterCounter returns a count of finished AssignmentMock.SelectActiveByTargetGroup invocations
+func (mmSelectActiveByTargetGroup *AssignmentMock) SelectActiveByTargetGroupAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectActiveByTargetGroup.afterSelectActiveByTargetGroupCounter)
+}
+
+// SelectActiveByTargetGroupBeforeCounter returns a count of AssignmentMock.SelectActiveByTargetGroup invocations
+func (mmSelectActiveByTargetGroup *AssignmentMock) SelectActiveByTargetGroupBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectActiveByTargetGroup.beforeSelectActiveByTargetGroupCounter)
+}
+
+// Calls returns a list of arguments used in each call to AssignmentMock.SelectActiveByTargetGroup.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSelectActiveByTargetGroup *mAssignmentMockSelectActiveByTargetGroup) Calls() []*AssignmentMockSelectActiveByTargetGroupParams {
+	mmSelectActiveByTargetGroup.mutex.RLock()
+
+	argCopy := make([]*AssignmentMockSelectActiveByTargetGroupParams, len(mmSelectActiveByTargetGroup.callArgs))
+	copy(argCopy, mmSelectActiveByTargetGroup.callArgs)
+
+	mmSelectActiveByTargetGroup.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSelectActiveByTargetGroupDone returns true if the count of the SelectActiveByTargetGroup invocations corresponds
+// the number of defined expectations
+func (m *AssignmentMock) MinimockSelectActiveByTargetGroupDone() bool {
+	if m.SelectActiveByTargetGroupMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SelectActiveByTargetGroupMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SelectActiveByTargetGroupMock.invocationsDone()
+}
+
+// MinimockSelectActiveByTargetGroupInspect logs each unmet expectation
+func (m *AssignmentMock) MinimockSelectActiveByTargetGroupInspect() {
+	for _, e := range m.SelectActiveByTargetGroupMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AssignmentMock.SelectActiveByTargetGroup at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSelectActiveByTargetGroupCounter := mm_atomic.LoadUint64(&m.afterSelectActiveByTargetGroupCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SelectActiveByTargetGroupMock.defaultExpectation != nil && afterSelectActiveByTargetGroupCounter < 1 {
+		if m.SelectActiveByTargetGroupMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AssignmentMock.SelectActiveByTargetGroup at\n%s", m.SelectActiveByTargetGroupMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AssignmentMock.SelectActiveByTargetGroup at\n%s with params: %#v", m.SelectActiveByTargetGroupMock.defaultExpectation.expectationOrigins.origin, *m.SelectActiveByTargetGroupMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSelectActiveByTargetGroup != nil && afterSelectActiveByTargetGroupCounter < 1 {
+		m.t.Errorf("Expected call to AssignmentMock.SelectActiveByTargetGroup at\n%s", m.funcSelectActiveByTargetGroupOrigin)
+	}
+
+	if !m.SelectActiveByTargetGroupMock.invocationsDone() && afterSelectActiveByTargetGroupCounter > 0 {
+		m.t.Errorf("Expected %d calls to AssignmentMock.SelectActiveByTargetGroup at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SelectActiveByTargetGroupMock.expectedInvocations), m.SelectActiveByTargetGroupMock.expectedInvocationsOrigin, afterSelectActiveByTargetGroupCounter)
+	}
+}
+
+type mAssignmentMockSelectActiveByVideoIDs struct {
+	optional           bool
+	mock               *AssignmentMock
+	defaultExpectation *AssignmentMockSelectActiveByVideoIDsExpectation
+	expectations       []*AssignmentMockSelectActiveByVideoIDsExpectation
+
+	callArgs []*AssignmentMockSelectActiveByVideoIDsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AssignmentMockSelectActiveByVideoIDsExpectation specifies expectation struct of the Assignment.SelectActiveByVideoIDs
+type AssignmentMockSelectActiveByVideoIDsExpectation struct {
+	mock               *AssignmentMock
+	params             *AssignmentMockSelectActiveByVideoIDsParams
+	paramPtrs          *AssignmentMockSelectActiveByVideoIDsParamPtrs
+	expectationOrigins AssignmentMockSelectActiveByVideoIDsExpectationOrigins
+	results            *AssignmentMockSelectActiveByVideoIDsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AssignmentMockSelectActiveByVideoIDsParams contains parameters of the Assignment.SelectActiveByVideoIDs
+type AssignmentMockSelectActiveByVideoIDsParams struct {
+	ctx      context.Context
+	videoIDs []uuid.UUID
+}
+
+// AssignmentMockSelectActiveByVideoIDsParamPtrs contains pointers to parameters of the Assignment.SelectActiveByVideoIDs
+type AssignmentMockSelectActiveByVideoIDsParamPtrs struct {
+	ctx      *context.Context
+	videoIDs *[]uuid.UUID
+}
+
+// AssignmentMockSelectActiveByVideoIDsResults contains results of the Assignment.SelectActiveByVideoIDs
+type AssignmentMockSelectActiveByVideoIDsResults struct {
+	aa1 []domain.Assignment
+	err error
+}
+
+// AssignmentMockSelectActiveByVideoIDsOrigins contains origins of expectations of the Assignment.SelectActiveByVideoIDs
+type AssignmentMockSelectActiveByVideoIDsExpectationOrigins struct {
+	origin         string
+	originCtx      string
+	originVideoIDs string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) Optional() *mAssignmentMockSelectActiveByVideoIDs {
+	mmSelectActiveByVideoIDs.optional = true
+	return mmSelectActiveByVideoIDs
+}
+
+// Expect sets up expected params for Assignment.SelectActiveByVideoIDs
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) Expect(ctx context.Context, videoIDs []uuid.UUID) *mAssignmentMockSelectActiveByVideoIDs {
+	if mmSelectActiveByVideoIDs.mock.funcSelectActiveByVideoIDs != nil {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("AssignmentMock.SelectActiveByVideoIDs mock is already set by Set")
+	}
+
+	if mmSelectActiveByVideoIDs.defaultExpectation == nil {
+		mmSelectActiveByVideoIDs.defaultExpectation = &AssignmentMockSelectActiveByVideoIDsExpectation{}
+	}
+
+	if mmSelectActiveByVideoIDs.defaultExpectation.paramPtrs != nil {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("AssignmentMock.SelectActiveByVideoIDs mock is already set by ExpectParams functions")
+	}
+
+	mmSelectActiveByVideoIDs.defaultExpectation.params = &AssignmentMockSelectActiveByVideoIDsParams{ctx, videoIDs}
+	mmSelectActiveByVideoIDs.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSelectActiveByVideoIDs.expectations {
+		if minimock.Equal(e.params, mmSelectActiveByVideoIDs.defaultExpectation.params) {
+			mmSelectActiveByVideoIDs.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSelectActiveByVideoIDs.defaultExpectation.params)
+		}
+	}
+
+	return mmSelectActiveByVideoIDs
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Assignment.SelectActiveByVideoIDs
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) ExpectCtxParam1(ctx context.Context) *mAssignmentMockSelectActiveByVideoIDs {
+	if mmSelectActiveByVideoIDs.mock.funcSelectActiveByVideoIDs != nil {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("AssignmentMock.SelectActiveByVideoIDs mock is already set by Set")
+	}
+
+	if mmSelectActiveByVideoIDs.defaultExpectation == nil {
+		mmSelectActiveByVideoIDs.defaultExpectation = &AssignmentMockSelectActiveByVideoIDsExpectation{}
+	}
+
+	if mmSelectActiveByVideoIDs.defaultExpectation.params != nil {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("AssignmentMock.SelectActiveByVideoIDs mock is already set by Expect")
+	}
+
+	if mmSelectActiveByVideoIDs.defaultExpectation.paramPtrs == nil {
+		mmSelectActiveByVideoIDs.defaultExpectation.paramPtrs = &AssignmentMockSelectActiveByVideoIDsParamPtrs{}
+	}
+	mmSelectActiveByVideoIDs.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSelectActiveByVideoIDs.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSelectActiveByVideoIDs
+}
+
+// ExpectVideoIDsParam2 sets up expected param videoIDs for Assignment.SelectActiveByVideoIDs
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) ExpectVideoIDsParam2(videoIDs []uuid.UUID) *mAssignmentMockSelectActiveByVideoIDs {
+	if mmSelectActiveByVideoIDs.mock.funcSelectActiveByVideoIDs != nil {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("AssignmentMock.SelectActiveByVideoIDs mock is already set by Set")
+	}
+
+	if mmSelectActiveByVideoIDs.defaultExpectation == nil {
+		mmSelectActiveByVideoIDs.defaultExpectation = &AssignmentMockSelectActiveByVideoIDsExpectation{}
+	}
+
+	if mmSelectActiveByVideoIDs.defaultExpectation.params != nil {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("AssignmentMock.SelectActiveByVideoIDs mock is already set by Expect")
+	}
+
+	if mmSelectActiveByVideoIDs.defaultExpectation.paramPtrs == nil {
+		mmSelectActiveByVideoIDs.defaultExpectation.paramPtrs = &AssignmentMockSelectActiveByVideoIDsParamPtrs{}
+	}
+	mmSelectActiveByVideoIDs.defaultExpectation.paramPtrs.videoIDs = &videoIDs
+	mmSelectActiveByVideoIDs.defaultExpectation.expectationOrigins.originVideoIDs = minimock.CallerInfo(1)
+
+	return mmSelectActiveByVideoIDs
+}
+
+// Inspect accepts an inspector function that has same arguments as the Assignment.SelectActiveByVideoIDs
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) Inspect(f func(ctx context.Context, videoIDs []uuid.UUID)) *mAssignmentMockSelectActiveByVideoIDs {
+	if mmSelectActiveByVideoIDs.mock.inspectFuncSelectActiveByVideoIDs != nil {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("Inspect function is already set for AssignmentMock.SelectActiveByVideoIDs")
+	}
+
+	mmSelectActiveByVideoIDs.mock.inspectFuncSelectActiveByVideoIDs = f
+
+	return mmSelectActiveByVideoIDs
+}
+
+// Return sets up results that will be returned by Assignment.SelectActiveByVideoIDs
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) Return(aa1 []domain.Assignment, err error) *AssignmentMock {
+	if mmSelectActiveByVideoIDs.mock.funcSelectActiveByVideoIDs != nil {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("AssignmentMock.SelectActiveByVideoIDs mock is already set by Set")
+	}
+
+	if mmSelectActiveByVideoIDs.defaultExpectation == nil {
+		mmSelectActiveByVideoIDs.defaultExpectation = &AssignmentMockSelectActiveByVideoIDsExpectation{mock: mmSelectActiveByVideoIDs.mock}
+	}
+	mmSelectActiveByVideoIDs.defaultExpectation.results = &AssignmentMockSelectActiveByVideoIDsResults{aa1, err}
+	mmSelectActiveByVideoIDs.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSelectActiveByVideoIDs.mock
+}
+
+// Set uses given function f to mock the Assignment.SelectActiveByVideoIDs method
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) Set(f func(ctx context.Context, videoIDs []uuid.UUID) (aa1 []domain.Assignment, err error)) *AssignmentMock {
+	if mmSelectActiveByVideoIDs.defaultExpectation != nil {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("Default expectation is already set for the Assignment.SelectActiveByVideoIDs method")
+	}
+
+	if len(mmSelectActiveByVideoIDs.expectations) > 0 {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("Some expectations are already set for the Assignment.SelectActiveByVideoIDs method")
+	}
+
+	mmSelectActiveByVideoIDs.mock.funcSelectActiveByVideoIDs = f
+	mmSelectActiveByVideoIDs.mock.funcSelectActiveByVideoIDsOrigin = minimock.CallerInfo(1)
+	return mmSelectActiveByVideoIDs.mock
+}
+
+// When sets expectation for the Assignment.SelectActiveByVideoIDs which will trigger the result defined by the following
+// Then helper
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) When(ctx context.Context, videoIDs []uuid.UUID) *AssignmentMockSelectActiveByVideoIDsExpectation {
+	if mmSelectActiveByVideoIDs.mock.funcSelectActiveByVideoIDs != nil {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("AssignmentMock.SelectActiveByVideoIDs mock is already set by Set")
+	}
+
+	expectation := &AssignmentMockSelectActiveByVideoIDsExpectation{
+		mock:               mmSelectActiveByVideoIDs.mock,
+		params:             &AssignmentMockSelectActiveByVideoIDsParams{ctx, videoIDs},
+		expectationOrigins: AssignmentMockSelectActiveByVideoIDsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSelectActiveByVideoIDs.expectations = append(mmSelectActiveByVideoIDs.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Assignment.SelectActiveByVideoIDs return parameters for the expectation previously defined by the When method
+func (e *AssignmentMockSelectActiveByVideoIDsExpectation) Then(aa1 []domain.Assignment, err error) *AssignmentMock {
+	e.results = &AssignmentMockSelectActiveByVideoIDsResults{aa1, err}
+	return e.mock
+}
+
+// Times sets number of times Assignment.SelectActiveByVideoIDs should be invoked
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) Times(n uint64) *mAssignmentMockSelectActiveByVideoIDs {
+	if n == 0 {
+		mmSelectActiveByVideoIDs.mock.t.Fatalf("Times of AssignmentMock.SelectActiveByVideoIDs mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSelectActiveByVideoIDs.expectedInvocations, n)
+	mmSelectActiveByVideoIDs.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSelectActiveByVideoIDs
+}
+
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) invocationsDone() bool {
+	if len(mmSelectActiveByVideoIDs.expectations) == 0 && mmSelectActiveByVideoIDs.defaultExpectation == nil && mmSelectActiveByVideoIDs.mock.funcSelectActiveByVideoIDs == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSelectActiveByVideoIDs.mock.afterSelectActiveByVideoIDsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSelectActiveByVideoIDs.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SelectActiveByVideoIDs implements mm_repository.Assignment
+func (mmSelectActiveByVideoIDs *AssignmentMock) SelectActiveByVideoIDs(ctx context.Context, videoIDs []uuid.UUID) (aa1 []domain.Assignment, err error) {
+	mm_atomic.AddUint64(&mmSelectActiveByVideoIDs.beforeSelectActiveByVideoIDsCounter, 1)
+	defer mm_atomic.AddUint64(&mmSelectActiveByVideoIDs.afterSelectActiveByVideoIDsCounter, 1)
+
+	mmSelectActiveByVideoIDs.t.Helper()
+
+	if mmSelectActiveByVideoIDs.inspectFuncSelectActiveByVideoIDs != nil {
+		mmSelectActiveByVideoIDs.inspectFuncSelectActiveByVideoIDs(ctx, videoIDs)
+	}
+
+	mm_params := AssignmentMockSelectActiveByVideoIDsParams{ctx, videoIDs}
+
+	// Record call args
+	mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.mutex.Lock()
+	mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.callArgs = append(mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.callArgs, &mm_params)
+	mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.mutex.Unlock()
+
+	for _, e := range mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.aa1, e.results.err
+		}
+	}
+
+	if mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.defaultExpectation.Counter, 1)
+		mm_want := mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.defaultExpectation.params
+		mm_want_ptrs := mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.defaultExpectation.paramPtrs
+
+		mm_got := AssignmentMockSelectActiveByVideoIDsParams{ctx, videoIDs}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSelectActiveByVideoIDs.t.Errorf("AssignmentMock.SelectActiveByVideoIDs got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.videoIDs != nil && !minimock.Equal(*mm_want_ptrs.videoIDs, mm_got.videoIDs) {
+				mmSelectActiveByVideoIDs.t.Errorf("AssignmentMock.SelectActiveByVideoIDs got unexpected parameter videoIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.defaultExpectation.expectationOrigins.originVideoIDs, *mm_want_ptrs.videoIDs, mm_got.videoIDs, minimock.Diff(*mm_want_ptrs.videoIDs, mm_got.videoIDs))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSelectActiveByVideoIDs.t.Errorf("AssignmentMock.SelectActiveByVideoIDs got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSelectActiveByVideoIDs.SelectActiveByVideoIDsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSelectActiveByVideoIDs.t.Fatal("No results are set for the AssignmentMock.SelectActiveByVideoIDs")
+		}
+		return (*mm_results).aa1, (*mm_results).err
+	}
+	if mmSelectActiveByVideoIDs.funcSelectActiveByVideoIDs != nil {
+		return mmSelectActiveByVideoIDs.funcSelectActiveByVideoIDs(ctx, videoIDs)
+	}
+	mmSelectActiveByVideoIDs.t.Fatalf("Unexpected call to AssignmentMock.SelectActiveByVideoIDs. %v %v", ctx, videoIDs)
+	return
+}
+
+// SelectActiveByVideoIDsAfterCounter returns a count of finished AssignmentMock.SelectActiveByVideoIDs invocations
+func (mmSelectActiveByVideoIDs *AssignmentMock) SelectActiveByVideoIDsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectActiveByVideoIDs.afterSelectActiveByVideoIDsCounter)
+}
+
+// SelectActiveByVideoIDsBeforeCounter returns a count of AssignmentMock.SelectActiveByVideoIDs invocations
+func (mmSelectActiveByVideoIDs *AssignmentMock) SelectActiveByVideoIDsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectActiveByVideoIDs.beforeSelectActiveByVideoIDsCounter)
+}
+
+// Calls returns a list of arguments used in each call to AssignmentMock.SelectActiveByVideoIDs.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSelectActiveByVideoIDs *mAssignmentMockSelectActiveByVideoIDs) Calls() []*AssignmentMockSelectActiveByVideoIDsParams {
+	mmSelectActiveByVideoIDs.mutex.RLock()
+
+	argCopy := make([]*AssignmentMockSelectActiveByVideoIDsParams, len(mmSelectActiveByVideoIDs.callArgs))
+	copy(argCopy, mmSelectActiveByVideoIDs.callArgs)
+
+	mmSelectActiveByVideoIDs.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSelectActiveByVideoIDsDone returns true if the count of the SelectActiveByVideoIDs invocations corresponds
+// the number of defined expectations
+func (m *AssignmentMock) MinimockSelectActiveByVideoIDsDone() bool {
+	if m.SelectActiveByVideoIDsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SelectActiveByVideoIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SelectActiveByVideoIDsMock.invocationsDone()
+}
+
+// MinimockSelectActiveByVideoIDsInspect logs each unmet expectation
+func (m *AssignmentMock) MinimockSelectActiveByVideoIDsInspect() {
+	for _, e := range m.SelectActiveByVideoIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AssignmentMock.SelectActiveByVideoIDs at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSelectActiveByVideoIDsCounter := mm_atomic.LoadUint64(&m.afterSelectActiveByVideoIDsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SelectActiveByVideoIDsMock.defaultExpectation != nil && afterSelectActiveByVideoIDsCounter < 1 {
+		if m.SelectActiveByVideoIDsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AssignmentMock.SelectActiveByVideoIDs at\n%s", m.SelectActiveByVideoIDsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AssignmentMock.SelectActiveByVideoIDs at\n%s with params: %#v", m.SelectActiveByVideoIDsMock.defaultExpectation.expectationOrigins.origin, *m.SelectActiveByVideoIDsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSelectActiveByVideoIDs != nil && afterSelectActiveByVideoIDsCounter < 1 {
+		m.t.Errorf("Expected call to AssignmentMock.SelectActiveByVideoIDs at\n%s", m.funcSelectActiveByVideoIDsOrigin)
+	}
+
+	if !m.SelectActiveByVideoIDsMock.invocationsDone() && afterSelectActiveByVideoIDsCounter > 0 {
+		m.t.Errorf("Expected %d calls to AssignmentMock.SelectActiveByVideoIDs at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SelectActiveByVideoIDsMock.expectedInvocations), m.SelectActiveByVideoIDsMock.expectedInvocationsOrigin, afterSelectActiveByVideoIDsCounter)
 	}
 }
 
@@ -1373,15 +2898,837 @@ func (m *AssignmentMock) MinimockSelectByIDsInspect() {
 	}
 }
 
+type mAssignmentMockUpdateComment struct {
+	optional           bool
+	mock               *AssignmentMock
+	defaultExpectation *AssignmentMockUpdateCommentExpectation
+	expectations       []*AssignmentMockUpdateCommentExpectation
+
+	callArgs []*AssignmentMockUpdateCommentParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AssignmentMockUpdateCommentExpectation specifies expectation struct of the Assignment.UpdateComment
+type AssignmentMockUpdateCommentExpectation struct {
+	mock               *AssignmentMock
+	params             *AssignmentMockUpdateCommentParams
+	paramPtrs          *AssignmentMockUpdateCommentParamPtrs
+	expectationOrigins AssignmentMockUpdateCommentExpectationOrigins
+	results            *AssignmentMockUpdateCommentResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AssignmentMockUpdateCommentParams contains parameters of the Assignment.UpdateComment
+type AssignmentMockUpdateCommentParams struct {
+	ctx     context.Context
+	id      uuid.UUID
+	comment string
+}
+
+// AssignmentMockUpdateCommentParamPtrs contains pointers to parameters of the Assignment.UpdateComment
+type AssignmentMockUpdateCommentParamPtrs struct {
+	ctx     *context.Context
+	id      *uuid.UUID
+	comment *string
+}
+
+// AssignmentMockUpdateCommentResults contains results of the Assignment.UpdateComment
+type AssignmentMockUpdateCommentResults struct {
+	a1  domain.Assignment
+	err error
+}
+
+// AssignmentMockUpdateCommentOrigins contains origins of expectations of the Assignment.UpdateComment
+type AssignmentMockUpdateCommentExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originId      string
+	originComment string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateComment *mAssignmentMockUpdateComment) Optional() *mAssignmentMockUpdateComment {
+	mmUpdateComment.optional = true
+	return mmUpdateComment
+}
+
+// Expect sets up expected params for Assignment.UpdateComment
+func (mmUpdateComment *mAssignmentMockUpdateComment) Expect(ctx context.Context, id uuid.UUID, comment string) *mAssignmentMockUpdateComment {
+	if mmUpdateComment.mock.funcUpdateComment != nil {
+		mmUpdateComment.mock.t.Fatalf("AssignmentMock.UpdateComment mock is already set by Set")
+	}
+
+	if mmUpdateComment.defaultExpectation == nil {
+		mmUpdateComment.defaultExpectation = &AssignmentMockUpdateCommentExpectation{}
+	}
+
+	if mmUpdateComment.defaultExpectation.paramPtrs != nil {
+		mmUpdateComment.mock.t.Fatalf("AssignmentMock.UpdateComment mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateComment.defaultExpectation.params = &AssignmentMockUpdateCommentParams{ctx, id, comment}
+	mmUpdateComment.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateComment.expectations {
+		if minimock.Equal(e.params, mmUpdateComment.defaultExpectation.params) {
+			mmUpdateComment.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateComment.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateComment
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Assignment.UpdateComment
+func (mmUpdateComment *mAssignmentMockUpdateComment) ExpectCtxParam1(ctx context.Context) *mAssignmentMockUpdateComment {
+	if mmUpdateComment.mock.funcUpdateComment != nil {
+		mmUpdateComment.mock.t.Fatalf("AssignmentMock.UpdateComment mock is already set by Set")
+	}
+
+	if mmUpdateComment.defaultExpectation == nil {
+		mmUpdateComment.defaultExpectation = &AssignmentMockUpdateCommentExpectation{}
+	}
+
+	if mmUpdateComment.defaultExpectation.params != nil {
+		mmUpdateComment.mock.t.Fatalf("AssignmentMock.UpdateComment mock is already set by Expect")
+	}
+
+	if mmUpdateComment.defaultExpectation.paramPtrs == nil {
+		mmUpdateComment.defaultExpectation.paramPtrs = &AssignmentMockUpdateCommentParamPtrs{}
+	}
+	mmUpdateComment.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateComment.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateComment
+}
+
+// ExpectIdParam2 sets up expected param id for Assignment.UpdateComment
+func (mmUpdateComment *mAssignmentMockUpdateComment) ExpectIdParam2(id uuid.UUID) *mAssignmentMockUpdateComment {
+	if mmUpdateComment.mock.funcUpdateComment != nil {
+		mmUpdateComment.mock.t.Fatalf("AssignmentMock.UpdateComment mock is already set by Set")
+	}
+
+	if mmUpdateComment.defaultExpectation == nil {
+		mmUpdateComment.defaultExpectation = &AssignmentMockUpdateCommentExpectation{}
+	}
+
+	if mmUpdateComment.defaultExpectation.params != nil {
+		mmUpdateComment.mock.t.Fatalf("AssignmentMock.UpdateComment mock is already set by Expect")
+	}
+
+	if mmUpdateComment.defaultExpectation.paramPtrs == nil {
+		mmUpdateComment.defaultExpectation.paramPtrs = &AssignmentMockUpdateCommentParamPtrs{}
+	}
+	mmUpdateComment.defaultExpectation.paramPtrs.id = &id
+	mmUpdateComment.defaultExpectation.expectationOrigins.originId = minimock.CallerInfo(1)
+
+	return mmUpdateComment
+}
+
+// ExpectCommentParam3 sets up expected param comment for Assignment.UpdateComment
+func (mmUpdateComment *mAssignmentMockUpdateComment) ExpectCommentParam3(comment string) *mAssignmentMockUpdateComment {
+	if mmUpdateComment.mock.funcUpdateComment != nil {
+		mmUpdateComment.mock.t.Fatalf("AssignmentMock.UpdateComment mock is already set by Set")
+	}
+
+	if mmUpdateComment.defaultExpectation == nil {
+		mmUpdateComment.defaultExpectation = &AssignmentMockUpdateCommentExpectation{}
+	}
+
+	if mmUpdateComment.defaultExpectation.params != nil {
+		mmUpdateComment.mock.t.Fatalf("AssignmentMock.UpdateComment mock is already set by Expect")
+	}
+
+	if mmUpdateComment.defaultExpectation.paramPtrs == nil {
+		mmUpdateComment.defaultExpectation.paramPtrs = &AssignmentMockUpdateCommentParamPtrs{}
+	}
+	mmUpdateComment.defaultExpectation.paramPtrs.comment = &comment
+	mmUpdateComment.defaultExpectation.expectationOrigins.originComment = minimock.CallerInfo(1)
+
+	return mmUpdateComment
+}
+
+// Inspect accepts an inspector function that has same arguments as the Assignment.UpdateComment
+func (mmUpdateComment *mAssignmentMockUpdateComment) Inspect(f func(ctx context.Context, id uuid.UUID, comment string)) *mAssignmentMockUpdateComment {
+	if mmUpdateComment.mock.inspectFuncUpdateComment != nil {
+		mmUpdateComment.mock.t.Fatalf("Inspect function is already set for AssignmentMock.UpdateComment")
+	}
+
+	mmUpdateComment.mock.inspectFuncUpdateComment = f
+
+	return mmUpdateComment
+}
+
+// Return sets up results that will be returned by Assignment.UpdateComment
+func (mmUpdateComment *mAssignmentMockUpdateComment) Return(a1 domain.Assignment, err error) *AssignmentMock {
+	if mmUpdateComment.mock.funcUpdateComment != nil {
+		mmUpdateComment.mock.t.Fatalf("AssignmentMock.UpdateComment mock is already set by Set")
+	}
+
+	if mmUpdateComment.defaultExpectation == nil {
+		mmUpdateComment.defaultExpectation = &AssignmentMockUpdateCommentExpectation{mock: mmUpdateComment.mock}
+	}
+	mmUpdateComment.defaultExpectation.results = &AssignmentMockUpdateCommentResults{a1, err}
+	mmUpdateComment.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateComment.mock
+}
+
+// Set uses given function f to mock the Assignment.UpdateComment method
+func (mmUpdateComment *mAssignmentMockUpdateComment) Set(f func(ctx context.Context, id uuid.UUID, comment string) (a1 domain.Assignment, err error)) *AssignmentMock {
+	if mmUpdateComment.defaultExpectation != nil {
+		mmUpdateComment.mock.t.Fatalf("Default expectation is already set for the Assignment.UpdateComment method")
+	}
+
+	if len(mmUpdateComment.expectations) > 0 {
+		mmUpdateComment.mock.t.Fatalf("Some expectations are already set for the Assignment.UpdateComment method")
+	}
+
+	mmUpdateComment.mock.funcUpdateComment = f
+	mmUpdateComment.mock.funcUpdateCommentOrigin = minimock.CallerInfo(1)
+	return mmUpdateComment.mock
+}
+
+// When sets expectation for the Assignment.UpdateComment which will trigger the result defined by the following
+// Then helper
+func (mmUpdateComment *mAssignmentMockUpdateComment) When(ctx context.Context, id uuid.UUID, comment string) *AssignmentMockUpdateCommentExpectation {
+	if mmUpdateComment.mock.funcUpdateComment != nil {
+		mmUpdateComment.mock.t.Fatalf("AssignmentMock.UpdateComment mock is already set by Set")
+	}
+
+	expectation := &AssignmentMockUpdateCommentExpectation{
+		mock:               mmUpdateComment.mock,
+		params:             &AssignmentMockUpdateCommentParams{ctx, id, comment},
+		expectationOrigins: AssignmentMockUpdateCommentExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateComment.expectations = append(mmUpdateComment.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Assignment.UpdateComment return parameters for the expectation previously defined by the When method
+func (e *AssignmentMockUpdateCommentExpectation) Then(a1 domain.Assignment, err error) *AssignmentMock {
+	e.results = &AssignmentMockUpdateCommentResults{a1, err}
+	return e.mock
+}
+
+// Times sets number of times Assignment.UpdateComment should be invoked
+func (mmUpdateComment *mAssignmentMockUpdateComment) Times(n uint64) *mAssignmentMockUpdateComment {
+	if n == 0 {
+		mmUpdateComment.mock.t.Fatalf("Times of AssignmentMock.UpdateComment mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateComment.expectedInvocations, n)
+	mmUpdateComment.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateComment
+}
+
+func (mmUpdateComment *mAssignmentMockUpdateComment) invocationsDone() bool {
+	if len(mmUpdateComment.expectations) == 0 && mmUpdateComment.defaultExpectation == nil && mmUpdateComment.mock.funcUpdateComment == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateComment.mock.afterUpdateCommentCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateComment.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateComment implements mm_repository.Assignment
+func (mmUpdateComment *AssignmentMock) UpdateComment(ctx context.Context, id uuid.UUID, comment string) (a1 domain.Assignment, err error) {
+	mm_atomic.AddUint64(&mmUpdateComment.beforeUpdateCommentCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateComment.afterUpdateCommentCounter, 1)
+
+	mmUpdateComment.t.Helper()
+
+	if mmUpdateComment.inspectFuncUpdateComment != nil {
+		mmUpdateComment.inspectFuncUpdateComment(ctx, id, comment)
+	}
+
+	mm_params := AssignmentMockUpdateCommentParams{ctx, id, comment}
+
+	// Record call args
+	mmUpdateComment.UpdateCommentMock.mutex.Lock()
+	mmUpdateComment.UpdateCommentMock.callArgs = append(mmUpdateComment.UpdateCommentMock.callArgs, &mm_params)
+	mmUpdateComment.UpdateCommentMock.mutex.Unlock()
+
+	for _, e := range mmUpdateComment.UpdateCommentMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.a1, e.results.err
+		}
+	}
+
+	if mmUpdateComment.UpdateCommentMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateComment.UpdateCommentMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateComment.UpdateCommentMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateComment.UpdateCommentMock.defaultExpectation.paramPtrs
+
+		mm_got := AssignmentMockUpdateCommentParams{ctx, id, comment}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateComment.t.Errorf("AssignmentMock.UpdateComment got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateComment.UpdateCommentMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.id != nil && !minimock.Equal(*mm_want_ptrs.id, mm_got.id) {
+				mmUpdateComment.t.Errorf("AssignmentMock.UpdateComment got unexpected parameter id, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateComment.UpdateCommentMock.defaultExpectation.expectationOrigins.originId, *mm_want_ptrs.id, mm_got.id, minimock.Diff(*mm_want_ptrs.id, mm_got.id))
+			}
+
+			if mm_want_ptrs.comment != nil && !minimock.Equal(*mm_want_ptrs.comment, mm_got.comment) {
+				mmUpdateComment.t.Errorf("AssignmentMock.UpdateComment got unexpected parameter comment, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateComment.UpdateCommentMock.defaultExpectation.expectationOrigins.originComment, *mm_want_ptrs.comment, mm_got.comment, minimock.Diff(*mm_want_ptrs.comment, mm_got.comment))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateComment.t.Errorf("AssignmentMock.UpdateComment got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateComment.UpdateCommentMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateComment.UpdateCommentMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateComment.t.Fatal("No results are set for the AssignmentMock.UpdateComment")
+		}
+		return (*mm_results).a1, (*mm_results).err
+	}
+	if mmUpdateComment.funcUpdateComment != nil {
+		return mmUpdateComment.funcUpdateComment(ctx, id, comment)
+	}
+	mmUpdateComment.t.Fatalf("Unexpected call to AssignmentMock.UpdateComment. %v %v %v", ctx, id, comment)
+	return
+}
+
+// UpdateCommentAfterCounter returns a count of finished AssignmentMock.UpdateComment invocations
+func (mmUpdateComment *AssignmentMock) UpdateCommentAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateComment.afterUpdateCommentCounter)
+}
+
+// UpdateCommentBeforeCounter returns a count of AssignmentMock.UpdateComment invocations
+func (mmUpdateComment *AssignmentMock) UpdateCommentBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateComment.beforeUpdateCommentCounter)
+}
+
+// Calls returns a list of arguments used in each call to AssignmentMock.UpdateComment.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateComment *mAssignmentMockUpdateComment) Calls() []*AssignmentMockUpdateCommentParams {
+	mmUpdateComment.mutex.RLock()
+
+	argCopy := make([]*AssignmentMockUpdateCommentParams, len(mmUpdateComment.callArgs))
+	copy(argCopy, mmUpdateComment.callArgs)
+
+	mmUpdateComment.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateCommentDone returns true if the count of the UpdateComment invocations corresponds
+// the number of defined expectations
+func (m *AssignmentMock) MinimockUpdateCommentDone() bool {
+	if m.UpdateCommentMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateCommentMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateCommentMock.invocationsDone()
+}
+
+// MinimockUpdateCommentInspect logs each unmet expectation
+func (m *AssignmentMock) MinimockUpdateCommentInspect() {
+	for _, e := range m.UpdateCommentMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AssignmentMock.UpdateComment at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateCommentCounter := mm_atomic.LoadUint64(&m.afterUpdateCommentCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateCommentMock.defaultExpectation != nil && afterUpdateCommentCounter < 1 {
+		if m.UpdateCommentMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AssignmentMock.UpdateComment at\n%s", m.UpdateCommentMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AssignmentMock.UpdateComment at\n%s with params: %#v", m.UpdateCommentMock.defaultExpectation.expectationOrigins.origin, *m.UpdateCommentMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateComment != nil && afterUpdateCommentCounter < 1 {
+		m.t.Errorf("Expected call to AssignmentMock.UpdateComment at\n%s", m.funcUpdateCommentOrigin)
+	}
+
+	if !m.UpdateCommentMock.invocationsDone() && afterUpdateCommentCounter > 0 {
+		m.t.Errorf("Expected %d calls to AssignmentMock.UpdateComment at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateCommentMock.expectedInvocations), m.UpdateCommentMock.expectedInvocationsOrigin, afterUpdateCommentCounter)
+	}
+}
+
+type mAssignmentMockUpdateDue struct {
+	optional           bool
+	mock               *AssignmentMock
+	defaultExpectation *AssignmentMockUpdateDueExpectation
+	expectations       []*AssignmentMockUpdateDueExpectation
+
+	callArgs []*AssignmentMockUpdateDueParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AssignmentMockUpdateDueExpectation specifies expectation struct of the Assignment.UpdateDue
+type AssignmentMockUpdateDueExpectation struct {
+	mock               *AssignmentMock
+	params             *AssignmentMockUpdateDueParams
+	paramPtrs          *AssignmentMockUpdateDueParamPtrs
+	expectationOrigins AssignmentMockUpdateDueExpectationOrigins
+	results            *AssignmentMockUpdateDueResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AssignmentMockUpdateDueParams contains parameters of the Assignment.UpdateDue
+type AssignmentMockUpdateDueParams struct {
+	ctx     context.Context
+	id      uuid.UUID
+	dueMode domain.AssignmentDueMode
+	dueAt   *time.Time
+	dueDays *int
+}
+
+// AssignmentMockUpdateDueParamPtrs contains pointers to parameters of the Assignment.UpdateDue
+type AssignmentMockUpdateDueParamPtrs struct {
+	ctx     *context.Context
+	id      *uuid.UUID
+	dueMode *domain.AssignmentDueMode
+	dueAt   **time.Time
+	dueDays **int
+}
+
+// AssignmentMockUpdateDueResults contains results of the Assignment.UpdateDue
+type AssignmentMockUpdateDueResults struct {
+	a1  domain.Assignment
+	err error
+}
+
+// AssignmentMockUpdateDueOrigins contains origins of expectations of the Assignment.UpdateDue
+type AssignmentMockUpdateDueExpectationOrigins struct {
+	origin        string
+	originCtx     string
+	originId      string
+	originDueMode string
+	originDueAt   string
+	originDueDays string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmUpdateDue *mAssignmentMockUpdateDue) Optional() *mAssignmentMockUpdateDue {
+	mmUpdateDue.optional = true
+	return mmUpdateDue
+}
+
+// Expect sets up expected params for Assignment.UpdateDue
+func (mmUpdateDue *mAssignmentMockUpdateDue) Expect(ctx context.Context, id uuid.UUID, dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int) *mAssignmentMockUpdateDue {
+	if mmUpdateDue.mock.funcUpdateDue != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Set")
+	}
+
+	if mmUpdateDue.defaultExpectation == nil {
+		mmUpdateDue.defaultExpectation = &AssignmentMockUpdateDueExpectation{}
+	}
+
+	if mmUpdateDue.defaultExpectation.paramPtrs != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by ExpectParams functions")
+	}
+
+	mmUpdateDue.defaultExpectation.params = &AssignmentMockUpdateDueParams{ctx, id, dueMode, dueAt, dueDays}
+	mmUpdateDue.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmUpdateDue.expectations {
+		if minimock.Equal(e.params, mmUpdateDue.defaultExpectation.params) {
+			mmUpdateDue.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmUpdateDue.defaultExpectation.params)
+		}
+	}
+
+	return mmUpdateDue
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Assignment.UpdateDue
+func (mmUpdateDue *mAssignmentMockUpdateDue) ExpectCtxParam1(ctx context.Context) *mAssignmentMockUpdateDue {
+	if mmUpdateDue.mock.funcUpdateDue != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Set")
+	}
+
+	if mmUpdateDue.defaultExpectation == nil {
+		mmUpdateDue.defaultExpectation = &AssignmentMockUpdateDueExpectation{}
+	}
+
+	if mmUpdateDue.defaultExpectation.params != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Expect")
+	}
+
+	if mmUpdateDue.defaultExpectation.paramPtrs == nil {
+		mmUpdateDue.defaultExpectation.paramPtrs = &AssignmentMockUpdateDueParamPtrs{}
+	}
+	mmUpdateDue.defaultExpectation.paramPtrs.ctx = &ctx
+	mmUpdateDue.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmUpdateDue
+}
+
+// ExpectIdParam2 sets up expected param id for Assignment.UpdateDue
+func (mmUpdateDue *mAssignmentMockUpdateDue) ExpectIdParam2(id uuid.UUID) *mAssignmentMockUpdateDue {
+	if mmUpdateDue.mock.funcUpdateDue != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Set")
+	}
+
+	if mmUpdateDue.defaultExpectation == nil {
+		mmUpdateDue.defaultExpectation = &AssignmentMockUpdateDueExpectation{}
+	}
+
+	if mmUpdateDue.defaultExpectation.params != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Expect")
+	}
+
+	if mmUpdateDue.defaultExpectation.paramPtrs == nil {
+		mmUpdateDue.defaultExpectation.paramPtrs = &AssignmentMockUpdateDueParamPtrs{}
+	}
+	mmUpdateDue.defaultExpectation.paramPtrs.id = &id
+	mmUpdateDue.defaultExpectation.expectationOrigins.originId = minimock.CallerInfo(1)
+
+	return mmUpdateDue
+}
+
+// ExpectDueModeParam3 sets up expected param dueMode for Assignment.UpdateDue
+func (mmUpdateDue *mAssignmentMockUpdateDue) ExpectDueModeParam3(dueMode domain.AssignmentDueMode) *mAssignmentMockUpdateDue {
+	if mmUpdateDue.mock.funcUpdateDue != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Set")
+	}
+
+	if mmUpdateDue.defaultExpectation == nil {
+		mmUpdateDue.defaultExpectation = &AssignmentMockUpdateDueExpectation{}
+	}
+
+	if mmUpdateDue.defaultExpectation.params != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Expect")
+	}
+
+	if mmUpdateDue.defaultExpectation.paramPtrs == nil {
+		mmUpdateDue.defaultExpectation.paramPtrs = &AssignmentMockUpdateDueParamPtrs{}
+	}
+	mmUpdateDue.defaultExpectation.paramPtrs.dueMode = &dueMode
+	mmUpdateDue.defaultExpectation.expectationOrigins.originDueMode = minimock.CallerInfo(1)
+
+	return mmUpdateDue
+}
+
+// ExpectDueAtParam4 sets up expected param dueAt for Assignment.UpdateDue
+func (mmUpdateDue *mAssignmentMockUpdateDue) ExpectDueAtParam4(dueAt *time.Time) *mAssignmentMockUpdateDue {
+	if mmUpdateDue.mock.funcUpdateDue != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Set")
+	}
+
+	if mmUpdateDue.defaultExpectation == nil {
+		mmUpdateDue.defaultExpectation = &AssignmentMockUpdateDueExpectation{}
+	}
+
+	if mmUpdateDue.defaultExpectation.params != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Expect")
+	}
+
+	if mmUpdateDue.defaultExpectation.paramPtrs == nil {
+		mmUpdateDue.defaultExpectation.paramPtrs = &AssignmentMockUpdateDueParamPtrs{}
+	}
+	mmUpdateDue.defaultExpectation.paramPtrs.dueAt = &dueAt
+	mmUpdateDue.defaultExpectation.expectationOrigins.originDueAt = minimock.CallerInfo(1)
+
+	return mmUpdateDue
+}
+
+// ExpectDueDaysParam5 sets up expected param dueDays for Assignment.UpdateDue
+func (mmUpdateDue *mAssignmentMockUpdateDue) ExpectDueDaysParam5(dueDays *int) *mAssignmentMockUpdateDue {
+	if mmUpdateDue.mock.funcUpdateDue != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Set")
+	}
+
+	if mmUpdateDue.defaultExpectation == nil {
+		mmUpdateDue.defaultExpectation = &AssignmentMockUpdateDueExpectation{}
+	}
+
+	if mmUpdateDue.defaultExpectation.params != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Expect")
+	}
+
+	if mmUpdateDue.defaultExpectation.paramPtrs == nil {
+		mmUpdateDue.defaultExpectation.paramPtrs = &AssignmentMockUpdateDueParamPtrs{}
+	}
+	mmUpdateDue.defaultExpectation.paramPtrs.dueDays = &dueDays
+	mmUpdateDue.defaultExpectation.expectationOrigins.originDueDays = minimock.CallerInfo(1)
+
+	return mmUpdateDue
+}
+
+// Inspect accepts an inspector function that has same arguments as the Assignment.UpdateDue
+func (mmUpdateDue *mAssignmentMockUpdateDue) Inspect(f func(ctx context.Context, id uuid.UUID, dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int)) *mAssignmentMockUpdateDue {
+	if mmUpdateDue.mock.inspectFuncUpdateDue != nil {
+		mmUpdateDue.mock.t.Fatalf("Inspect function is already set for AssignmentMock.UpdateDue")
+	}
+
+	mmUpdateDue.mock.inspectFuncUpdateDue = f
+
+	return mmUpdateDue
+}
+
+// Return sets up results that will be returned by Assignment.UpdateDue
+func (mmUpdateDue *mAssignmentMockUpdateDue) Return(a1 domain.Assignment, err error) *AssignmentMock {
+	if mmUpdateDue.mock.funcUpdateDue != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Set")
+	}
+
+	if mmUpdateDue.defaultExpectation == nil {
+		mmUpdateDue.defaultExpectation = &AssignmentMockUpdateDueExpectation{mock: mmUpdateDue.mock}
+	}
+	mmUpdateDue.defaultExpectation.results = &AssignmentMockUpdateDueResults{a1, err}
+	mmUpdateDue.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmUpdateDue.mock
+}
+
+// Set uses given function f to mock the Assignment.UpdateDue method
+func (mmUpdateDue *mAssignmentMockUpdateDue) Set(f func(ctx context.Context, id uuid.UUID, dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int) (a1 domain.Assignment, err error)) *AssignmentMock {
+	if mmUpdateDue.defaultExpectation != nil {
+		mmUpdateDue.mock.t.Fatalf("Default expectation is already set for the Assignment.UpdateDue method")
+	}
+
+	if len(mmUpdateDue.expectations) > 0 {
+		mmUpdateDue.mock.t.Fatalf("Some expectations are already set for the Assignment.UpdateDue method")
+	}
+
+	mmUpdateDue.mock.funcUpdateDue = f
+	mmUpdateDue.mock.funcUpdateDueOrigin = minimock.CallerInfo(1)
+	return mmUpdateDue.mock
+}
+
+// When sets expectation for the Assignment.UpdateDue which will trigger the result defined by the following
+// Then helper
+func (mmUpdateDue *mAssignmentMockUpdateDue) When(ctx context.Context, id uuid.UUID, dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int) *AssignmentMockUpdateDueExpectation {
+	if mmUpdateDue.mock.funcUpdateDue != nil {
+		mmUpdateDue.mock.t.Fatalf("AssignmentMock.UpdateDue mock is already set by Set")
+	}
+
+	expectation := &AssignmentMockUpdateDueExpectation{
+		mock:               mmUpdateDue.mock,
+		params:             &AssignmentMockUpdateDueParams{ctx, id, dueMode, dueAt, dueDays},
+		expectationOrigins: AssignmentMockUpdateDueExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmUpdateDue.expectations = append(mmUpdateDue.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Assignment.UpdateDue return parameters for the expectation previously defined by the When method
+func (e *AssignmentMockUpdateDueExpectation) Then(a1 domain.Assignment, err error) *AssignmentMock {
+	e.results = &AssignmentMockUpdateDueResults{a1, err}
+	return e.mock
+}
+
+// Times sets number of times Assignment.UpdateDue should be invoked
+func (mmUpdateDue *mAssignmentMockUpdateDue) Times(n uint64) *mAssignmentMockUpdateDue {
+	if n == 0 {
+		mmUpdateDue.mock.t.Fatalf("Times of AssignmentMock.UpdateDue mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmUpdateDue.expectedInvocations, n)
+	mmUpdateDue.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmUpdateDue
+}
+
+func (mmUpdateDue *mAssignmentMockUpdateDue) invocationsDone() bool {
+	if len(mmUpdateDue.expectations) == 0 && mmUpdateDue.defaultExpectation == nil && mmUpdateDue.mock.funcUpdateDue == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmUpdateDue.mock.afterUpdateDueCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmUpdateDue.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// UpdateDue implements mm_repository.Assignment
+func (mmUpdateDue *AssignmentMock) UpdateDue(ctx context.Context, id uuid.UUID, dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int) (a1 domain.Assignment, err error) {
+	mm_atomic.AddUint64(&mmUpdateDue.beforeUpdateDueCounter, 1)
+	defer mm_atomic.AddUint64(&mmUpdateDue.afterUpdateDueCounter, 1)
+
+	mmUpdateDue.t.Helper()
+
+	if mmUpdateDue.inspectFuncUpdateDue != nil {
+		mmUpdateDue.inspectFuncUpdateDue(ctx, id, dueMode, dueAt, dueDays)
+	}
+
+	mm_params := AssignmentMockUpdateDueParams{ctx, id, dueMode, dueAt, dueDays}
+
+	// Record call args
+	mmUpdateDue.UpdateDueMock.mutex.Lock()
+	mmUpdateDue.UpdateDueMock.callArgs = append(mmUpdateDue.UpdateDueMock.callArgs, &mm_params)
+	mmUpdateDue.UpdateDueMock.mutex.Unlock()
+
+	for _, e := range mmUpdateDue.UpdateDueMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.a1, e.results.err
+		}
+	}
+
+	if mmUpdateDue.UpdateDueMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmUpdateDue.UpdateDueMock.defaultExpectation.Counter, 1)
+		mm_want := mmUpdateDue.UpdateDueMock.defaultExpectation.params
+		mm_want_ptrs := mmUpdateDue.UpdateDueMock.defaultExpectation.paramPtrs
+
+		mm_got := AssignmentMockUpdateDueParams{ctx, id, dueMode, dueAt, dueDays}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmUpdateDue.t.Errorf("AssignmentMock.UpdateDue got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateDue.UpdateDueMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.id != nil && !minimock.Equal(*mm_want_ptrs.id, mm_got.id) {
+				mmUpdateDue.t.Errorf("AssignmentMock.UpdateDue got unexpected parameter id, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateDue.UpdateDueMock.defaultExpectation.expectationOrigins.originId, *mm_want_ptrs.id, mm_got.id, minimock.Diff(*mm_want_ptrs.id, mm_got.id))
+			}
+
+			if mm_want_ptrs.dueMode != nil && !minimock.Equal(*mm_want_ptrs.dueMode, mm_got.dueMode) {
+				mmUpdateDue.t.Errorf("AssignmentMock.UpdateDue got unexpected parameter dueMode, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateDue.UpdateDueMock.defaultExpectation.expectationOrigins.originDueMode, *mm_want_ptrs.dueMode, mm_got.dueMode, minimock.Diff(*mm_want_ptrs.dueMode, mm_got.dueMode))
+			}
+
+			if mm_want_ptrs.dueAt != nil && !minimock.Equal(*mm_want_ptrs.dueAt, mm_got.dueAt) {
+				mmUpdateDue.t.Errorf("AssignmentMock.UpdateDue got unexpected parameter dueAt, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateDue.UpdateDueMock.defaultExpectation.expectationOrigins.originDueAt, *mm_want_ptrs.dueAt, mm_got.dueAt, minimock.Diff(*mm_want_ptrs.dueAt, mm_got.dueAt))
+			}
+
+			if mm_want_ptrs.dueDays != nil && !minimock.Equal(*mm_want_ptrs.dueDays, mm_got.dueDays) {
+				mmUpdateDue.t.Errorf("AssignmentMock.UpdateDue got unexpected parameter dueDays, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmUpdateDue.UpdateDueMock.defaultExpectation.expectationOrigins.originDueDays, *mm_want_ptrs.dueDays, mm_got.dueDays, minimock.Diff(*mm_want_ptrs.dueDays, mm_got.dueDays))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmUpdateDue.t.Errorf("AssignmentMock.UpdateDue got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmUpdateDue.UpdateDueMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmUpdateDue.UpdateDueMock.defaultExpectation.results
+		if mm_results == nil {
+			mmUpdateDue.t.Fatal("No results are set for the AssignmentMock.UpdateDue")
+		}
+		return (*mm_results).a1, (*mm_results).err
+	}
+	if mmUpdateDue.funcUpdateDue != nil {
+		return mmUpdateDue.funcUpdateDue(ctx, id, dueMode, dueAt, dueDays)
+	}
+	mmUpdateDue.t.Fatalf("Unexpected call to AssignmentMock.UpdateDue. %v %v %v %v %v", ctx, id, dueMode, dueAt, dueDays)
+	return
+}
+
+// UpdateDueAfterCounter returns a count of finished AssignmentMock.UpdateDue invocations
+func (mmUpdateDue *AssignmentMock) UpdateDueAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateDue.afterUpdateDueCounter)
+}
+
+// UpdateDueBeforeCounter returns a count of AssignmentMock.UpdateDue invocations
+func (mmUpdateDue *AssignmentMock) UpdateDueBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmUpdateDue.beforeUpdateDueCounter)
+}
+
+// Calls returns a list of arguments used in each call to AssignmentMock.UpdateDue.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmUpdateDue *mAssignmentMockUpdateDue) Calls() []*AssignmentMockUpdateDueParams {
+	mmUpdateDue.mutex.RLock()
+
+	argCopy := make([]*AssignmentMockUpdateDueParams, len(mmUpdateDue.callArgs))
+	copy(argCopy, mmUpdateDue.callArgs)
+
+	mmUpdateDue.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockUpdateDueDone returns true if the count of the UpdateDue invocations corresponds
+// the number of defined expectations
+func (m *AssignmentMock) MinimockUpdateDueDone() bool {
+	if m.UpdateDueMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.UpdateDueMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.UpdateDueMock.invocationsDone()
+}
+
+// MinimockUpdateDueInspect logs each unmet expectation
+func (m *AssignmentMock) MinimockUpdateDueInspect() {
+	for _, e := range m.UpdateDueMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AssignmentMock.UpdateDue at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterUpdateDueCounter := mm_atomic.LoadUint64(&m.afterUpdateDueCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.UpdateDueMock.defaultExpectation != nil && afterUpdateDueCounter < 1 {
+		if m.UpdateDueMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AssignmentMock.UpdateDue at\n%s", m.UpdateDueMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AssignmentMock.UpdateDue at\n%s with params: %#v", m.UpdateDueMock.defaultExpectation.expectationOrigins.origin, *m.UpdateDueMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcUpdateDue != nil && afterUpdateDueCounter < 1 {
+		m.t.Errorf("Expected call to AssignmentMock.UpdateDue at\n%s", m.funcUpdateDueOrigin)
+	}
+
+	if !m.UpdateDueMock.invocationsDone() && afterUpdateDueCounter > 0 {
+		m.t.Errorf("Expected %d calls to AssignmentMock.UpdateDue at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.UpdateDueMock.expectedInvocations), m.UpdateDueMock.expectedInvocationsOrigin, afterUpdateDueCounter)
+	}
+}
+
 // MinimockFinish checks that all mocked methods have been called the expected number of times
 func (m *AssignmentMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockCancelInspect()
+
 			m.MinimockInsertInspect()
+
+			m.MinimockSelectActiveByGroupIDInspect()
+
+			m.MinimockSelectActiveByTargetGroupInspect()
+
+			m.MinimockSelectActiveByVideoIDsInspect()
 
 			m.MinimockSelectByIDInspect()
 
 			m.MinimockSelectByIDsInspect()
+
+			m.MinimockUpdateCommentInspect()
+
+			m.MinimockUpdateDueInspect()
 		}
 	})
 }
@@ -1405,7 +3752,13 @@ func (m *AssignmentMock) MinimockWait(timeout mm_time.Duration) {
 func (m *AssignmentMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockCancelDone() &&
 		m.MinimockInsertDone() &&
+		m.MinimockSelectActiveByGroupIDDone() &&
+		m.MinimockSelectActiveByTargetGroupDone() &&
+		m.MinimockSelectActiveByVideoIDsDone() &&
 		m.MinimockSelectByIDDone() &&
-		m.MinimockSelectByIDsDone()
+		m.MinimockSelectByIDsDone() &&
+		m.MinimockUpdateCommentDone() &&
+		m.MinimockUpdateDueDone()
 }

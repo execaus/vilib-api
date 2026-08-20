@@ -17,6 +17,8 @@ import (
 	"github.com/stephenafamo/bob/dialect/psql"
 	"github.com/stephenafamo/bob/dialect/psql/im"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
+	"github.com/stephenafamo/bob/dialect/psql/um"
+	"github.com/stephenafamo/bob/expr"
 	"github.com/stephenafamo/scan"
 	"go.uber.org/zap"
 )
@@ -319,4 +321,190 @@ func (r *AssignmentParticipantRepository) CountByAssignmentIDs(
 	}
 
 	return result, nil
+}
+
+// userIDRow — строка сканирования результата RETURNING user_id.
+type userIDRow struct {
+	UserID uuid.UUID `db:"user_id"`
+}
+
+func userIDsFromRows(rows []userIDRow) []uuid.UUID {
+	ids := make([]uuid.UUID, len(rows))
+	for i, row := range rows {
+		ids[i] = row.UserID
+	}
+
+	return ids
+}
+
+// SelectByAssignmentIDAndUserID выбирает персональную запись участника назначения (§4 дизайна
+// эпика Э3, AssignmentService.RemoveParticipant). Строка не найдена — ErrNotFound.
+func (r *AssignmentParticipantRepository) SelectByAssignmentIDAndUserID(
+	ctx context.Context, assignmentID, userID uuid.UUID,
+) (domain.AssignmentParticipant, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	row, err := schema.AssignmentParticipants.Query(
+		sm.Where(schema.AssignmentParticipants.Columns.AssignmentID.EQ(psql.Arg(assignmentID))),
+		sm.Where(schema.AssignmentParticipants.Columns.UserID.EQ(psql.Arg(userID))),
+	).One(ctx, exec)
+	if err != nil {
+		if errors.Is(pgx.ErrNoRows, err) {
+			return domain.AssignmentParticipant{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.AssignmentParticipant{}, err
+	}
+
+	var participant domain.AssignmentParticipant
+	participant.FromDB(row)
+
+	return participant, nil
+}
+
+const updateDueByAssignmentDateSQL = `
+UPDATE assignment_participants
+SET due_at = ?
+WHERE assignment_id = ?
+  AND status IN ('assigned', 'in_progress')
+RETURNING user_id
+`
+
+const updateDueByAssignmentDaysSQL = `
+UPDATE assignment_participants
+SET due_at = enrolled_at + (? * interval '1 day')
+WHERE assignment_id = ?
+  AND status IN ('assigned', 'in_progress')
+RETURNING user_id
+`
+
+// UpdateDueByAssignment пересчитывает персональные сроки незавершённых участников назначения
+// (§4 дизайна эпика Э3, AssignmentService.UpdateDue): режим date ставит всем общий срок,
+// режим days — enrolled_at + dueDays. Условие по статусу в самом запросе оставляет
+// завершённые (Э3-Н1) и отменённые записи нетронутыми.
+func (r *AssignmentParticipantRepository) UpdateDueByAssignment(
+	ctx context.Context,
+	assignmentID uuid.UUID,
+	dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int,
+) ([]uuid.UUID, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	var query bob.BaseQuery[expr.Clause]
+	switch {
+	case dueMode == domain.AssignmentDueModeDate && dueAt != nil:
+		query = psql.RawQuery(updateDueByAssignmentDateSQL, *dueAt, assignmentID)
+	case dueMode == domain.AssignmentDueModeDays && dueDays != nil:
+		query = psql.RawQuery(updateDueByAssignmentDaysSQL, *dueDays, assignmentID)
+	default:
+		return nil, fmt.Errorf("%w: режим срока %q без значения", ErrInvalidDueMode, dueMode)
+	}
+
+	rows, err := bob.All(ctx, exec, query, scan.StructMapper[userIDRow]())
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return userIDsFromRows(rows), nil
+}
+
+const cancelByAssignmentSQL = `
+UPDATE assignment_participants
+SET status = 'cancelled',
+	cancelled_at = ?,
+	cancel_reason = ?
+WHERE assignment_id = ?
+  AND status IN ('assigned', 'in_progress')
+RETURNING user_id
+`
+
+// CancelByAssignment отменяет незавершённых участников назначения (§4 дизайна эпика Э3:
+// отмена назначения, удаление видео или группы) и возвращает id отменённых пользователей.
+// Завершённые записи остаются как есть (Э3-Н1).
+func (r *AssignmentParticipantRepository) CancelByAssignment(
+	ctx context.Context,
+	assignmentID uuid.UUID,
+	reason domain.AssignmentParticipantCancelReason, at time.Time,
+) ([]uuid.UUID, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	query := psql.RawQuery(cancelByAssignmentSQL, at, string(reason), assignmentID)
+
+	rows, err := bob.All(ctx, exec, query, scan.StructMapper[userIDRow]())
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return userIDsFromRows(rows), nil
+}
+
+// CancelOne отменяет участие одного пользователя в назначении (§4 дизайна эпика Э3, снятие
+// участника менеджером). Условие по статусу в запросе оставляет завершённую запись нетронутой
+// — в этом случае метод возвращает false.
+func (r *AssignmentParticipantRepository) CancelOne(
+	ctx context.Context,
+	assignmentID, userID uuid.UUID,
+	reason domain.AssignmentParticipantCancelReason, at time.Time,
+) (bool, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	setter := &schema.AssignmentParticipantSetter{
+		Status:       omit.From(string(domain.AssignmentParticipantStatusCancelled)),
+		CancelledAt:  omitnull.From(at),
+		CancelReason: omitnull.From(string(reason)),
+	}
+
+	affected, err := schema.AssignmentParticipants.Update(
+		setter.UpdateMod(),
+		um.Where(schema.AssignmentParticipants.Columns.AssignmentID.EQ(psql.Arg(assignmentID))),
+		um.Where(schema.AssignmentParticipants.Columns.UserID.EQ(psql.Arg(userID))),
+		um.Where(schema.AssignmentParticipants.Columns.Status.In(
+			psql.Arg(string(domain.AssignmentParticipantStatusAssigned)),
+			psql.Arg(string(domain.AssignmentParticipantStatusInProgress)),
+		)),
+	).Exec(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return false, err
+	}
+
+	return affected > 0, nil
+}
+
+const cancelBySourceGroupAndUserSQL = `
+UPDATE assignment_participants ap
+SET status = 'cancelled',
+	cancelled_at = ?,
+	cancel_reason = ?
+FROM assignments a
+WHERE ap.assignment_id = a.assignment_id
+  AND a.status = 'active'
+  AND ap.user_id = ?
+  AND ap.source = 'group'
+  AND ap.source_group_id = ?
+  AND ap.status IN ('assigned', 'in_progress')
+RETURNING ap.assignment_id
+`
+
+// CancelBySourceGroupAndUser отменяет участия пользователя, полученные через членство в
+// группе, во всех действующих назначениях (§4 дизайна эпика Э3, каскад OnMemberRemoved).
+// Личные назначения (source=personal) не затрагиваются — Э3-Т30. Возвращает id назначений,
+// в которых участие отменено.
+func (r *AssignmentParticipantRepository) CancelBySourceGroupAndUser(
+	ctx context.Context,
+	groupID, userID uuid.UUID,
+	reason domain.AssignmentParticipantCancelReason, at time.Time,
+) ([]uuid.UUID, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	query := psql.RawQuery(cancelBySourceGroupAndUserSQL, at, string(reason), userID, groupID)
+
+	rows, err := bob.All(ctx, exec, query, scan.StructMapper[assignmentIDRow]())
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return assignmentIDsFromRows(rows), nil
 }
