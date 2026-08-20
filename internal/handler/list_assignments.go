@@ -17,7 +17,11 @@ import (
 // @Description список групп); нет области — пустой список, не ошибка. include_deactivated=false
 // @Description (по умолчанию) исключает деактивированных из счётчиков и участников.
 // @Description expand_participants=true добавляет в каждый элемент список участников — основа
-// @Description сводки «сотрудник × видео» (С-7).
+// @Description сводки «сотрудник × видео» (С-7). due_from/due_to задают период срока
+// @Description (включительно, границы независимы); попадание в период проверяется по-разному
+// @Description в зависимости от режима срока назначения (В-61): в режиме «дата» — по общему
+// @Description сроку назначения, в режиме «N дней с зачисления» — по персональному сроку хотя
+// @Description бы одного незавершённого участника (отменённые участия не учитываются).
 // @Tags assignments
 // @Produce json
 // @Param accountId path string true "ID аккаунта"
@@ -25,8 +29,8 @@ import (
 // @Param video_id query string false "ID видео"
 // @Param user_id query string false "ID участника"
 // @Param status query string false "Статус назначения: active, cancelled"
-// @Param due_from query string false "Начало диапазона срока (RFC3339)"
-// @Param due_to query string false "Конец диапазона срока (RFC3339)"
+// @Param due_from query string false "Начало периода срока, включительно (RFC3339)"
+// @Param due_to query string false "Конец периода срока, включительно (RFC3339)"
 // @Param include_deactivated query bool false "Включать деактивированных участников"
 // @Param expand_participants query bool false "Добавить участников в каждый элемент"
 // @Success 200 {object} dto.ListAssignmentsResponse

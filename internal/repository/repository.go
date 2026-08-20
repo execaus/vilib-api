@@ -290,8 +290,12 @@ type AssignmentFilter struct {
 	VideoID   *uuid.UUID
 	// UserID фильтрует назначения, в которых есть персональная запись указанного пользователя
 	// (в любом статусе).
-	UserID  *uuid.UUID
-	Status  *domain.AssignmentStatus
+	UserID *uuid.UUID
+	Status *domain.AssignmentStatus
+	// DueFrom/DueTo — границы периода срока (включительно, независимы друг от друга, В-61).
+	// Назначение попадает в период, если в границы укладывается либо assignments.due_at
+	// (режим «дата»), либо персональный срок хотя бы одного незавершённого участника —
+	// assignment_participants.due_at (режим «N дней с зачисления», см. assignmentDueRangeExpr).
 	DueFrom *time.Time
 	DueTo   *time.Time
 }

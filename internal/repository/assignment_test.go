@@ -548,6 +548,87 @@ func TestRepository_AssignmentSelectByFilter_FiltersByDueRange(t *testing.T) {
 	})
 }
 
+func TestRepository_AssignmentSelectByFilter_DueRangeMatchesPersonalDueInDaysMode(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		fixture := newTestAccountAndVideo(t, r, f)
+
+		// due_mode=days: у самого назначения due_at не заполнен, срок — только персональный
+		// (assignment_participants.due_at), поэтому попадание в период проверяется через
+		// участника (В-61).
+		assignment, err := r.Assignment.Insert(
+			t.Context(), fixture.AccountID, fixture.Video.ID, fixture.Video.Name,
+			fixture.Video.GroupID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDays, nil, ptrInt(7), "",
+		)
+		require.NoError(t, err)
+
+		participant := newTestUser(t, r, f, fixture.AccountRoleID)
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		personalDueAt := now.Add(5 * 24 * time.Hour)
+		_, err = r.AssignmentParticipant.InsertBatch(t.Context(), []domain.AssignmentParticipant{
+			{
+				AssignmentID: assignment.ID, UserID: participant.ID,
+				Status: domain.AssignmentParticipantStatusAssigned, Source: domain.AssignmentParticipantSourcePersonal,
+				EnrolledAt: now, DueAt: personalDueAt,
+			},
+		})
+		require.NoError(t, err)
+
+		dueFrom := now
+		dueTo := now.Add(10 * 24 * time.Hour)
+
+		got, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: fixture.AccountID, Scope: repository.AssignmentScope{All: true},
+			DueFrom: &dueFrom, DueTo: &dueTo,
+		})
+
+		require.NoError(t, err)
+		require.ElementsMatch(t, []uuid.UUID{assignment.ID}, assignmentIDs(got))
+	})
+}
+
+func TestRepository_AssignmentSelectByFilter_DueRangeExcludesAssignmentWhereAllParticipantsCancelled(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		fixture := newTestAccountAndVideo(t, r, f)
+
+		assignment, err := r.Assignment.Insert(
+			t.Context(), fixture.AccountID, fixture.Video.ID, fixture.Video.Name,
+			fixture.Video.GroupID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDays, nil, ptrInt(7), "",
+		)
+		require.NoError(t, err)
+
+		participant := newTestUser(t, r, f, fixture.AccountRoleID)
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		personalDueAt := now.Add(5 * 24 * time.Hour)
+		// Персональный срок формально попадает в период, но участие отменено — обязанности
+		// пройти видео в этом периоде уже нет, назначение не должно попасть в выборку.
+		_, err = r.AssignmentParticipant.InsertBatch(t.Context(), []domain.AssignmentParticipant{
+			{
+				AssignmentID: assignment.ID, UserID: participant.ID,
+				Status: domain.AssignmentParticipantStatusCancelled, Source: domain.AssignmentParticipantSourcePersonal,
+				EnrolledAt: now, DueAt: personalDueAt,
+			},
+		})
+		require.NoError(t, err)
+
+		dueFrom := now
+		dueTo := now.Add(10 * 24 * time.Hour)
+
+		got, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: fixture.AccountID, Scope: repository.AssignmentScope{All: true},
+			DueFrom: &dueFrom, DueTo: &dueTo,
+		})
+
+		require.NoError(t, err)
+		require.Empty(t, got)
+	})
+}
+
 // assignmentIDs собирает идентификаторы назначений для сравнения без учёта порядка —
 // SelectByFilter не гарантирует сортировку (сортировка на клиенте, §5 дизайна эпика Э3).
 func assignmentIDs(assignments []domain.Assignment) []uuid.UUID {
