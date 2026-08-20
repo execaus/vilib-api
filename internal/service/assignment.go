@@ -21,6 +21,9 @@ const (
 	// (§4 дизайна эпика Э3, шаг 3).
 	assignmentMinDueDays = 1
 	assignmentMaxDueDays = 3650
+	// maxEventsPerEnrolledParticipant — сколько событий журнала может дать один зачисленный
+	// участник: participant_enrolled и, если он уже досмотрел видео, participant_completed.
+	maxEventsPerEnrolledParticipant = 2
 )
 
 // assignmentCandidate — кандидат в участники назначения на этапе раскрытия целей (§4 дизайна
@@ -1422,7 +1425,8 @@ func (s *AssignmentService) recordGroupEnrolledEvents(
 		return err
 	}
 
-	events := make([]domain.AssignmentEvent, 0, 2*len(participants))
+	// На каждого участника приходится до двух событий: зачисление и, для В-11, подтверждение.
+	events := make([]domain.AssignmentEvent, 0, maxEventsPerEnrolledParticipant*len(participants))
 	for i := range participants {
 		events = append(events, domain.AssignmentEvent{
 			AssignmentID: assignmentID, UserID: &participants[i].UserID,

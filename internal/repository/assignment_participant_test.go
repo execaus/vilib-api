@@ -312,7 +312,7 @@ func insertTestParticipant(
 	status domain.AssignmentParticipantStatus,
 	source domain.AssignmentParticipantSource, sourceGroupID *uuid.UUID,
 	enrolledAt, dueAt time.Time,
-) domain.AssignmentParticipant {
+) {
 	t.Helper()
 
 	inserted, err := r.AssignmentParticipant.InsertBatch(t.Context(), []domain.AssignmentParticipant{
@@ -328,8 +328,6 @@ func insertTestParticipant(
 	})
 	require.NoError(t, err)
 	require.Len(t, inserted, 1)
-
-	return inserted[0]
 }
 
 // participantsByUser раскладывает участников назначения по идентификатору пользователя.

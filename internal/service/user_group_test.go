@@ -188,7 +188,7 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				access *service_mocks.AccessMock,
 				groupMember *service_mocks.GroupMemberMock,
 				groupRole *service_mocks.GroupRoleMock,
-				assignment *service_mocks.AssignmentMock,
+				_ *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(
@@ -245,7 +245,7 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				access *service_mocks.AccessMock,
 				groupMember *service_mocks.GroupMemberMock,
 				groupRole *service_mocks.GroupRoleMock,
-				assignment *service_mocks.AssignmentMock,
+				_ *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(
