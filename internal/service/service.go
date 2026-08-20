@@ -370,6 +370,17 @@ type Assignment interface {
 	Get(ctx context.Context, accountID, initiatorID, id uuid.UUID) (domain.AssignmentDetails, error)
 	// ListMine собирает «мои назначения» пользователя во всех статусах (§4 дизайна эпика Э3).
 	ListMine(ctx context.Context, userID uuid.UUID) ([]domain.MyAssignment, error)
+	// List собирает список/отчёт по назначениям с фильтрами (§4, §5, §6 дизайна эпика Э3,
+	// В-53): область — правило В-8 через Access.ManagedAssignmentGroups, счётчики — одним
+	// батчем на все назначения, участники — только при f.ExpandParticipants.
+	List(
+		ctx context.Context,
+		accountID, initiatorID uuid.UUID,
+		f domain.AssignmentFilter,
+	) ([]domain.AssignmentListItem, error)
+	// ListForUser собирает отчёт по всем назначениям одного сотрудника (§4, §6 дизайна эпика
+	// Э3, В-53) с учётом области В-8. userID должен состоять в accountID — иначе ErrNotFound.
+	ListForUser(ctx context.Context, accountID, initiatorID, userID uuid.UUID) ([]domain.UserAssignmentItem, error)
 	// UpdateDue меняет срок и/или комментарий назначения с пересчётом персональных сроков
 	// незавершённых участников. Отменённое назначение не редактируется.
 	UpdateDue(

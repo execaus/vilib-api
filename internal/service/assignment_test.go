@@ -779,6 +779,306 @@ func TestService_AssignmentListMine_UsesCompletedCoverageForCompletedParticipant
 	require.Equal(t, coverage, items[0].CoveragePct)
 }
 
+// TestService_AssignmentList_EmptyWhenNoAssignments проверяет, что список пуст, если область
+// В-8 инициатора не содержит ни одного назначения — без дальнейших батч-запросов.
+func TestService_AssignmentList_EmptyWhenNoAssignments(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	m.Access.ManagedAssignmentGroupsMock.Return(true, nil, nil)
+	m.Assignment.SelectByFilterMock.Return(nil, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	items, err := svc.List(t.Context(), f.AccountID, f.InitiatorID, domain.AssignmentFilter{})
+
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
+
+// TestService_AssignmentList_PassesScopeAndFiltersToRepository проверяет перевод области В-8
+// (не-владелец, ограниченный список групп) и всех query-фильтров в repository.AssignmentFilter
+// (§4, §5 дизайна эпика Э3, В-53).
+func TestService_AssignmentList_PassesScopeAndFiltersToRepository(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	groups := []uuid.UUID{f.GroupID}
+	statusActive := domain.AssignmentStatusActive
+	dueFrom := f.Now
+	dueTo := f.Now.Add(30 * 24 * time.Hour)
+	userID := uuid.New()
+
+	m.Access.ManagedAssignmentGroupsMock.Expect(minimock.AnyContext, f.AccountID, f.InitiatorID).
+		Return(false, groups, nil)
+	m.Assignment.SelectByFilterMock.Set(
+		func(_ context.Context, got repository.AssignmentFilter) ([]domain.Assignment, error) {
+			require.Equal(t, f.AccountID, got.AccountID)
+			require.False(t, got.Scope.All)
+			require.Equal(t, groups, got.Scope.GroupIDs)
+			require.Equal(t, f.InitiatorID, got.Scope.CreatedBy)
+			require.Equal(t, &f.GroupID, got.GroupID)
+			require.Equal(t, &userID, got.UserID)
+			require.Equal(t, &statusActive, got.Status)
+			require.Equal(t, &dueFrom, got.DueFrom)
+			require.Equal(t, &dueTo, got.DueTo)
+
+			return nil, nil
+		},
+	)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	_, err := svc.List(t.Context(), f.AccountID, f.InitiatorID, domain.AssignmentFilter{
+		GroupID: &f.GroupID, UserID: &userID, Status: &statusActive, DueFrom: &dueFrom, DueTo: &dueTo,
+	})
+
+	require.NoError(t, err)
+}
+
+// TestService_AssignmentList_BuildsTargetsCountersAndCreatedBy проверяет сборку целей (имя
+// пользователя/снимок группы), счётчиков и автора назначения одним проходом батчей без участия
+// (ExpandParticipants=false).
+func TestService_AssignmentList_BuildsTargetsCountersAndCreatedBy(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	assignment := activeAssignment(f)
+	userTargetID := uuid.New()
+
+	m.Access.ManagedAssignmentGroupsMock.Return(true, nil, nil)
+	m.Assignment.SelectByFilterMock.Return([]domain.Assignment{assignment}, nil)
+	m.Targets.SelectByAssignmentIDsMock.Expect(minimock.AnyContext, []uuid.UUID{f.AssignmentID}).
+		Return([]domain.AssignmentTarget{
+			{AssignmentID: f.AssignmentID, TargetType: domain.AssignmentTargetTypeUser, TargetID: userTargetID},
+			{AssignmentID: f.AssignmentID, TargetType: domain.AssignmentTargetTypeGroup, TargetID: f.GroupID},
+		}, nil)
+	m.User.GetByIDsMock.Return([]domain.User{
+		{ID: f.InitiatorID, Name: "Автор"},
+		{ID: userTargetID, Name: "Иван", Surname: "Иванов"},
+	}, nil)
+	m.Participants.CountByAssignmentIDsMock.
+		Expect(minimock.AnyContext, []uuid.UUID{f.AssignmentID}, false).
+		Return(map[uuid.UUID]domain.AssignmentCounters{f.AssignmentID: {Total: 3, Assigned: 3}}, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	items, err := svc.List(t.Context(), f.AccountID, f.InitiatorID, domain.AssignmentFilter{})
+
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, "Автор", items[0].CreatedByUser.Name)
+	require.Len(t, items[0].Targets, 2)
+	require.Equal(t, 3, items[0].Counters.Total)
+	require.Nil(t, items[0].Participants, "участники не запрошены — expand_participants=false")
+}
+
+// TestService_AssignmentList_ExpandParticipantsExcludesDeactivatedByDefault проверяет
+// критерий В-53/Э3-Т29: include_deactivated=false по умолчанию скрывает деактивированного
+// участника из счётчиков (переданный в CountByAssignmentIDs флаг) и из списка участников.
+func TestService_AssignmentList_ExpandParticipantsExcludesDeactivatedByDefault(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	assignment := activeAssignment(f)
+	activeUserID := uuid.New()
+	deactivatedUserID := uuid.New()
+	deactivatedAt := f.Now.Add(-time.Hour)
+
+	m.Access.ManagedAssignmentGroupsMock.Return(true, nil, nil)
+	m.Assignment.SelectByFilterMock.Return([]domain.Assignment{assignment}, nil)
+	m.Targets.SelectByAssignmentIDsMock.Return(nil, nil)
+	m.Participants.SelectByAssignmentIDsMock.Expect(minimock.AnyContext, []uuid.UUID{f.AssignmentID}).
+		Return([]domain.AssignmentParticipant{
+			{
+				AssignmentID: f.AssignmentID, UserID: activeUserID,
+				Status: domain.AssignmentParticipantStatusInProgress, DueAt: f.Now.Add(time.Hour),
+			},
+			{
+				AssignmentID: f.AssignmentID, UserID: deactivatedUserID,
+				Status: domain.AssignmentParticipantStatusAssigned, DueAt: f.Now.Add(time.Hour),
+			},
+		}, nil)
+	m.User.GetByIDsMock.Return([]domain.User{
+		{ID: f.InitiatorID, Name: "Автор"},
+		{ID: activeUserID, Name: "Активный"},
+		{ID: deactivatedUserID, Name: "Уволен", DeactivatedAt: &deactivatedAt},
+	}, nil)
+	m.Participants.CountByAssignmentIDsMock.
+		Expect(minimock.AnyContext, []uuid.UUID{f.AssignmentID}, false).
+		Return(map[uuid.UUID]domain.AssignmentCounters{}, nil)
+	m.Video.SelectByIDsMock.Return([]domain.Video{f.Video}, nil)
+	m.Progress.SelectByVideoIDsMock.Return(nil, nil)
+	m.Access.CanWatchVideoMock.Return(true)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	items, err := svc.List(t.Context(), f.AccountID, f.InitiatorID, domain.AssignmentFilter{ExpandParticipants: true})
+
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Len(t, items[0].Participants, 1, "деактивированный участник исключён из списка")
+	require.Equal(t, activeUserID, items[0].Participants[0].Participant.UserID)
+	require.True(t, items[0].Participants[0].HasAccess)
+}
+
+// TestService_AssignmentList_IncludeDeactivatedKeepsAllParticipants проверяет переключатель
+// include_deactivated=true: деактивированный участник остаётся в списке, флаг доходит до
+// CountByAssignmentIDs.
+func TestService_AssignmentList_IncludeDeactivatedKeepsAllParticipants(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	assignment := activeAssignment(f)
+	activeUserID := uuid.New()
+	deactivatedUserID := uuid.New()
+	deactivatedAt := f.Now.Add(-time.Hour)
+
+	m.Access.ManagedAssignmentGroupsMock.Return(true, nil, nil)
+	m.Assignment.SelectByFilterMock.Return([]domain.Assignment{assignment}, nil)
+	m.Targets.SelectByAssignmentIDsMock.Return(nil, nil)
+	m.Participants.SelectByAssignmentIDsMock.Return([]domain.AssignmentParticipant{
+		{
+			AssignmentID: f.AssignmentID, UserID: activeUserID,
+			Status: domain.AssignmentParticipantStatusInProgress, DueAt: f.Now.Add(time.Hour),
+		},
+		{
+			AssignmentID: f.AssignmentID, UserID: deactivatedUserID,
+			Status: domain.AssignmentParticipantStatusAssigned, DueAt: f.Now.Add(time.Hour),
+		},
+	}, nil)
+	m.User.GetByIDsMock.Return([]domain.User{
+		{ID: f.InitiatorID, Name: "Автор"},
+		{ID: activeUserID, Name: "Активный"},
+		{ID: deactivatedUserID, Name: "Уволен", DeactivatedAt: &deactivatedAt},
+	}, nil)
+	m.Participants.CountByAssignmentIDsMock.
+		Expect(minimock.AnyContext, []uuid.UUID{f.AssignmentID}, true).
+		Return(map[uuid.UUID]domain.AssignmentCounters{}, nil)
+	m.Video.SelectByIDsMock.Return([]domain.Video{f.Video}, nil)
+	m.Progress.SelectByVideoIDsMock.Return(nil, nil)
+	m.Access.CanWatchVideoMock.Return(true)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	items, err := svc.List(t.Context(), f.AccountID, f.InitiatorID, domain.AssignmentFilter{
+		ExpandParticipants: true, IncludeDeactivated: true,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Len(t, items[0].Participants, 2)
+}
+
+// TestService_AssignmentListForUser_NotFoundWhenUserNotInAccount проверяет 404 для сотрудника
+// вне аккаунта — до любого обращения к назначениям.
+func TestService_AssignmentListForUser_NotFoundWhenUserNotInAccount(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	targetUserID := uuid.New()
+	roleID := uuid.New()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	m.User.GetByIDMock.Expect(minimock.AnyContext, targetUserID).
+		Return([]domain.User{{ID: targetUserID, RoleID: roleID}}, nil)
+	m.AccountRole.GetByIDMock.Return([]domain.AccountRole{{ID: roleID, AccountID: uuid.New()}}, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	_, err := svc.ListForUser(t.Context(), f.AccountID, f.InitiatorID, targetUserID)
+
+	require.ErrorIs(t, err, service.ErrNotFound)
+}
+
+// TestService_AssignmentListForUser_EmptyWhenNoParticipants проверяет пустой отчёт для
+// сотрудника без единого назначения.
+func TestService_AssignmentListForUser_EmptyWhenNoParticipants(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	targetUserID := uuid.New()
+	roleID := uuid.New()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	m.User.GetByIDMock.Expect(minimock.AnyContext, targetUserID).
+		Return([]domain.User{{ID: targetUserID, RoleID: roleID}}, nil)
+	m.AccountRole.GetByIDMock.Return([]domain.AccountRole{{ID: roleID, AccountID: f.AccountID}}, nil)
+	m.Access.ManagedAssignmentGroupsMock.Return(true, nil, nil)
+	m.Participants.SelectByUserIDMock.Expect(minimock.AnyContext, targetUserID).Return(nil, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	items, err := svc.ListForUser(t.Context(), f.AccountID, f.InitiatorID, targetUserID)
+
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
+
+// TestService_AssignmentListForUser_FiltersByScope проверяет критерий КП-6: руководитель
+// группы не видит в отчёте по сотруднику назначения из чужой группы, созданные не им.
+func TestService_AssignmentListForUser_FiltersByScope(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	targetUserID := uuid.New()
+	roleID := uuid.New()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	inScope := activeAssignment(f)
+	outOfScopeGroupID := uuid.New()
+	outOfScope := domain.Assignment{
+		ID: uuid.New(), AccountID: f.AccountID, GroupID: &outOfScopeGroupID, CreatedBy: uuid.New(),
+	}
+
+	participantIn := domain.AssignmentParticipant{
+		AssignmentID: inScope.ID, UserID: targetUserID, DueAt: f.Now.Add(time.Hour),
+	}
+	participantOut := domain.AssignmentParticipant{
+		AssignmentID: outOfScope.ID, UserID: targetUserID, DueAt: f.Now.Add(time.Hour),
+	}
+
+	m.User.GetByIDMock.Expect(minimock.AnyContext, targetUserID).
+		Return([]domain.User{{ID: targetUserID, RoleID: roleID}}, nil)
+	m.AccountRole.GetByIDMock.Return([]domain.AccountRole{{ID: roleID, AccountID: f.AccountID}}, nil)
+	m.Access.ManagedAssignmentGroupsMock.Expect(minimock.AnyContext, f.AccountID, f.InitiatorID).
+		Return(false, []uuid.UUID{f.GroupID}, nil)
+	m.Participants.SelectByUserIDMock.Expect(minimock.AnyContext, targetUserID).
+		Return([]domain.AssignmentParticipant{participantIn, participantOut}, nil)
+	m.Assignment.SelectByIDsMock.Return([]domain.Assignment{inScope, outOfScope}, nil)
+	m.Targets.SelectByAssignmentIDsMock.Expect(minimock.AnyContext, []uuid.UUID{inScope.ID}).
+		Return(nil, nil)
+	m.User.GetByIDsMock.Return([]domain.User{
+		{ID: f.InitiatorID, Name: "Автор"}, {ID: targetUserID, Name: "Сотрудник"},
+	}, nil)
+	m.Participants.CountByAssignmentIDsMock.
+		Expect(minimock.AnyContext, []uuid.UUID{inScope.ID}, true).
+		Return(map[uuid.UUID]domain.AssignmentCounters{}, nil)
+	// Прогресс/длительность батчатся только по назначению в области — вне области видео не
+	// запрашивается (см. правку ListForUser, сужение assignmentByID).
+	m.Video.SelectByIDsMock.Expect(minimock.AnyContext, []uuid.UUID{f.VideoID}).
+		Return([]domain.Video{f.Video}, nil)
+	m.Progress.SelectByVideoIDsMock.Return(nil, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	items, err := svc.ListForUser(t.Context(), f.AccountID, f.InitiatorID, targetUserID)
+
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, inScope.ID, items[0].Assignment.ID)
+}
+
 func ptrTime(t time.Time) *time.Time { return &t }
 func ptrInt64(v int64) *int64        { return &v }
 

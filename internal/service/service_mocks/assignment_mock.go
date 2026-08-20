@@ -41,6 +41,20 @@ type AssignmentMock struct {
 	beforeGetCounter uint64
 	GetMock          mAssignmentMockGet
 
+	funcList          func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, f domain.AssignmentFilter) (aa1 []domain.AssignmentListItem, err error)
+	funcListOrigin    string
+	inspectFuncList   func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, f domain.AssignmentFilter)
+	afterListCounter  uint64
+	beforeListCounter uint64
+	ListMock          mAssignmentMockList
+
+	funcListForUser          func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, userID uuid.UUID) (ua1 []domain.UserAssignmentItem, err error)
+	funcListForUserOrigin    string
+	inspectFuncListForUser   func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, userID uuid.UUID)
+	afterListForUserCounter  uint64
+	beforeListForUserCounter uint64
+	ListForUserMock          mAssignmentMockListForUser
+
 	funcListMine          func(ctx context.Context, userID uuid.UUID) (ma1 []domain.MyAssignment, err error)
 	funcListMineOrigin    string
 	inspectFuncListMine   func(ctx context.Context, userID uuid.UUID)
@@ -107,6 +121,12 @@ func NewAssignmentMock(t minimock.Tester) *AssignmentMock {
 
 	m.GetMock = mAssignmentMockGet{mock: m}
 	m.GetMock.callArgs = []*AssignmentMockGetParams{}
+
+	m.ListMock = mAssignmentMockList{mock: m}
+	m.ListMock.callArgs = []*AssignmentMockListParams{}
+
+	m.ListForUserMock = mAssignmentMockListForUser{mock: m}
+	m.ListForUserMock.callArgs = []*AssignmentMockListForUserParams{}
 
 	m.ListMineMock = mAssignmentMockListMine{mock: m}
 	m.ListMineMock.callArgs = []*AssignmentMockListMineParams{}
@@ -1346,6 +1366,816 @@ func (m *AssignmentMock) MinimockGetInspect() {
 	if !m.GetMock.invocationsDone() && afterGetCounter > 0 {
 		m.t.Errorf("Expected %d calls to AssignmentMock.Get at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.GetMock.expectedInvocations), m.GetMock.expectedInvocationsOrigin, afterGetCounter)
+	}
+}
+
+type mAssignmentMockList struct {
+	optional           bool
+	mock               *AssignmentMock
+	defaultExpectation *AssignmentMockListExpectation
+	expectations       []*AssignmentMockListExpectation
+
+	callArgs []*AssignmentMockListParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AssignmentMockListExpectation specifies expectation struct of the Assignment.List
+type AssignmentMockListExpectation struct {
+	mock               *AssignmentMock
+	params             *AssignmentMockListParams
+	paramPtrs          *AssignmentMockListParamPtrs
+	expectationOrigins AssignmentMockListExpectationOrigins
+	results            *AssignmentMockListResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AssignmentMockListParams contains parameters of the Assignment.List
+type AssignmentMockListParams struct {
+	ctx         context.Context
+	accountID   uuid.UUID
+	initiatorID uuid.UUID
+	f           domain.AssignmentFilter
+}
+
+// AssignmentMockListParamPtrs contains pointers to parameters of the Assignment.List
+type AssignmentMockListParamPtrs struct {
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	initiatorID *uuid.UUID
+	f           *domain.AssignmentFilter
+}
+
+// AssignmentMockListResults contains results of the Assignment.List
+type AssignmentMockListResults struct {
+	aa1 []domain.AssignmentListItem
+	err error
+}
+
+// AssignmentMockListOrigins contains origins of expectations of the Assignment.List
+type AssignmentMockListExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originInitiatorID string
+	originF           string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmList *mAssignmentMockList) Optional() *mAssignmentMockList {
+	mmList.optional = true
+	return mmList
+}
+
+// Expect sets up expected params for Assignment.List
+func (mmList *mAssignmentMockList) Expect(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, f domain.AssignmentFilter) *mAssignmentMockList {
+	if mmList.mock.funcList != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Set")
+	}
+
+	if mmList.defaultExpectation == nil {
+		mmList.defaultExpectation = &AssignmentMockListExpectation{}
+	}
+
+	if mmList.defaultExpectation.paramPtrs != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by ExpectParams functions")
+	}
+
+	mmList.defaultExpectation.params = &AssignmentMockListParams{ctx, accountID, initiatorID, f}
+	mmList.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmList.expectations {
+		if minimock.Equal(e.params, mmList.defaultExpectation.params) {
+			mmList.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmList.defaultExpectation.params)
+		}
+	}
+
+	return mmList
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Assignment.List
+func (mmList *mAssignmentMockList) ExpectCtxParam1(ctx context.Context) *mAssignmentMockList {
+	if mmList.mock.funcList != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Set")
+	}
+
+	if mmList.defaultExpectation == nil {
+		mmList.defaultExpectation = &AssignmentMockListExpectation{}
+	}
+
+	if mmList.defaultExpectation.params != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Expect")
+	}
+
+	if mmList.defaultExpectation.paramPtrs == nil {
+		mmList.defaultExpectation.paramPtrs = &AssignmentMockListParamPtrs{}
+	}
+	mmList.defaultExpectation.paramPtrs.ctx = &ctx
+	mmList.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmList
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Assignment.List
+func (mmList *mAssignmentMockList) ExpectAccountIDParam2(accountID uuid.UUID) *mAssignmentMockList {
+	if mmList.mock.funcList != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Set")
+	}
+
+	if mmList.defaultExpectation == nil {
+		mmList.defaultExpectation = &AssignmentMockListExpectation{}
+	}
+
+	if mmList.defaultExpectation.params != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Expect")
+	}
+
+	if mmList.defaultExpectation.paramPtrs == nil {
+		mmList.defaultExpectation.paramPtrs = &AssignmentMockListParamPtrs{}
+	}
+	mmList.defaultExpectation.paramPtrs.accountID = &accountID
+	mmList.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmList
+}
+
+// ExpectInitiatorIDParam3 sets up expected param initiatorID for Assignment.List
+func (mmList *mAssignmentMockList) ExpectInitiatorIDParam3(initiatorID uuid.UUID) *mAssignmentMockList {
+	if mmList.mock.funcList != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Set")
+	}
+
+	if mmList.defaultExpectation == nil {
+		mmList.defaultExpectation = &AssignmentMockListExpectation{}
+	}
+
+	if mmList.defaultExpectation.params != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Expect")
+	}
+
+	if mmList.defaultExpectation.paramPtrs == nil {
+		mmList.defaultExpectation.paramPtrs = &AssignmentMockListParamPtrs{}
+	}
+	mmList.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmList.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmList
+}
+
+// ExpectFParam4 sets up expected param f for Assignment.List
+func (mmList *mAssignmentMockList) ExpectFParam4(f domain.AssignmentFilter) *mAssignmentMockList {
+	if mmList.mock.funcList != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Set")
+	}
+
+	if mmList.defaultExpectation == nil {
+		mmList.defaultExpectation = &AssignmentMockListExpectation{}
+	}
+
+	if mmList.defaultExpectation.params != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Expect")
+	}
+
+	if mmList.defaultExpectation.paramPtrs == nil {
+		mmList.defaultExpectation.paramPtrs = &AssignmentMockListParamPtrs{}
+	}
+	mmList.defaultExpectation.paramPtrs.f = &f
+	mmList.defaultExpectation.expectationOrigins.originF = minimock.CallerInfo(1)
+
+	return mmList
+}
+
+// Inspect accepts an inspector function that has same arguments as the Assignment.List
+func (mmList *mAssignmentMockList) Inspect(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, f domain.AssignmentFilter)) *mAssignmentMockList {
+	if mmList.mock.inspectFuncList != nil {
+		mmList.mock.t.Fatalf("Inspect function is already set for AssignmentMock.List")
+	}
+
+	mmList.mock.inspectFuncList = f
+
+	return mmList
+}
+
+// Return sets up results that will be returned by Assignment.List
+func (mmList *mAssignmentMockList) Return(aa1 []domain.AssignmentListItem, err error) *AssignmentMock {
+	if mmList.mock.funcList != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Set")
+	}
+
+	if mmList.defaultExpectation == nil {
+		mmList.defaultExpectation = &AssignmentMockListExpectation{mock: mmList.mock}
+	}
+	mmList.defaultExpectation.results = &AssignmentMockListResults{aa1, err}
+	mmList.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmList.mock
+}
+
+// Set uses given function f to mock the Assignment.List method
+func (mmList *mAssignmentMockList) Set(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, f domain.AssignmentFilter) (aa1 []domain.AssignmentListItem, err error)) *AssignmentMock {
+	if mmList.defaultExpectation != nil {
+		mmList.mock.t.Fatalf("Default expectation is already set for the Assignment.List method")
+	}
+
+	if len(mmList.expectations) > 0 {
+		mmList.mock.t.Fatalf("Some expectations are already set for the Assignment.List method")
+	}
+
+	mmList.mock.funcList = f
+	mmList.mock.funcListOrigin = minimock.CallerInfo(1)
+	return mmList.mock
+}
+
+// When sets expectation for the Assignment.List which will trigger the result defined by the following
+// Then helper
+func (mmList *mAssignmentMockList) When(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, f domain.AssignmentFilter) *AssignmentMockListExpectation {
+	if mmList.mock.funcList != nil {
+		mmList.mock.t.Fatalf("AssignmentMock.List mock is already set by Set")
+	}
+
+	expectation := &AssignmentMockListExpectation{
+		mock:               mmList.mock,
+		params:             &AssignmentMockListParams{ctx, accountID, initiatorID, f},
+		expectationOrigins: AssignmentMockListExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmList.expectations = append(mmList.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Assignment.List return parameters for the expectation previously defined by the When method
+func (e *AssignmentMockListExpectation) Then(aa1 []domain.AssignmentListItem, err error) *AssignmentMock {
+	e.results = &AssignmentMockListResults{aa1, err}
+	return e.mock
+}
+
+// Times sets number of times Assignment.List should be invoked
+func (mmList *mAssignmentMockList) Times(n uint64) *mAssignmentMockList {
+	if n == 0 {
+		mmList.mock.t.Fatalf("Times of AssignmentMock.List mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmList.expectedInvocations, n)
+	mmList.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmList
+}
+
+func (mmList *mAssignmentMockList) invocationsDone() bool {
+	if len(mmList.expectations) == 0 && mmList.defaultExpectation == nil && mmList.mock.funcList == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmList.mock.afterListCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmList.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// List implements mm_service.Assignment
+func (mmList *AssignmentMock) List(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, f domain.AssignmentFilter) (aa1 []domain.AssignmentListItem, err error) {
+	mm_atomic.AddUint64(&mmList.beforeListCounter, 1)
+	defer mm_atomic.AddUint64(&mmList.afterListCounter, 1)
+
+	mmList.t.Helper()
+
+	if mmList.inspectFuncList != nil {
+		mmList.inspectFuncList(ctx, accountID, initiatorID, f)
+	}
+
+	mm_params := AssignmentMockListParams{ctx, accountID, initiatorID, f}
+
+	// Record call args
+	mmList.ListMock.mutex.Lock()
+	mmList.ListMock.callArgs = append(mmList.ListMock.callArgs, &mm_params)
+	mmList.ListMock.mutex.Unlock()
+
+	for _, e := range mmList.ListMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.aa1, e.results.err
+		}
+	}
+
+	if mmList.ListMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmList.ListMock.defaultExpectation.Counter, 1)
+		mm_want := mmList.ListMock.defaultExpectation.params
+		mm_want_ptrs := mmList.ListMock.defaultExpectation.paramPtrs
+
+		mm_got := AssignmentMockListParams{ctx, accountID, initiatorID, f}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmList.t.Errorf("AssignmentMock.List got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmList.ListMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmList.t.Errorf("AssignmentMock.List got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmList.ListMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmList.t.Errorf("AssignmentMock.List got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmList.ListMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.f != nil && !minimock.Equal(*mm_want_ptrs.f, mm_got.f) {
+				mmList.t.Errorf("AssignmentMock.List got unexpected parameter f, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmList.ListMock.defaultExpectation.expectationOrigins.originF, *mm_want_ptrs.f, mm_got.f, minimock.Diff(*mm_want_ptrs.f, mm_got.f))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmList.t.Errorf("AssignmentMock.List got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmList.ListMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmList.ListMock.defaultExpectation.results
+		if mm_results == nil {
+			mmList.t.Fatal("No results are set for the AssignmentMock.List")
+		}
+		return (*mm_results).aa1, (*mm_results).err
+	}
+	if mmList.funcList != nil {
+		return mmList.funcList(ctx, accountID, initiatorID, f)
+	}
+	mmList.t.Fatalf("Unexpected call to AssignmentMock.List. %v %v %v %v", ctx, accountID, initiatorID, f)
+	return
+}
+
+// ListAfterCounter returns a count of finished AssignmentMock.List invocations
+func (mmList *AssignmentMock) ListAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmList.afterListCounter)
+}
+
+// ListBeforeCounter returns a count of AssignmentMock.List invocations
+func (mmList *AssignmentMock) ListBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmList.beforeListCounter)
+}
+
+// Calls returns a list of arguments used in each call to AssignmentMock.List.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmList *mAssignmentMockList) Calls() []*AssignmentMockListParams {
+	mmList.mutex.RLock()
+
+	argCopy := make([]*AssignmentMockListParams, len(mmList.callArgs))
+	copy(argCopy, mmList.callArgs)
+
+	mmList.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListDone returns true if the count of the List invocations corresponds
+// the number of defined expectations
+func (m *AssignmentMock) MinimockListDone() bool {
+	if m.ListMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ListMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListMock.invocationsDone()
+}
+
+// MinimockListInspect logs each unmet expectation
+func (m *AssignmentMock) MinimockListInspect() {
+	for _, e := range m.ListMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AssignmentMock.List at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterListCounter := mm_atomic.LoadUint64(&m.afterListCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListMock.defaultExpectation != nil && afterListCounter < 1 {
+		if m.ListMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AssignmentMock.List at\n%s", m.ListMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AssignmentMock.List at\n%s with params: %#v", m.ListMock.defaultExpectation.expectationOrigins.origin, *m.ListMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcList != nil && afterListCounter < 1 {
+		m.t.Errorf("Expected call to AssignmentMock.List at\n%s", m.funcListOrigin)
+	}
+
+	if !m.ListMock.invocationsDone() && afterListCounter > 0 {
+		m.t.Errorf("Expected %d calls to AssignmentMock.List at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListMock.expectedInvocations), m.ListMock.expectedInvocationsOrigin, afterListCounter)
+	}
+}
+
+type mAssignmentMockListForUser struct {
+	optional           bool
+	mock               *AssignmentMock
+	defaultExpectation *AssignmentMockListForUserExpectation
+	expectations       []*AssignmentMockListForUserExpectation
+
+	callArgs []*AssignmentMockListForUserParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AssignmentMockListForUserExpectation specifies expectation struct of the Assignment.ListForUser
+type AssignmentMockListForUserExpectation struct {
+	mock               *AssignmentMock
+	params             *AssignmentMockListForUserParams
+	paramPtrs          *AssignmentMockListForUserParamPtrs
+	expectationOrigins AssignmentMockListForUserExpectationOrigins
+	results            *AssignmentMockListForUserResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AssignmentMockListForUserParams contains parameters of the Assignment.ListForUser
+type AssignmentMockListForUserParams struct {
+	ctx         context.Context
+	accountID   uuid.UUID
+	initiatorID uuid.UUID
+	userID      uuid.UUID
+}
+
+// AssignmentMockListForUserParamPtrs contains pointers to parameters of the Assignment.ListForUser
+type AssignmentMockListForUserParamPtrs struct {
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	initiatorID *uuid.UUID
+	userID      *uuid.UUID
+}
+
+// AssignmentMockListForUserResults contains results of the Assignment.ListForUser
+type AssignmentMockListForUserResults struct {
+	ua1 []domain.UserAssignmentItem
+	err error
+}
+
+// AssignmentMockListForUserOrigins contains origins of expectations of the Assignment.ListForUser
+type AssignmentMockListForUserExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originInitiatorID string
+	originUserID      string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmListForUser *mAssignmentMockListForUser) Optional() *mAssignmentMockListForUser {
+	mmListForUser.optional = true
+	return mmListForUser
+}
+
+// Expect sets up expected params for Assignment.ListForUser
+func (mmListForUser *mAssignmentMockListForUser) Expect(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, userID uuid.UUID) *mAssignmentMockListForUser {
+	if mmListForUser.mock.funcListForUser != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Set")
+	}
+
+	if mmListForUser.defaultExpectation == nil {
+		mmListForUser.defaultExpectation = &AssignmentMockListForUserExpectation{}
+	}
+
+	if mmListForUser.defaultExpectation.paramPtrs != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by ExpectParams functions")
+	}
+
+	mmListForUser.defaultExpectation.params = &AssignmentMockListForUserParams{ctx, accountID, initiatorID, userID}
+	mmListForUser.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmListForUser.expectations {
+		if minimock.Equal(e.params, mmListForUser.defaultExpectation.params) {
+			mmListForUser.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmListForUser.defaultExpectation.params)
+		}
+	}
+
+	return mmListForUser
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Assignment.ListForUser
+func (mmListForUser *mAssignmentMockListForUser) ExpectCtxParam1(ctx context.Context) *mAssignmentMockListForUser {
+	if mmListForUser.mock.funcListForUser != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Set")
+	}
+
+	if mmListForUser.defaultExpectation == nil {
+		mmListForUser.defaultExpectation = &AssignmentMockListForUserExpectation{}
+	}
+
+	if mmListForUser.defaultExpectation.params != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Expect")
+	}
+
+	if mmListForUser.defaultExpectation.paramPtrs == nil {
+		mmListForUser.defaultExpectation.paramPtrs = &AssignmentMockListForUserParamPtrs{}
+	}
+	mmListForUser.defaultExpectation.paramPtrs.ctx = &ctx
+	mmListForUser.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmListForUser
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Assignment.ListForUser
+func (mmListForUser *mAssignmentMockListForUser) ExpectAccountIDParam2(accountID uuid.UUID) *mAssignmentMockListForUser {
+	if mmListForUser.mock.funcListForUser != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Set")
+	}
+
+	if mmListForUser.defaultExpectation == nil {
+		mmListForUser.defaultExpectation = &AssignmentMockListForUserExpectation{}
+	}
+
+	if mmListForUser.defaultExpectation.params != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Expect")
+	}
+
+	if mmListForUser.defaultExpectation.paramPtrs == nil {
+		mmListForUser.defaultExpectation.paramPtrs = &AssignmentMockListForUserParamPtrs{}
+	}
+	mmListForUser.defaultExpectation.paramPtrs.accountID = &accountID
+	mmListForUser.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmListForUser
+}
+
+// ExpectInitiatorIDParam3 sets up expected param initiatorID for Assignment.ListForUser
+func (mmListForUser *mAssignmentMockListForUser) ExpectInitiatorIDParam3(initiatorID uuid.UUID) *mAssignmentMockListForUser {
+	if mmListForUser.mock.funcListForUser != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Set")
+	}
+
+	if mmListForUser.defaultExpectation == nil {
+		mmListForUser.defaultExpectation = &AssignmentMockListForUserExpectation{}
+	}
+
+	if mmListForUser.defaultExpectation.params != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Expect")
+	}
+
+	if mmListForUser.defaultExpectation.paramPtrs == nil {
+		mmListForUser.defaultExpectation.paramPtrs = &AssignmentMockListForUserParamPtrs{}
+	}
+	mmListForUser.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmListForUser.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmListForUser
+}
+
+// ExpectUserIDParam4 sets up expected param userID for Assignment.ListForUser
+func (mmListForUser *mAssignmentMockListForUser) ExpectUserIDParam4(userID uuid.UUID) *mAssignmentMockListForUser {
+	if mmListForUser.mock.funcListForUser != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Set")
+	}
+
+	if mmListForUser.defaultExpectation == nil {
+		mmListForUser.defaultExpectation = &AssignmentMockListForUserExpectation{}
+	}
+
+	if mmListForUser.defaultExpectation.params != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Expect")
+	}
+
+	if mmListForUser.defaultExpectation.paramPtrs == nil {
+		mmListForUser.defaultExpectation.paramPtrs = &AssignmentMockListForUserParamPtrs{}
+	}
+	mmListForUser.defaultExpectation.paramPtrs.userID = &userID
+	mmListForUser.defaultExpectation.expectationOrigins.originUserID = minimock.CallerInfo(1)
+
+	return mmListForUser
+}
+
+// Inspect accepts an inspector function that has same arguments as the Assignment.ListForUser
+func (mmListForUser *mAssignmentMockListForUser) Inspect(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, userID uuid.UUID)) *mAssignmentMockListForUser {
+	if mmListForUser.mock.inspectFuncListForUser != nil {
+		mmListForUser.mock.t.Fatalf("Inspect function is already set for AssignmentMock.ListForUser")
+	}
+
+	mmListForUser.mock.inspectFuncListForUser = f
+
+	return mmListForUser
+}
+
+// Return sets up results that will be returned by Assignment.ListForUser
+func (mmListForUser *mAssignmentMockListForUser) Return(ua1 []domain.UserAssignmentItem, err error) *AssignmentMock {
+	if mmListForUser.mock.funcListForUser != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Set")
+	}
+
+	if mmListForUser.defaultExpectation == nil {
+		mmListForUser.defaultExpectation = &AssignmentMockListForUserExpectation{mock: mmListForUser.mock}
+	}
+	mmListForUser.defaultExpectation.results = &AssignmentMockListForUserResults{ua1, err}
+	mmListForUser.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmListForUser.mock
+}
+
+// Set uses given function f to mock the Assignment.ListForUser method
+func (mmListForUser *mAssignmentMockListForUser) Set(f func(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, userID uuid.UUID) (ua1 []domain.UserAssignmentItem, err error)) *AssignmentMock {
+	if mmListForUser.defaultExpectation != nil {
+		mmListForUser.mock.t.Fatalf("Default expectation is already set for the Assignment.ListForUser method")
+	}
+
+	if len(mmListForUser.expectations) > 0 {
+		mmListForUser.mock.t.Fatalf("Some expectations are already set for the Assignment.ListForUser method")
+	}
+
+	mmListForUser.mock.funcListForUser = f
+	mmListForUser.mock.funcListForUserOrigin = minimock.CallerInfo(1)
+	return mmListForUser.mock
+}
+
+// When sets expectation for the Assignment.ListForUser which will trigger the result defined by the following
+// Then helper
+func (mmListForUser *mAssignmentMockListForUser) When(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, userID uuid.UUID) *AssignmentMockListForUserExpectation {
+	if mmListForUser.mock.funcListForUser != nil {
+		mmListForUser.mock.t.Fatalf("AssignmentMock.ListForUser mock is already set by Set")
+	}
+
+	expectation := &AssignmentMockListForUserExpectation{
+		mock:               mmListForUser.mock,
+		params:             &AssignmentMockListForUserParams{ctx, accountID, initiatorID, userID},
+		expectationOrigins: AssignmentMockListForUserExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmListForUser.expectations = append(mmListForUser.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Assignment.ListForUser return parameters for the expectation previously defined by the When method
+func (e *AssignmentMockListForUserExpectation) Then(ua1 []domain.UserAssignmentItem, err error) *AssignmentMock {
+	e.results = &AssignmentMockListForUserResults{ua1, err}
+	return e.mock
+}
+
+// Times sets number of times Assignment.ListForUser should be invoked
+func (mmListForUser *mAssignmentMockListForUser) Times(n uint64) *mAssignmentMockListForUser {
+	if n == 0 {
+		mmListForUser.mock.t.Fatalf("Times of AssignmentMock.ListForUser mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmListForUser.expectedInvocations, n)
+	mmListForUser.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmListForUser
+}
+
+func (mmListForUser *mAssignmentMockListForUser) invocationsDone() bool {
+	if len(mmListForUser.expectations) == 0 && mmListForUser.defaultExpectation == nil && mmListForUser.mock.funcListForUser == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmListForUser.mock.afterListForUserCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmListForUser.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// ListForUser implements mm_service.Assignment
+func (mmListForUser *AssignmentMock) ListForUser(ctx context.Context, accountID uuid.UUID, initiatorID uuid.UUID, userID uuid.UUID) (ua1 []domain.UserAssignmentItem, err error) {
+	mm_atomic.AddUint64(&mmListForUser.beforeListForUserCounter, 1)
+	defer mm_atomic.AddUint64(&mmListForUser.afterListForUserCounter, 1)
+
+	mmListForUser.t.Helper()
+
+	if mmListForUser.inspectFuncListForUser != nil {
+		mmListForUser.inspectFuncListForUser(ctx, accountID, initiatorID, userID)
+	}
+
+	mm_params := AssignmentMockListForUserParams{ctx, accountID, initiatorID, userID}
+
+	// Record call args
+	mmListForUser.ListForUserMock.mutex.Lock()
+	mmListForUser.ListForUserMock.callArgs = append(mmListForUser.ListForUserMock.callArgs, &mm_params)
+	mmListForUser.ListForUserMock.mutex.Unlock()
+
+	for _, e := range mmListForUser.ListForUserMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.ua1, e.results.err
+		}
+	}
+
+	if mmListForUser.ListForUserMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmListForUser.ListForUserMock.defaultExpectation.Counter, 1)
+		mm_want := mmListForUser.ListForUserMock.defaultExpectation.params
+		mm_want_ptrs := mmListForUser.ListForUserMock.defaultExpectation.paramPtrs
+
+		mm_got := AssignmentMockListForUserParams{ctx, accountID, initiatorID, userID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmListForUser.t.Errorf("AssignmentMock.ListForUser got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListForUser.ListForUserMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmListForUser.t.Errorf("AssignmentMock.ListForUser got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListForUser.ListForUserMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmListForUser.t.Errorf("AssignmentMock.ListForUser got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListForUser.ListForUserMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+			if mm_want_ptrs.userID != nil && !minimock.Equal(*mm_want_ptrs.userID, mm_got.userID) {
+				mmListForUser.t.Errorf("AssignmentMock.ListForUser got unexpected parameter userID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmListForUser.ListForUserMock.defaultExpectation.expectationOrigins.originUserID, *mm_want_ptrs.userID, mm_got.userID, minimock.Diff(*mm_want_ptrs.userID, mm_got.userID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmListForUser.t.Errorf("AssignmentMock.ListForUser got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmListForUser.ListForUserMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmListForUser.ListForUserMock.defaultExpectation.results
+		if mm_results == nil {
+			mmListForUser.t.Fatal("No results are set for the AssignmentMock.ListForUser")
+		}
+		return (*mm_results).ua1, (*mm_results).err
+	}
+	if mmListForUser.funcListForUser != nil {
+		return mmListForUser.funcListForUser(ctx, accountID, initiatorID, userID)
+	}
+	mmListForUser.t.Fatalf("Unexpected call to AssignmentMock.ListForUser. %v %v %v %v", ctx, accountID, initiatorID, userID)
+	return
+}
+
+// ListForUserAfterCounter returns a count of finished AssignmentMock.ListForUser invocations
+func (mmListForUser *AssignmentMock) ListForUserAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListForUser.afterListForUserCounter)
+}
+
+// ListForUserBeforeCounter returns a count of AssignmentMock.ListForUser invocations
+func (mmListForUser *AssignmentMock) ListForUserBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmListForUser.beforeListForUserCounter)
+}
+
+// Calls returns a list of arguments used in each call to AssignmentMock.ListForUser.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmListForUser *mAssignmentMockListForUser) Calls() []*AssignmentMockListForUserParams {
+	mmListForUser.mutex.RLock()
+
+	argCopy := make([]*AssignmentMockListForUserParams, len(mmListForUser.callArgs))
+	copy(argCopy, mmListForUser.callArgs)
+
+	mmListForUser.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockListForUserDone returns true if the count of the ListForUser invocations corresponds
+// the number of defined expectations
+func (m *AssignmentMock) MinimockListForUserDone() bool {
+	if m.ListForUserMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.ListForUserMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.ListForUserMock.invocationsDone()
+}
+
+// MinimockListForUserInspect logs each unmet expectation
+func (m *AssignmentMock) MinimockListForUserInspect() {
+	for _, e := range m.ListForUserMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AssignmentMock.ListForUser at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterListForUserCounter := mm_atomic.LoadUint64(&m.afterListForUserCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.ListForUserMock.defaultExpectation != nil && afterListForUserCounter < 1 {
+		if m.ListForUserMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AssignmentMock.ListForUser at\n%s", m.ListForUserMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AssignmentMock.ListForUser at\n%s with params: %#v", m.ListForUserMock.defaultExpectation.expectationOrigins.origin, *m.ListForUserMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcListForUser != nil && afterListForUserCounter < 1 {
+		m.t.Errorf("Expected call to AssignmentMock.ListForUser at\n%s", m.funcListForUserOrigin)
+	}
+
+	if !m.ListForUserMock.invocationsDone() && afterListForUserCounter > 0 {
+		m.t.Errorf("Expected %d calls to AssignmentMock.ListForUser at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.ListForUserMock.expectedInvocations), m.ListForUserMock.expectedInvocationsOrigin, afterListForUserCounter)
 	}
 }
 
@@ -4003,6 +4833,10 @@ func (m *AssignmentMock) MinimockFinish() {
 
 			m.MinimockGetInspect()
 
+			m.MinimockListInspect()
+
+			m.MinimockListForUserInspect()
+
 			m.MinimockListMineInspect()
 
 			m.MinimockOnGroupDeletedInspect()
@@ -4042,6 +4876,8 @@ func (m *AssignmentMock) minimockDone() bool {
 		m.MinimockCancelDone() &&
 		m.MinimockCreateDone() &&
 		m.MinimockGetDone() &&
+		m.MinimockListDone() &&
+		m.MinimockListForUserDone() &&
 		m.MinimockListMineDone() &&
 		m.MinimockOnGroupDeletedDone() &&
 		m.MinimockOnMemberRemovedDone() &&
