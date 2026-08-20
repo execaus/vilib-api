@@ -58,6 +58,8 @@ var (
 	GetAssignmentURL               = NewURLSupplier("accounts/%s/assignments/%s")
 	DeleteAssignmentParticipantURL = NewURLSupplier("accounts/%s/assignments/%s/participants/%s")
 	MyAssignmentsURL               = "me/assignments"
+	ListAssignmentsURL             = NewURLSupplier("accounts/%s/assignments")
+	ListUserAssignmentsURL         = NewURLSupplier("accounts/%s/users/%s/assignments")
 
 	ListUsersURL         = NewURLSupplier("accounts/%s/users")
 	ReactivateUserURL    = NewURLSupplier("accounts/%s/users/%s/reactivate")
@@ -268,6 +270,7 @@ func (h *Handler) GetRouter() *gin.Engine {
 // оставалась обозримой по разделам.
 func (h *Handler) registerAssignmentRoutes(v1 *gin.RouterGroup) {
 	v1.POST(CreateAssignmentURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateAssignment)
+	v1.GET(ListAssignmentsURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.ListAssignments)
 	v1.GET(
 		GetAssignmentURL.WithPathParams(pathKeyAccountID, pathKeyAssignmentID),
 		h.RequireAuthMiddleware,
@@ -289,4 +292,9 @@ func (h *Handler) registerAssignmentRoutes(v1 *gin.RouterGroup) {
 		h.DeleteAssignmentParticipant,
 	)
 	v1.GET(MyAssignmentsURL, h.RequireAuthMiddleware, h.GetMyAssignments)
+	v1.GET(
+		ListUserAssignmentsURL.WithPathParams(pathKeyAccountID, pathKeyUserID),
+		h.RequireAuthMiddleware,
+		h.ListUserAssignments,
+	)
 }
