@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/schema"
@@ -318,10 +320,57 @@ func assignmentScopeExpr(scope AssignmentScope) psql.Expression {
 	return psql.Or(schema.Assignments.Columns.GroupID.In(groupArgs...), createdByExpr)
 }
 
+// assignmentDueRangeExpr строит условие фильтра периода (due_from/due_to, В-53/В-61):
+// назначение попадает в период, если срок в границах [dueFrom; dueTo] (включительно) есть
+// либо у самого назначения (assignments.due_at, режим «дата»), либо у персонального срока
+// хотя бы одного незавершённого участника (assignment_participants.due_at, режим «N дней с
+// зачисления» — там срок персональный и в assignments.due_at не хранится). Отменённые
+// участия (status='cancelled') в проверку не берутся: отменённое участие не создаёт
+// обязанности пройти видео в периоде. Границы независимы — отсутствующая не ограничивает
+// соответствующую сторону диапазона; ровно так же, как раньше вела себя проверка по
+// assignments.due_at.
+func assignmentDueRangeExpr(dueFrom, dueTo *time.Time) psql.Expression {
+	var assignmentConds, participantConds []string
+	var args []any
+
+	if dueFrom != nil {
+		assignmentConds = append(assignmentConds, "assignments.due_at >= ?")
+		participantConds = append(participantConds, "ap.due_at >= ?")
+		args = append(args, *dueFrom)
+	}
+	if dueTo != nil {
+		assignmentConds = append(assignmentConds, "assignments.due_at <= ?")
+		participantConds = append(participantConds, "ap.due_at <= ?")
+		args = append(args, *dueTo)
+	}
+
+	// args собираются в порядке появления плейсхолдеров: сначала условие по assignments.due_at,
+	// затем — по ap.due_at внутри EXISTS, в обоих местах due_from раньше due_to.
+	fullArgs := make([]any, 0, len(args)*2) //nolint:mnd // удвоение: условие встречается в обеих ветках OR
+	fullArgs = append(fullArgs, args...)
+	fullArgs = append(fullArgs, args...)
+
+	// Внешние скобки обязательны: bob соединяет условия WHERE через AND без группировки,
+	// и без них дизъюнкция разорвала бы соседние условия (в том числе account_id) по
+	// приоритету операторов — назначения чужого аккаунта попали бы в выборку.
+	sqlExpr := fmt.Sprintf(
+		"((%s) OR EXISTS ("+
+			"SELECT 1 FROM assignment_participants ap "+
+			"WHERE ap.assignment_id = assignments.assignment_id "+
+			"AND ap.status <> 'cancelled' AND (%s)))",
+		strings.Join(assignmentConds, " AND "),
+		strings.Join(participantConds, " AND "),
+	)
+
+	return psql.Raw(sqlExpr, fullArgs...)
+}
+
 // SelectByFilter выбирает назначения аккаунта по области В-8 и дополнительным фильтрам списка/
 // отчёта (§4, §5 дизайна эпика Э3, AssignmentService.List/ListForUser). Область all=true не
 // сужает выборку никаким условием сверх account_id — назначение видно целиком по аккаунтному
-// праву.
+// праву. Фильтр периода due_from/due_to трактует срок по-разному в зависимости от режима
+// назначения (assignmentDueRangeExpr): «дата» — assignments.due_at, «N дней с зачисления» —
+// персональный срок участника.
 func (r *AssignmentRepository) SelectByFilter(ctx context.Context, f AssignmentFilter) ([]domain.Assignment, error) {
 	exec := r.provider.GetExecutor(ctx)
 
@@ -340,11 +389,8 @@ func (r *AssignmentRepository) SelectByFilter(ctx context.Context, f AssignmentF
 	if f.Status != nil {
 		mods = append(mods, sm.Where(schema.Assignments.Columns.Status.EQ(psql.Arg(string(*f.Status)))))
 	}
-	if f.DueFrom != nil {
-		mods = append(mods, sm.Where(schema.Assignments.Columns.DueAt.GTE(psql.Arg(*f.DueFrom))))
-	}
-	if f.DueTo != nil {
-		mods = append(mods, sm.Where(schema.Assignments.Columns.DueAt.LTE(psql.Arg(*f.DueTo))))
+	if f.DueFrom != nil || f.DueTo != nil {
+		mods = append(mods, sm.Where(assignmentDueRangeExpr(f.DueFrom, f.DueTo)))
 	}
 	if f.UserID != nil {
 		mods = append(mods, sm.Where(psql.Raw(
