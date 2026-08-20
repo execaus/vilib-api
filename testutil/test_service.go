@@ -30,6 +30,7 @@ func TestService(
 		VideoAsset:    mock_service.NewVideoAssetMock(mc),
 		Access:        mock_service.NewAccessMock(mc),
 		WatchProgress: mock_service.NewWatchProgressMock(mc),
+		Assignment:    mock_service.NewAssignmentMock(mc),
 		S3:            mock_service.NewS3Mock(mc),
 	}
 
@@ -47,6 +48,9 @@ func TestService(
 		WatchProgress:         mock_repository.NewWatchProgressMock(mc),
 		WatchSession:          mock_repository.NewWatchSessionMock(mc),
 		AssignmentParticipant: mock_repository.NewAssignmentParticipantMock(mc),
+		Assignment:            mock_repository.NewAssignmentMock(mc),
+		AssignmentTarget:      mock_repository.NewAssignmentTargetMock(mc),
+		AssignmentEvent:       mock_repository.NewAssignmentEventMock(mc),
 	}
 
 	setupMocks(s, r)

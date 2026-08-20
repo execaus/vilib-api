@@ -309,6 +309,21 @@ type RejectedTarget struct {
 	Reason  RejectedReason
 }
 
+// UpdateAssignment — патч изменения назначения (§4 дизайна эпика Э3,
+// AssignmentService.UpdateDue): nil-поле означает «не менять». Срок меняется целиком —
+// режим вместе со своим значением.
+type UpdateAssignment struct {
+	DueMode *AssignmentDueMode
+	DueAt   *time.Time
+	DueDays *int
+	Comment *string
+}
+
+// HasDue сообщает, что патч меняет срок назначения.
+func (u UpdateAssignment) HasDue() bool {
+	return u.DueMode != nil
+}
+
 // CreateAssignment — вход для создания назначения (§5 дизайна эпика Э3): DueAt/DueDays
 // заполняется по DueMode; Users/Groups — хотя бы один непустой список.
 type CreateAssignment struct {

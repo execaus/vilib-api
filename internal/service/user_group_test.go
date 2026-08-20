@@ -173,6 +173,7 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 			*service_mocks.AccessMock,
 			*service_mocks.GroupMemberMock,
 			*service_mocks.GroupRoleMock,
+			*service_mocks.AssignmentMock,
 		)
 		args    args
 		want    []domain.GroupMember
@@ -187,6 +188,7 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				access *service_mocks.AccessMock,
 				groupMember *service_mocks.GroupMemberMock,
 				groupRole *service_mocks.GroupRoleMock,
+				_ *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(
@@ -208,6 +210,7 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				access *service_mocks.AccessMock,
 				groupMember *service_mocks.GroupMemberMock,
 				groupRole *service_mocks.GroupRoleMock,
+				assignment *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(
@@ -224,6 +227,10 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				groupMember.CreateMock.
 					Expect(minimock.AnyContext, testGroupID, testDefaultGroupRoleID, testTargetUserID).
 					Return(wantMembers, nil)
+				// Каскад обязательного обучения: новички зачисляются в назначения группы (Э3-Т3).
+				assignment.OnMembersAddedMock.
+					Expect(minimock.AnyContext, testGroupID, []uuid.UUID{testTargetUserID}).
+					Return(nil)
 			},
 			args:    args{testAccountID, testInitiatorID, testGroupID, []uuid.UUID{testTargetUserID}},
 			want:    wantMembers,
@@ -238,6 +245,7 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				access *service_mocks.AccessMock,
 				groupMember *service_mocks.GroupMemberMock,
 				groupRole *service_mocks.GroupRoleMock,
+				_ *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(
@@ -263,6 +271,7 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				access *service_mocks.AccessMock,
 				groupMember *service_mocks.GroupMemberMock,
 				groupRole *service_mocks.GroupRoleMock,
+				assignment *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(
@@ -279,6 +288,10 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 				groupMember.CreateMock.
 					Expect(minimock.AnyContext, testGroupID, testDefaultGroupRoleID, testTargetUserID).
 					Return(wantMembers, nil)
+				// Каскад обязательного обучения: новички зачисляются в назначения группы (Э3-Т3).
+				assignment.OnMembersAddedMock.
+					Expect(minimock.AnyContext, testGroupID, []uuid.UUID{testTargetUserID}).
+					Return(nil)
 			},
 			args:    args{testAccountID, testInitiatorID, testGroupID, []uuid.UUID{testTargetUserID}},
 			want:    wantMembers,
@@ -300,6 +313,7 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 						mockServices.Access,
 						mockServices.GroupMember,
 						mockServices.GroupRole,
+						mockServices.Assignment,
 					)
 				},
 				func(s *service.Service, r *repository.Repository) {
@@ -366,7 +380,10 @@ func TestService_UserGroup_Delete(t *testing.T) {
 		repo := repository_mocks.NewUserGroupMock(mc)
 		repo.DeleteCascadeMock.Expect(minimock.AnyContext, testGroupID).Return(nil, repoErr)
 
-		svc := &service.Service{Access: access}
+		assignment := service_mocks.NewAssignmentMock(mc)
+		assignment.OnGroupDeletedMock.Expect(minimock.AnyContext, testGroupID).Return(nil)
+
+		svc := &service.Service{Access: access, Assignment: assignment}
 		groupSvc := service.NewUserGroupService(repo, svc)
 
 		err := groupSvc.Delete(t.Context(), testInitiatorID, testAccountID, testGroupID)
@@ -401,7 +418,10 @@ func TestService_UserGroup_Delete(t *testing.T) {
 		})
 
 		videoRepo := repository_mocks.NewVideoMock(mc)
-		svc := &service.Service{Access: access}
+		assignment := service_mocks.NewAssignmentMock(mc)
+		assignment.OnGroupDeletedMock.Expect(minimock.AnyContext, testGroupID).Return(nil)
+
+		svc := &service.Service{Access: access, Assignment: assignment}
 		svc.Video = service.NewVideoService(s3Mock, videoRepo, svc, service.VideoServiceConfig{Bucket: testBucket})
 		svc.UserGroup = service.NewUserGroupService(userGroupRepo, svc)
 

@@ -119,6 +119,17 @@ func (s *UserGroupService) AddMembers(
 		return nil, err
 	}
 
+	// Каскад обязательного обучения: новые участники группы зачисляются в её действующие
+	// назначения (§4 «Каскады» дизайна эпика Э3, Э3-Т3) — в той же транзакции саги.
+	addedIDs := make([]uuid.UUID, len(members))
+	for i, member := range members {
+		addedIDs[i] = member.UserID
+	}
+	if err = s.srv.Assignment.OnMembersAdded(ctx, groupID, addedIDs); err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
 	return members, nil
 }
 
@@ -194,6 +205,14 @@ func (s *UserGroupService) Delete(
 		initiatorID,
 		domain.AccountPermissionManageGroups,
 	); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	// Каскад обязательного обучения: назначения видео группы отменяются до удаления самой
+	// группы (§4 «Каскады» дизайна эпика Э3, Э3-Т31) — иначе строки назначений уже потеряют
+	// связь с группой (FK ON DELETE SET NULL).
+	if err := s.srv.Assignment.OnGroupDeleted(ctx, groupID); err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}

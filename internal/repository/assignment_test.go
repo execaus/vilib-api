@@ -192,3 +192,173 @@ func TestRepository_AssignmentSelectByIDs_EmptyInputNoQuery(t *testing.T) {
 		require.Empty(t, got)
 	})
 }
+
+func TestRepository_AssignmentUpdateDue_SwitchesModeAndClearsOppositeField(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, _ := newTestAssignment(t, r, f)
+		require.NotNil(t, assignment.DueAt, "фикстура создаётся в режиме date")
+
+		dueDays := 14
+
+		updated, err := r.Assignment.UpdateDue(
+			t.Context(), assignment.ID, domain.AssignmentDueModeDays, nil, &dueDays,
+		)
+
+		require.NoError(t, err)
+		require.Equal(t, domain.AssignmentDueModeDays, updated.DueMode)
+		require.Nil(t, updated.DueAt, "поле противоположного режима обнуляется")
+		require.NotNil(t, updated.DueDays)
+		require.Equal(t, dueDays, *updated.DueDays)
+	})
+}
+
+func TestRepository_AssignmentUpdateComment_SetsAndClears(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, _ := newTestAssignment(t, r, f)
+
+		withComment, err := r.Assignment.UpdateComment(t.Context(), assignment.ID, "Пройти до конца месяца")
+		require.NoError(t, err)
+		require.Equal(t, "Пройти до конца месяца", withComment.Comment)
+
+		cleared, err := r.Assignment.UpdateComment(t.Context(), assignment.ID, "")
+		require.NoError(t, err)
+		require.Empty(t, cleared.Comment)
+	})
+}
+
+func TestRepository_AssignmentCancel_SecondCallDoesNotUpdate(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+		cancelledBy := fixture.Video.Author
+		now := time.Now().UTC().Truncate(time.Millisecond)
+
+		cancelled, err := r.Assignment.Cancel(
+			t.Context(), assignment.ID, &cancelledBy, domain.AssignmentCancelReasonManual, now,
+		)
+		require.NoError(t, err)
+		require.True(t, cancelled)
+
+		repeated, err := r.Assignment.Cancel(
+			t.Context(), assignment.ID, &cancelledBy, domain.AssignmentCancelReasonManual, now,
+		)
+		require.NoError(t, err)
+		require.False(t, repeated, "повторная отмена не обновляет строку")
+
+		stored, err := r.Assignment.SelectByID(t.Context(), assignment.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.AssignmentStatusCancelled, stored.Status)
+		require.NotNil(t, stored.CancelReason)
+		require.Equal(t, domain.AssignmentCancelReasonManual, *stored.CancelReason)
+		require.NotNil(t, stored.CancelledBy)
+		require.Equal(t, cancelledBy, *stored.CancelledBy)
+	})
+}
+
+func TestRepository_AssignmentCancel_SystemCancelWithoutActor(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, _ := newTestAssignment(t, r, f)
+
+		cancelled, err := r.Assignment.Cancel(
+			t.Context(), assignment.ID, nil, domain.AssignmentCancelReasonVideoDeleted,
+			time.Now().UTC().Truncate(time.Millisecond),
+		)
+
+		require.NoError(t, err)
+		require.True(t, cancelled)
+
+		stored, err := r.Assignment.SelectByID(t.Context(), assignment.ID)
+		require.NoError(t, err)
+		require.Nil(t, stored.CancelledBy, "системная отмена выполняется без инициатора")
+	})
+}
+
+func TestRepository_AssignmentSelectActiveByTargetGroup_SkipsCancelledAndForeignTargets(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+		groupID := fixture.Video.GroupID
+
+		cancelled, _ := newTestAssignment(t, r, f)
+		foreignGroupID := uuid.New()
+
+		_, err := r.AssignmentTarget.InsertBatch(t.Context(), []domain.AssignmentTarget{
+			{AssignmentID: assignment.ID, TargetType: domain.AssignmentTargetTypeGroup, TargetID: groupID},
+			{AssignmentID: assignment.ID, TargetType: domain.AssignmentTargetTypeUser, TargetID: uuid.New()},
+			{AssignmentID: cancelled.ID, TargetType: domain.AssignmentTargetTypeGroup, TargetID: groupID},
+			{AssignmentID: cancelled.ID, TargetType: domain.AssignmentTargetTypeGroup, TargetID: foreignGroupID},
+		})
+		require.NoError(t, err)
+
+		_, err = r.Assignment.Cancel(
+			t.Context(), cancelled.ID, nil, domain.AssignmentCancelReasonManual,
+			time.Now().UTC().Truncate(time.Millisecond),
+		)
+		require.NoError(t, err)
+
+		active, err := r.Assignment.SelectActiveByTargetGroup(t.Context(), groupID)
+
+		require.NoError(t, err)
+		require.Len(t, active, 1)
+		require.Equal(t, assignment.ID, active[0].ID)
+	})
+}
+
+func TestRepository_AssignmentSelectActiveByVideoIDs_ReturnsOnlyActive(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+
+		cancelled, err := r.Assignment.Insert(
+			t.Context(),
+			fixture.AccountID, fixture.Video.ID, fixture.Video.Name,
+			fixture.Video.GroupID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDays, nil, ptrInt(5), "",
+		)
+		require.NoError(t, err)
+
+		_, err = r.Assignment.Cancel(
+			t.Context(), cancelled.ID, nil, domain.AssignmentCancelReasonVideoDeleted,
+			time.Now().UTC().Truncate(time.Millisecond),
+		)
+		require.NoError(t, err)
+
+		active, err := r.Assignment.SelectActiveByVideoIDs(t.Context(), []uuid.UUID{fixture.Video.ID})
+
+		require.NoError(t, err)
+		require.Len(t, active, 1)
+		require.Equal(t, assignment.ID, active[0].ID)
+
+		empty, err := r.Assignment.SelectActiveByVideoIDs(t.Context(), nil)
+		require.NoError(t, err)
+		require.Empty(t, empty)
+	})
+}
+
+func TestRepository_AssignmentSelectActiveByGroupID_ReturnsAssignmentsOfGroupVideos(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+		other, _ := newTestAssignment(t, r, f)
+
+		found, err := r.Assignment.SelectActiveByGroupID(t.Context(), fixture.Video.GroupID)
+
+		require.NoError(t, err)
+		require.Len(t, found, 1)
+		require.Equal(t, assignment.ID, found[0].ID)
+		require.NotEqual(t, other.ID, found[0].ID)
+	})
+}
+
+// ptrInt — указатель на литерал int для необязательных полей репозитория.
+func ptrInt(v int) *int { return &v }

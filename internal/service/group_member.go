@@ -80,6 +80,13 @@ func (s *GroupMemberService) RemoveMember(
 		return err
 	}
 
+	// Каскад обязательного обучения: участия, полученные через эту группу, отменяются
+	// (§4 «Каскады» дизайна эпика Э3, Э3-Т30); личные назначения не затрагиваются.
+	if err := s.srv.Assignment.OnMemberRemoved(ctx, groupID, targetID); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
 	return nil
 }
 

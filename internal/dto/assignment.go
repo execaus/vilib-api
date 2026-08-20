@@ -259,6 +259,31 @@ type CreateAssignmentResponse struct {
 	Rejected   []RejectedTarget  `json:"rejected"`
 }
 
+// UpdateAssignmentRequest — тело запроса изменения назначения (§5 контракта эпика Э3):
+// nil-поле не меняется. Срок меняется целиком — режим вместе со своим значением.
+type UpdateAssignmentRequest struct {
+	DueMode *string    `json:"due_mode" binding:"omitempty,oneof=date days"`
+	DueAt   *time.Time `json:"due_at"`
+	DueDays *int       `json:"due_days"`
+	Comment *string    `json:"comment"  binding:"omitempty,max=500"`
+}
+
+// ToDomain конвертирует запрос изменения назначения в domain.UpdateAssignment.
+func (r *UpdateAssignmentRequest) ToDomain() domain.UpdateAssignment {
+	patch := domain.UpdateAssignment{DueAt: r.DueAt, DueDays: r.DueDays, Comment: r.Comment}
+	if r.DueMode != nil {
+		mode := domain.AssignmentDueMode(*r.DueMode)
+		patch.DueMode = &mode
+	}
+
+	return patch
+}
+
+// UpdateAssignmentResponse — ответ на изменение назначения: обновлённая карточка.
+type UpdateAssignmentResponse struct {
+	Assignment AssignmentDetails `json:"assignment"`
+}
+
 // GetAssignmentResponse — ответ на получение карточки назначения (§5 контракта эпика Э3).
 type GetAssignmentResponse struct {
 	Assignment AssignmentDetails `json:"assignment"`

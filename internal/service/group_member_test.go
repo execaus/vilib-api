@@ -104,6 +104,7 @@ func TestService_GroupMember_RemoveMember(t *testing.T) {
 		setupMocks func(
 			*service_mocks.AccessMock,
 			*repository_mocks.GroupMemberMock,
+			*service_mocks.AssignmentMock,
 		)
 		args    args
 		wantErr error
@@ -113,6 +114,7 @@ func TestService_GroupMember_RemoveMember(t *testing.T) {
 			setupMocks: func(
 				access *service_mocks.AccessMock,
 				repo *repository_mocks.GroupMemberMock,
+				assignment *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(
@@ -121,6 +123,10 @@ func TestService_GroupMember_RemoveMember(t *testing.T) {
 						domain.AccountPermissionManageGroups, domain.GroupPermissionManageMembers,
 					).Return(nil)
 				repo.DeleteMock.Expect(minimock.AnyContext, testGroupID, testTargetID).
+					Return(nil)
+				// Каскад обязательного обучения: участия через эту группу отменяются (Э3-Т30).
+				assignment.OnMemberRemovedMock.
+					Expect(minimock.AnyContext, testGroupID, testTargetID).
 					Return(nil)
 			},
 			args:    args{testAccountID, testInitiatorID, testGroupID, testTargetID},
@@ -131,6 +137,7 @@ func TestService_GroupMember_RemoveMember(t *testing.T) {
 			setupMocks: func(
 				access *service_mocks.AccessMock,
 				repo *repository_mocks.GroupMemberMock,
+				assignment *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(
@@ -147,6 +154,7 @@ func TestService_GroupMember_RemoveMember(t *testing.T) {
 			setupMocks: func(
 				access *service_mocks.AccessMock,
 				repo *repository_mocks.GroupMemberMock,
+				assignment *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(
@@ -167,7 +175,7 @@ func TestService_GroupMember_RemoveMember(t *testing.T) {
 			testutil.TestService(
 				t,
 				func(mockServices *testutil.ServiceMock, mockRepos *testutil.RepositoryMock) {
-					tt.setupMocks(mockServices.Access, mockRepos.GroupMember)
+					tt.setupMocks(mockServices.Access, mockRepos.GroupMember, mockServices.Assignment)
 				},
 				func(s *service.Service, r *repository.Repository) {
 					srv := service.NewGroupMemberService(r.GroupMember, s)

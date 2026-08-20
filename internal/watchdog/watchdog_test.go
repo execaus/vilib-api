@@ -41,6 +41,15 @@ func newTestRunner(t *testing.T, svc *service.Service) saga.Runner[*service.Serv
 	return saga.NewSagaRunner(svc, repo)
 }
 
+// newCleanupMock — мок сервиса прогресса просмотра для тика watchdog'а: чистка сессий
+// (решение О-2 эпика Э3) в тестах ничего не удаляет и не мешает проверке основного прохода.
+func newCleanupMock(mc *minimock.Controller) *service_mocks.WatchProgressMock {
+	watchProgress := service_mocks.NewWatchProgressMock(mc)
+	watchProgress.CleanupStaleSessionsMock.Return(0, nil)
+
+	return watchProgress
+}
+
 // runUntil запускает wd.Run в фоне и блокируется до срабатывания done либо таймаута, после
 // чего отменяет контекст и дожидается завершения Run.
 func runUntil(t *testing.T, wd *watchdog.Watchdog, done <-chan struct{}) {
@@ -88,7 +97,7 @@ func TestWatchdog_Run_TicksImmediatelyAtStart(t *testing.T) {
 		return domain.TimedOutReport{}, nil
 	})
 
-	svc := &service.Service{Video: videoMock}
+	svc := &service.Service{Video: videoMock, WatchProgress: newCleanupMock(mc)}
 	runner := newTestRunner(t, svc)
 
 	// Интервал заведомо больше времени ожидания в тесте — если бы первый тик ждал тикер,
@@ -124,7 +133,7 @@ func TestWatchdog_Run_ContinuesAfterTickError(t *testing.T) {
 		return domain.TimedOutReport{}, nil
 	})
 
-	svc := &service.Service{Video: videoMock}
+	svc := &service.Service{Video: videoMock, WatchProgress: newCleanupMock(mc)}
 	runner := newTestRunner(t, svc)
 
 	wd := watchdog.New(runner, config.VideoConfig{WatchdogInterval: 5 * time.Millisecond}, zap.NewNop())
@@ -148,7 +157,7 @@ func TestWatchdog_Run_StopsOnContextCancellation(t *testing.T) {
 		return domain.TimedOutReport{}, nil
 	})
 
-	svc := &service.Service{Video: videoMock}
+	svc := &service.Service{Video: videoMock, WatchProgress: newCleanupMock(mc)}
 	runner := newTestRunner(t, svc)
 
 	wd := watchdog.New(runner, config.VideoConfig{WatchdogInterval: time.Hour}, zap.NewNop())

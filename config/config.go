@@ -118,6 +118,10 @@ type VideoConfig struct {
 	// WatchHeartbeatInterval — ожидаемый период отправки heartbeat'ов плеером; используется как
 	// базовый интервал для расчёта допустимой длины первого интервала сессии (§3 дизайна эпика Э3).
 	WatchHeartbeatInterval time.Duration `mapstructure:"watch_heartbeat_interval"`
+	// WatchSessionRetention — срок хранения сессий просмотра: тик watchdog'а удаляет сессии,
+	// не обновлявшиеся дольше этого срока (решение О-2 эпика Э3). Сессии нужны только для
+	// идемпотентности и антиперемотки живого просмотра, история хранится в watch_progress.
+	WatchSessionRetention time.Duration `mapstructure:"watch_session_retention"`
 }
 
 // LoadConfig собирает конфигурацию из файла (путь — CONFIG_PATH, по умолчанию config/config.yaml)
@@ -208,6 +212,7 @@ func (c Config) Validate() error {
 		"video.hls_url_ttl":              c.Video.HLSURLTTL,
 		"video.hls_segment_ttl":          c.Video.HLSSegmentTTL,
 		"video.watch_heartbeat_interval": c.Video.WatchHeartbeatInterval,
+		"video.watch_session_retention":  c.Video.WatchSessionRetention,
 	}
 	for key, value := range positiveDurations {
 		if value <= 0 {

@@ -55,6 +55,7 @@ const (
 	defaultVideoHLSSegmentTTL                  = time.Hour
 	defaultVideoWatchCompletionThreshold       = 0.95
 	defaultVideoWatchHeartbeatInterval         = 10 * time.Second
+	defaultVideoWatchSessionRetention          = 30 * 24 * time.Hour
 )
 
 // defaultVideoProfiles — дефолтный набор профилей качества видео.
@@ -117,4 +118,5 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("video.hls_segment_ttl", defaultVideoHLSSegmentTTL)
 	v.SetDefault("video.watch_completion_threshold", defaultVideoWatchCompletionThreshold)
 	v.SetDefault("video.watch_heartbeat_interval", defaultVideoWatchHeartbeatInterval)
+	v.SetDefault("video.watch_session_retention", defaultVideoWatchSessionRetention)
 }

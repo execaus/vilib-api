@@ -351,6 +351,9 @@ type WatchProgress interface {
 	// того, как стала известна длительность видео (§3, «Э3-Т6») — вызывается из
 	// VideoService.ApplyProcessingCompleted при переходе видео в ready.
 	OnDurationKnown(ctx context.Context, videoID uuid.UUID, durationMs int64) error
+	// CleanupStaleSessions удаляет сессии просмотра старше срока хранения (решение О-2 эпика
+	// Э3) — вызывается тиком watchdog'а. Возвращает число удалённых строк.
+	CleanupStaleSessions(ctx context.Context, now time.Time) (int64, error)
 }
 
 // Assignment реализует сервис назначений обязательного обучения — создание, чтение карточки
@@ -367,6 +370,29 @@ type Assignment interface {
 	Get(ctx context.Context, accountID, initiatorID, id uuid.UUID) (domain.AssignmentDetails, error)
 	// ListMine собирает «мои назначения» пользователя во всех статусах (§4 дизайна эпика Э3).
 	ListMine(ctx context.Context, userID uuid.UUID) ([]domain.MyAssignment, error)
+	// UpdateDue меняет срок и/или комментарий назначения с пересчётом персональных сроков
+	// незавершённых участников. Отменённое назначение не редактируется.
+	UpdateDue(
+		ctx context.Context, accountID, initiatorID, id uuid.UUID, patch domain.UpdateAssignment,
+	) (domain.AssignmentDetails, error)
+	// Cancel отменяет назначение целиком вместе с незавершёнными участиями. Повторная отмена
+	// — ErrAssignmentCancelled.
+	Cancel(ctx context.Context, accountID, initiatorID, id uuid.UUID) error
+	// RemoveParticipant снимает участника с назначения; завершившего обучение снять нельзя
+	// (ErrParticipantCompleted).
+	RemoveParticipant(ctx context.Context, accountID, initiatorID, id, userID uuid.UUID) error
+	// OnMembersAdded — системный каскад: зачисляет новых участников группы в действующие
+	// назначения этой группы (Э3-Т3, правило срока В-5).
+	OnMembersAdded(ctx context.Context, groupID uuid.UUID, userIDs []uuid.UUID) error
+	// OnMemberRemoved — системный каскад: отменяет участия исключённого из группы сотрудника,
+	// полученные через эту группу (Э3-Т30).
+	OnMemberRemoved(ctx context.Context, groupID, userID uuid.UUID) error
+	// OnVideoDeleted — системный каскад: отменяет действующие назначения удаляемого видео
+	// (Э3-Т28).
+	OnVideoDeleted(ctx context.Context, videoID uuid.UUID) error
+	// OnGroupDeleted — системный каскад: отменяет действующие назначения видео удаляемой
+	// группы (Э3-Т31).
+	OnGroupDeleted(ctx context.Context, groupID uuid.UUID) error
 }
 
 // Profile агрегирует контекст текущего пользователя для ручки GET /me (§2.3 дизайна эпика Э2).

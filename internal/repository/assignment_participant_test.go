@@ -303,3 +303,285 @@ func TestRepository_AssignmentParticipantCompleteByUserVideo_SetsCompletedFields
 		require.Equal(t, sessionID, *got[0].CompletedSessionID)
 	})
 }
+
+// insertTestParticipant создаёт персональную запись участника назначения в заданном статусе —
+// исходное состояние для тестов пересчёта срока и отмены.
+func insertTestParticipant(
+	t *testing.T, r *repository.Repository,
+	assignmentID, userID uuid.UUID,
+	status domain.AssignmentParticipantStatus,
+	source domain.AssignmentParticipantSource, sourceGroupID *uuid.UUID,
+	enrolledAt, dueAt time.Time,
+) {
+	t.Helper()
+
+	inserted, err := r.AssignmentParticipant.InsertBatch(t.Context(), []domain.AssignmentParticipant{
+		{
+			AssignmentID:  assignmentID,
+			UserID:        userID,
+			Status:        status,
+			Source:        source,
+			SourceGroupID: sourceGroupID,
+			EnrolledAt:    enrolledAt,
+			DueAt:         dueAt,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, inserted, 1)
+}
+
+// participantsByUser раскладывает участников назначения по идентификатору пользователя.
+func participantsByUser(
+	t *testing.T, r *repository.Repository, assignmentID uuid.UUID,
+) map[uuid.UUID]domain.AssignmentParticipant {
+	t.Helper()
+
+	stored, err := r.AssignmentParticipant.SelectByAssignmentIDs(t.Context(), []uuid.UUID{assignmentID})
+	require.NoError(t, err)
+
+	byUser := make(map[uuid.UUID]domain.AssignmentParticipant, len(stored))
+	for _, p := range stored {
+		byUser[p.UserID] = p
+	}
+
+	return byUser
+}
+
+func TestRepository_AssignmentParticipantSelectByAssignmentIDAndUserID_NotFound(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, _ := newTestAssignment(t, r, f)
+
+		_, err := r.AssignmentParticipant.SelectByAssignmentIDAndUserID(t.Context(), assignment.ID, uuid.New())
+
+		require.ErrorIs(t, err, repository.ErrNotFound)
+	})
+}
+
+func TestRepository_AssignmentParticipantUpdateDueByAssignment_DateKeepsCompleted(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		oldDueAt := now.Add(24 * time.Hour)
+
+		activeUser := newTestUser(t, r, f, fixture.AccountRoleID)
+		completedUser := newTestUser(t, r, f, fixture.AccountRoleID)
+		insertTestParticipant(
+			t, r, assignment.ID, activeUser.ID, domain.AssignmentParticipantStatusAssigned,
+			domain.AssignmentParticipantSourcePersonal, nil, now, oldDueAt,
+		)
+		insertTestParticipant(
+			t, r, assignment.ID, completedUser.ID, domain.AssignmentParticipantStatusCompleted,
+			domain.AssignmentParticipantSourcePersonal, nil, now, oldDueAt,
+		)
+
+		newDueAt := now.Add(10 * 24 * time.Hour)
+
+		updated, err := r.AssignmentParticipant.UpdateDueByAssignment(
+			t.Context(), assignment.ID, domain.AssignmentDueModeDate, &newDueAt, nil,
+		)
+
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{activeUser.ID}, updated)
+
+		byUser := participantsByUser(t, r, assignment.ID)
+		require.WithinDuration(t, newDueAt, byUser[activeUser.ID].DueAt, time.Second)
+		require.WithinDuration(t, oldDueAt, byUser[completedUser.ID].DueAt, time.Second,
+			"срок завершённого участника не пересчитывается")
+	})
+}
+
+func TestRepository_AssignmentParticipantUpdateDueByAssignment_DaysCountsFromEnrolledAt(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		enrolledAt := now.Add(-48 * time.Hour)
+
+		user := newTestUser(t, r, f, fixture.AccountRoleID)
+		insertTestParticipant(
+			t, r, assignment.ID, user.ID, domain.AssignmentParticipantStatusInProgress,
+			domain.AssignmentParticipantSourceGroup, &fixture.Video.GroupID, enrolledAt, now,
+		)
+
+		dueDays := 5
+
+		updated, err := r.AssignmentParticipant.UpdateDueByAssignment(
+			t.Context(), assignment.ID, domain.AssignmentDueModeDays, nil, &dueDays,
+		)
+
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{user.ID}, updated)
+
+		byUser := participantsByUser(t, r, assignment.ID)
+		require.WithinDuration(
+			t, enrolledAt.Add(time.Duration(dueDays)*24*time.Hour), byUser[user.ID].DueAt, time.Second,
+		)
+	})
+}
+
+func TestRepository_AssignmentParticipantUpdateDueByAssignment_RejectsModeWithoutValue(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, _ := newTestAssignment(t, r, f)
+
+		_, err := r.AssignmentParticipant.UpdateDueByAssignment(
+			t.Context(), assignment.ID, domain.AssignmentDueModeDate, nil, nil,
+		)
+
+		require.ErrorIs(t, err, repository.ErrInvalidDueMode)
+	})
+}
+
+func TestRepository_AssignmentParticipantCancelByAssignment_CancelsOnlyUnfinished(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+		now := time.Now().UTC().Truncate(time.Millisecond)
+
+		assignedUser := newTestUser(t, r, f, fixture.AccountRoleID)
+		completedUser := newTestUser(t, r, f, fixture.AccountRoleID)
+		insertTestParticipant(
+			t, r, assignment.ID, assignedUser.ID, domain.AssignmentParticipantStatusAssigned,
+			domain.AssignmentParticipantSourcePersonal, nil, now, now.Add(24*time.Hour),
+		)
+		insertTestParticipant(
+			t, r, assignment.ID, completedUser.ID, domain.AssignmentParticipantStatusCompleted,
+			domain.AssignmentParticipantSourcePersonal, nil, now, now.Add(24*time.Hour),
+		)
+
+		cancelled, err := r.AssignmentParticipant.CancelByAssignment(
+			t.Context(), assignment.ID, domain.AssignmentParticipantCancelReasonAssignmentCancelled, now,
+		)
+
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{assignedUser.ID}, cancelled)
+
+		byUser := participantsByUser(t, r, assignment.ID)
+		require.Equal(t, domain.AssignmentParticipantStatusCancelled, byUser[assignedUser.ID].Status)
+		require.NotNil(t, byUser[assignedUser.ID].CancelReason)
+		require.Equal(
+			t, domain.AssignmentParticipantCancelReasonAssignmentCancelled,
+			*byUser[assignedUser.ID].CancelReason,
+		)
+		require.Equal(t, domain.AssignmentParticipantStatusCompleted, byUser[completedUser.ID].Status)
+	})
+}
+
+func TestRepository_AssignmentParticipantCancelOne_SkipsCompleted(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+		now := time.Now().UTC().Truncate(time.Millisecond)
+
+		activeUser := newTestUser(t, r, f, fixture.AccountRoleID)
+		completedUser := newTestUser(t, r, f, fixture.AccountRoleID)
+		insertTestParticipant(
+			t, r, assignment.ID, activeUser.ID, domain.AssignmentParticipantStatusInProgress,
+			domain.AssignmentParticipantSourcePersonal, nil, now, now.Add(24*time.Hour),
+		)
+		insertTestParticipant(
+			t, r, assignment.ID, completedUser.ID, domain.AssignmentParticipantStatusCompleted,
+			domain.AssignmentParticipantSourcePersonal, nil, now, now.Add(24*time.Hour),
+		)
+
+		cancelled, err := r.AssignmentParticipant.CancelOne(
+			t.Context(), assignment.ID, activeUser.ID,
+			domain.AssignmentParticipantCancelReasonRemovedByManager, now,
+		)
+		require.NoError(t, err)
+		require.True(t, cancelled)
+
+		skipped, err := r.AssignmentParticipant.CancelOne(
+			t.Context(), assignment.ID, completedUser.ID,
+			domain.AssignmentParticipantCancelReasonRemovedByManager, now,
+		)
+		require.NoError(t, err)
+		require.False(t, skipped, "завершённый участник не отменяется")
+
+		byUser := participantsByUser(t, r, assignment.ID)
+		require.Equal(t, domain.AssignmentParticipantStatusCancelled, byUser[activeUser.ID].Status)
+		require.Equal(t, domain.AssignmentParticipantStatusCompleted, byUser[completedUser.ID].Status)
+	})
+}
+
+func TestRepository_AssignmentParticipantCancelBySourceGroupAndUser_KeepsPersonal(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		groupAssignment, fixture := newTestAssignment(t, r, f)
+		groupID := fixture.Video.GroupID
+		now := time.Now().UTC().Truncate(time.Millisecond)
+
+		personalAssignment, err := r.Assignment.Insert(
+			t.Context(),
+			fixture.AccountID, fixture.Video.ID, fixture.Video.Name,
+			groupID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDays, nil, ptrInt(3), "",
+		)
+		require.NoError(t, err)
+
+		user := newTestUser(t, r, f, fixture.AccountRoleID)
+		insertTestParticipant(
+			t, r, groupAssignment.ID, user.ID, domain.AssignmentParticipantStatusAssigned,
+			domain.AssignmentParticipantSourceGroup, &groupID, now, now.Add(24*time.Hour),
+		)
+		insertTestParticipant(
+			t, r, personalAssignment.ID, user.ID, domain.AssignmentParticipantStatusAssigned,
+			domain.AssignmentParticipantSourcePersonal, nil, now, now.Add(24*time.Hour),
+		)
+
+		cancelled, err := r.AssignmentParticipant.CancelBySourceGroupAndUser(
+			t.Context(), groupID, user.ID, domain.AssignmentParticipantCancelReasonLeftGroup, now,
+		)
+
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{groupAssignment.ID}, cancelled)
+
+		byGroupAssignment := participantsByUser(t, r, groupAssignment.ID)
+		require.Equal(t, domain.AssignmentParticipantStatusCancelled, byGroupAssignment[user.ID].Status)
+		require.NotNil(t, byGroupAssignment[user.ID].CancelReason)
+		require.Equal(
+			t, domain.AssignmentParticipantCancelReasonLeftGroup, *byGroupAssignment[user.ID].CancelReason,
+		)
+
+		byPersonalAssignment := participantsByUser(t, r, personalAssignment.ID)
+		require.Equal(t, domain.AssignmentParticipantStatusAssigned, byPersonalAssignment[user.ID].Status,
+			"личное назначение исключением из группы не затрагивается")
+	})
+}
+
+func TestRepository_AssignmentParticipantCancelBySourceGroupAndUser_SkipsCancelledAssignment(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+		groupID := fixture.Video.GroupID
+		now := time.Now().UTC().Truncate(time.Millisecond)
+
+		user := newTestUser(t, r, f, fixture.AccountRoleID)
+		insertTestParticipant(
+			t, r, assignment.ID, user.ID, domain.AssignmentParticipantStatusAssigned,
+			domain.AssignmentParticipantSourceGroup, &groupID, now, now.Add(24*time.Hour),
+		)
+
+		_, err := r.Assignment.Cancel(
+			t.Context(), assignment.ID, nil, domain.AssignmentCancelReasonManual, now,
+		)
+		require.NoError(t, err)
+
+		cancelled, err := r.AssignmentParticipant.CancelBySourceGroupAndUser(
+			t.Context(), groupID, user.ID, domain.AssignmentParticipantCancelReasonLeftGroup, now,
+		)
+
+		require.NoError(t, err)
+		require.Empty(t, cancelled, "участники отменённого назначения не трогаются")
+	})
+}

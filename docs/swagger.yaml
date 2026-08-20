@@ -677,6 +677,26 @@ definitions:
       account_role:
         $ref: '#/definitions/dto.AccountRole'
     type: object
+  dto.UpdateAssignmentRequest:
+    properties:
+      comment:
+        maxLength: 500
+        type: string
+      due_at:
+        type: string
+      due_days:
+        type: integer
+      due_mode:
+        enum:
+        - date
+        - days
+        type: string
+    type: object
+  dto.UpdateAssignmentResponse:
+    properties:
+      assignment:
+        $ref: '#/definitions/dto.AssignmentDetails'
+    type: object
   dto.UpdateGroupMemberRequest:
     properties:
       role_id:
@@ -981,6 +1001,52 @@ paths:
       tags:
       - assignments
   /api/v1/accounts/{accountId}/assignments/{assignmentId}:
+    delete:
+      description: |-
+        Отменяет назначение целиком (§4 дизайна эпика Э3): незавершённые участники
+        переводятся в cancelled, завершённые остаются с подтверждённым просмотром.
+        Повторная отмена — 409 conflict.assignment_cancelled.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID назначения
+        in: path
+        name: assignmentId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Отмена назначения обязательного обучения
+      tags:
+      - assignments
     get:
       description: |-
         Возвращает назначение целиком: цели, счётчики, участников с покрытием и
@@ -1024,6 +1090,114 @@ paths:
       security:
       - BearerAuth: []
       summary: Карточка назначения обязательного обучения
+      tags:
+      - assignments
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Меняет срок и/или комментарий назначения (§4 дизайна эпика Э3): новый срок
+        проверяется как при создании и пересчитывается всем незавершённым участникам,
+        завершённые записи не затрагиваются. Отменённое назначение не редактируется.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID назначения
+        in: path
+        name: assignmentId
+        required: true
+        type: string
+      - description: Тело запроса
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateAssignmentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.UpdateAssignmentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Изменение назначения обязательного обучения
+      tags:
+      - assignments
+  /api/v1/accounts/{accountId}/assignments/{assignmentId}/participants/{userId}:
+    delete:
+      description: |-
+        Снимает одного сотрудника с назначения (§4 дизайна эпика Э3): участие
+        переводится в cancelled с причиной removed_by_manager. Уже подтвердившего
+        просмотр снять нельзя — 409 conflict.participant_completed.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID назначения
+        in: path
+        name: assignmentId
+        required: true
+        type: string
+      - description: ID участника
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Снятие участника с назначения
       tags:
       - assignments
   /api/v1/accounts/{accountId}/roles:
