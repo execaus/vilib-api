@@ -199,6 +199,40 @@ func (r *VideoRepository) UpdateTimedOut(
 	return ids, nil
 }
 
+// SelectByIDs батчем выбирает видео по списку идентификаторов (§4 дизайна эпика Э3,
+// AssignmentService.ListMine: резолв текущего состояния видео назначений одним запросом).
+// Отсутствие строки для части id — не ошибка, такие идентификаторы просто не попадают в
+// результат (видео удалено — работает снимок в assignments.video_name/group_name).
+// Пустой список идентификаторов не порождает запроса к БД.
+func (r *VideoRepository) SelectByIDs(ctx context.Context, ids []uuid.UUID) ([]domain.Video, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	exec := r.provider.GetExecutor(ctx)
+
+	idArgs := make([]bob.Expression, len(ids))
+	for i, id := range ids {
+		idArgs[i] = psql.Arg(id)
+	}
+
+	videosDB, err := schema.UserGroupVideos.Query(
+		sm.Where(schema.UserGroupVideos.Columns.ID.In(idArgs...)),
+	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	videos := make([]domain.Video, len(videosDB))
+	for i, v := range videosDB {
+		videos[i] = domain.Video{}
+		videos[i].FromDB(v)
+	}
+
+	return videos, nil
+}
+
 func (r *VideoRepository) SelectByGroupID(ctx context.Context, groupID uuid.UUID) ([]domain.Video, error) {
 	exec := r.provider.GetExecutor(ctx)
 

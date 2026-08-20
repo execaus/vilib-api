@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 	"vilib-api/internal/domain"
 
@@ -20,7 +21,10 @@ import (
 //go:generate minimock -i PasswordResetToken -o ./repository_mocks/password_reset_token_mock.go
 //go:generate minimock -i WatchProgress -o ./repository_mocks/watch_progress_mock.go
 //go:generate minimock -i WatchSession -o ./repository_mocks/watch_session_mock.go
+//go:generate minimock -i Assignment -o ./repository_mocks/assignment_mock.go
+//go:generate minimock -i AssignmentTarget -o ./repository_mocks/assignment_target_mock.go
 //go:generate minimock -i AssignmentParticipant -o ./repository_mocks/assignment_participant_mock.go
+//go:generate minimock -i AssignmentEvent -o ./repository_mocks/assignment_event_mock.go
 
 // UserStatus определяет фильтр по активности пользователей при выборке.
 type UserStatus string
@@ -151,6 +155,9 @@ type Video interface {
 		patch domain.VideoPatch,
 	) (bool, error)
 	SelectByGroupID(ctx context.Context, groupID uuid.UUID) ([]domain.Video, error)
+	// SelectByIDs батчем выбирает видео по списку идентификаторов (§4 дизайна эпика Э3,
+	// AssignmentService.ListMine). Отсутствие строки для части id — не ошибка.
+	SelectByIDs(ctx context.Context, ids []uuid.UUID) ([]domain.Video, error)
 	UpdateName(ctx context.Context, videoID uuid.UUID, name string) (domain.Video, error)
 	// Delete удаляет видео вместе со всеми его ассетами и файлами (Э1-Т21) — без сирот в БД.
 	Delete(ctx context.Context, videoID uuid.UUID) error
@@ -265,10 +272,57 @@ type WatchSession interface {
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
-// AssignmentParticipant — минимальный срез репозитория персональных записей участников
-// назначений, нужный алгоритму зачёта heartbeat'а (§3 шаг 7 дизайна эпика Э3). Остальные
-// методы (Insert/Select/Cancel и т.д., §4 дизайна эпика) добавляются в В-51.
+// Assignment — репозиторий назначений обязательного обучения (§1.1, §4 дизайна эпика Э3).
+type Assignment interface {
+	// Insert создаёт назначение в статусе active со снимком названия видео и группы
+	// (Э3-Т7). dueAt/dueDays заполняется по dueMode.
+	Insert(
+		ctx context.Context,
+		accountID, videoID uuid.UUID, videoName string,
+		groupID uuid.UUID, groupName string,
+		createdBy uuid.UUID,
+		dueMode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int,
+		comment string,
+	) (domain.Assignment, error)
+	// SelectByID выбирает назначение по идентификатору. Строка не найдена — ErrNotFound.
+	SelectByID(ctx context.Context, id uuid.UUID) (domain.Assignment, error)
+	// SelectByIDs батчем выбирает назначения по списку идентификаторов (AssignmentService.
+	// ListMine). Отсутствие строки для части id — не ошибка.
+	SelectByIDs(ctx context.Context, ids []uuid.UUID) ([]domain.Assignment, error)
+}
+
+// AssignmentTarget — репозиторий целей назначения: конкретный пользователь или группа
+// (§1.2 дизайна эпика Э3).
+type AssignmentTarget interface {
+	// InsertBatch создаёт строки целей назначения. Конфликтов при создании назначения не
+	// бывает (assignment_id всегда новый).
+	InsertBatch(ctx context.Context, targets []domain.AssignmentTarget) ([]domain.AssignmentTarget, error)
+	// SelectByAssignmentIDs батчем выбирает цели нескольких назначений (карточка/список).
+	SelectByAssignmentIDs(ctx context.Context, assignmentIDs []uuid.UUID) ([]domain.AssignmentTarget, error)
+}
+
+// AssignmentParticipant — репозиторий персональных записей участников назначений (§1.3, §4
+// дизайна эпика Э3).
 type AssignmentParticipant interface {
+	// InsertBatch создаёт или реактивирует персональные записи участников назначения (семантика
+	// «OnMembersAdded», §4 дизайна эпика Э3): конфликт по (assignment_id, user_id) обновляет
+	// только отменённые записи, завершённые и активные неприкосновенны (Э3-Н1) — такие строки
+	// молча пропускаются в результате.
+	InsertBatch(
+		ctx context.Context,
+		participants []domain.AssignmentParticipant,
+	) ([]domain.AssignmentParticipant, error)
+	// SelectByAssignmentIDs батчем выбирает участников нескольких назначений (карточка/список).
+	SelectByAssignmentIDs(ctx context.Context, assignmentIDs []uuid.UUID) ([]domain.AssignmentParticipant, error)
+	// SelectByUserID выбирает все персональные записи пользователя во всех статусах
+	// (AssignmentService.ListMine).
+	SelectByUserID(ctx context.Context, userID uuid.UUID) ([]domain.AssignmentParticipant, error)
+	// CountByAssignmentIDs агрегирует счётчики статусов участников по каждому назначению
+	// (включая просроченных) одним запросом GROUP BY.
+	CountByAssignmentIDs(
+		ctx context.Context,
+		assignmentIDs []uuid.UUID,
+	) (map[uuid.UUID]domain.AssignmentCounters, error)
 	// UpdateStatusByUserVideo переводит статус участника из from в to для всех активных
 	// назначений видео videoID, в которых участвует userID. Возвращает id обновлённых
 	// назначений.
@@ -286,6 +340,21 @@ type AssignmentParticipant interface {
 		completedAt time.Time, coveragePct, thresholdPct int,
 		sessionID *uuid.UUID,
 	) ([]uuid.UUID, error)
+}
+
+// AssignmentEvent — репозиторий журнала назначения (§1.6 дизайна эпика Э3, Э3-Т32).
+type AssignmentEvent interface {
+	// Insert создаёт одну запись журнала.
+	Insert(
+		ctx context.Context,
+		assignmentID uuid.UUID, userID *uuid.UUID,
+		eventType domain.AssignmentEventType, actorID *uuid.UUID,
+		payload json.RawMessage, now time.Time,
+	) (domain.AssignmentEvent, error)
+	// InsertBatch создаёт несколько записей журнала в текущей транзакции.
+	InsertBatch(ctx context.Context, events []domain.AssignmentEvent) ([]domain.AssignmentEvent, error)
+	// SelectByAssignmentID выбирает журнал назначения в хронологическом порядке.
+	SelectByAssignmentID(ctx context.Context, assignmentID uuid.UUID) ([]domain.AssignmentEvent, error)
 }
 
 // Outbox — репозиторий очереди исходящих событий Kafka (transactional outbox, §7.1 эпика).
@@ -312,7 +381,10 @@ type Repository struct {
 	PasswordResetToken
 	WatchProgress
 	WatchSession
+	Assignment
+	AssignmentTarget
 	AssignmentParticipant
+	AssignmentEvent
 }
 
 func NewRepository(provider *ExecutorProvider) *Repository {
@@ -329,6 +401,9 @@ func NewRepository(provider *ExecutorProvider) *Repository {
 		PasswordResetToken:    NewPasswordResetTokenRepository(provider),
 		WatchProgress:         NewWatchProgressRepository(provider),
 		WatchSession:          NewWatchSessionRepository(provider),
+		Assignment:            NewAssignmentRepository(provider),
+		AssignmentTarget:      NewAssignmentTargetRepository(provider),
 		AssignmentParticipant: NewAssignmentParticipantRepository(provider),
+		AssignmentEvent:       NewAssignmentEventRepository(provider),
 	}
 }

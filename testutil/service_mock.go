@@ -19,6 +19,7 @@ type ServiceMock struct {
 	VideoAsset    *mock_service.VideoAssetMock
 	Access        *mock_service.AccessMock
 	WatchProgress *mock_service.WatchProgressMock
+	Assignment    *mock_service.AssignmentMock
 	S3            s3.S3
 }
 
@@ -36,5 +37,6 @@ func (s *ServiceMock) ToServices() *service.Service {
 		VideoAsset:    s.VideoAsset,
 		Access:        s.Access,
 		WatchProgress: s.WatchProgress,
+		Assignment:    s.Assignment,
 	}
 }

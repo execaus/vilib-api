@@ -49,6 +49,13 @@ type VideoMock struct {
 	beforeSelectByGroupIDCounter uint64
 	SelectByGroupIDMock          mVideoMockSelectByGroupID
 
+	funcSelectByIDs          func(ctx context.Context, ids []uuid.UUID) (va1 []domain.Video, err error)
+	funcSelectByIDsOrigin    string
+	inspectFuncSelectByIDs   func(ctx context.Context, ids []uuid.UUID)
+	afterSelectByIDsCounter  uint64
+	beforeSelectByIDsCounter uint64
+	SelectByIDsMock          mVideoMockSelectByIDs
+
 	funcUpdateName          func(ctx context.Context, videoID uuid.UUID, name string) (v1 domain.Video, err error)
 	funcUpdateNameOrigin    string
 	inspectFuncUpdateName   func(ctx context.Context, videoID uuid.UUID, name string)
@@ -90,6 +97,9 @@ func NewVideoMock(t minimock.Tester) *VideoMock {
 
 	m.SelectByGroupIDMock = mVideoMockSelectByGroupID{mock: m}
 	m.SelectByGroupIDMock.callArgs = []*VideoMockSelectByGroupIDParams{}
+
+	m.SelectByIDsMock = mVideoMockSelectByIDs{mock: m}
+	m.SelectByIDsMock.callArgs = []*VideoMockSelectByIDsParams{}
 
 	m.UpdateNameMock = mVideoMockUpdateName{mock: m}
 	m.UpdateNameMock.callArgs = []*VideoMockUpdateNameParams{}
@@ -1569,6 +1579,349 @@ func (m *VideoMock) MinimockSelectByGroupIDInspect() {
 	}
 }
 
+type mVideoMockSelectByIDs struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockSelectByIDsExpectation
+	expectations       []*VideoMockSelectByIDsExpectation
+
+	callArgs []*VideoMockSelectByIDsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockSelectByIDsExpectation specifies expectation struct of the Video.SelectByIDs
+type VideoMockSelectByIDsExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockSelectByIDsParams
+	paramPtrs          *VideoMockSelectByIDsParamPtrs
+	expectationOrigins VideoMockSelectByIDsExpectationOrigins
+	results            *VideoMockSelectByIDsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockSelectByIDsParams contains parameters of the Video.SelectByIDs
+type VideoMockSelectByIDsParams struct {
+	ctx context.Context
+	ids []uuid.UUID
+}
+
+// VideoMockSelectByIDsParamPtrs contains pointers to parameters of the Video.SelectByIDs
+type VideoMockSelectByIDsParamPtrs struct {
+	ctx *context.Context
+	ids *[]uuid.UUID
+}
+
+// VideoMockSelectByIDsResults contains results of the Video.SelectByIDs
+type VideoMockSelectByIDsResults struct {
+	va1 []domain.Video
+	err error
+}
+
+// VideoMockSelectByIDsOrigins contains origins of expectations of the Video.SelectByIDs
+type VideoMockSelectByIDsExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originIds string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSelectByIDs *mVideoMockSelectByIDs) Optional() *mVideoMockSelectByIDs {
+	mmSelectByIDs.optional = true
+	return mmSelectByIDs
+}
+
+// Expect sets up expected params for Video.SelectByIDs
+func (mmSelectByIDs *mVideoMockSelectByIDs) Expect(ctx context.Context, ids []uuid.UUID) *mVideoMockSelectByIDs {
+	if mmSelectByIDs.mock.funcSelectByIDs != nil {
+		mmSelectByIDs.mock.t.Fatalf("VideoMock.SelectByIDs mock is already set by Set")
+	}
+
+	if mmSelectByIDs.defaultExpectation == nil {
+		mmSelectByIDs.defaultExpectation = &VideoMockSelectByIDsExpectation{}
+	}
+
+	if mmSelectByIDs.defaultExpectation.paramPtrs != nil {
+		mmSelectByIDs.mock.t.Fatalf("VideoMock.SelectByIDs mock is already set by ExpectParams functions")
+	}
+
+	mmSelectByIDs.defaultExpectation.params = &VideoMockSelectByIDsParams{ctx, ids}
+	mmSelectByIDs.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSelectByIDs.expectations {
+		if minimock.Equal(e.params, mmSelectByIDs.defaultExpectation.params) {
+			mmSelectByIDs.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSelectByIDs.defaultExpectation.params)
+		}
+	}
+
+	return mmSelectByIDs
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.SelectByIDs
+func (mmSelectByIDs *mVideoMockSelectByIDs) ExpectCtxParam1(ctx context.Context) *mVideoMockSelectByIDs {
+	if mmSelectByIDs.mock.funcSelectByIDs != nil {
+		mmSelectByIDs.mock.t.Fatalf("VideoMock.SelectByIDs mock is already set by Set")
+	}
+
+	if mmSelectByIDs.defaultExpectation == nil {
+		mmSelectByIDs.defaultExpectation = &VideoMockSelectByIDsExpectation{}
+	}
+
+	if mmSelectByIDs.defaultExpectation.params != nil {
+		mmSelectByIDs.mock.t.Fatalf("VideoMock.SelectByIDs mock is already set by Expect")
+	}
+
+	if mmSelectByIDs.defaultExpectation.paramPtrs == nil {
+		mmSelectByIDs.defaultExpectation.paramPtrs = &VideoMockSelectByIDsParamPtrs{}
+	}
+	mmSelectByIDs.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSelectByIDs.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSelectByIDs
+}
+
+// ExpectIdsParam2 sets up expected param ids for Video.SelectByIDs
+func (mmSelectByIDs *mVideoMockSelectByIDs) ExpectIdsParam2(ids []uuid.UUID) *mVideoMockSelectByIDs {
+	if mmSelectByIDs.mock.funcSelectByIDs != nil {
+		mmSelectByIDs.mock.t.Fatalf("VideoMock.SelectByIDs mock is already set by Set")
+	}
+
+	if mmSelectByIDs.defaultExpectation == nil {
+		mmSelectByIDs.defaultExpectation = &VideoMockSelectByIDsExpectation{}
+	}
+
+	if mmSelectByIDs.defaultExpectation.params != nil {
+		mmSelectByIDs.mock.t.Fatalf("VideoMock.SelectByIDs mock is already set by Expect")
+	}
+
+	if mmSelectByIDs.defaultExpectation.paramPtrs == nil {
+		mmSelectByIDs.defaultExpectation.paramPtrs = &VideoMockSelectByIDsParamPtrs{}
+	}
+	mmSelectByIDs.defaultExpectation.paramPtrs.ids = &ids
+	mmSelectByIDs.defaultExpectation.expectationOrigins.originIds = minimock.CallerInfo(1)
+
+	return mmSelectByIDs
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.SelectByIDs
+func (mmSelectByIDs *mVideoMockSelectByIDs) Inspect(f func(ctx context.Context, ids []uuid.UUID)) *mVideoMockSelectByIDs {
+	if mmSelectByIDs.mock.inspectFuncSelectByIDs != nil {
+		mmSelectByIDs.mock.t.Fatalf("Inspect function is already set for VideoMock.SelectByIDs")
+	}
+
+	mmSelectByIDs.mock.inspectFuncSelectByIDs = f
+
+	return mmSelectByIDs
+}
+
+// Return sets up results that will be returned by Video.SelectByIDs
+func (mmSelectByIDs *mVideoMockSelectByIDs) Return(va1 []domain.Video, err error) *VideoMock {
+	if mmSelectByIDs.mock.funcSelectByIDs != nil {
+		mmSelectByIDs.mock.t.Fatalf("VideoMock.SelectByIDs mock is already set by Set")
+	}
+
+	if mmSelectByIDs.defaultExpectation == nil {
+		mmSelectByIDs.defaultExpectation = &VideoMockSelectByIDsExpectation{mock: mmSelectByIDs.mock}
+	}
+	mmSelectByIDs.defaultExpectation.results = &VideoMockSelectByIDsResults{va1, err}
+	mmSelectByIDs.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSelectByIDs.mock
+}
+
+// Set uses given function f to mock the Video.SelectByIDs method
+func (mmSelectByIDs *mVideoMockSelectByIDs) Set(f func(ctx context.Context, ids []uuid.UUID) (va1 []domain.Video, err error)) *VideoMock {
+	if mmSelectByIDs.defaultExpectation != nil {
+		mmSelectByIDs.mock.t.Fatalf("Default expectation is already set for the Video.SelectByIDs method")
+	}
+
+	if len(mmSelectByIDs.expectations) > 0 {
+		mmSelectByIDs.mock.t.Fatalf("Some expectations are already set for the Video.SelectByIDs method")
+	}
+
+	mmSelectByIDs.mock.funcSelectByIDs = f
+	mmSelectByIDs.mock.funcSelectByIDsOrigin = minimock.CallerInfo(1)
+	return mmSelectByIDs.mock
+}
+
+// When sets expectation for the Video.SelectByIDs which will trigger the result defined by the following
+// Then helper
+func (mmSelectByIDs *mVideoMockSelectByIDs) When(ctx context.Context, ids []uuid.UUID) *VideoMockSelectByIDsExpectation {
+	if mmSelectByIDs.mock.funcSelectByIDs != nil {
+		mmSelectByIDs.mock.t.Fatalf("VideoMock.SelectByIDs mock is already set by Set")
+	}
+
+	expectation := &VideoMockSelectByIDsExpectation{
+		mock:               mmSelectByIDs.mock,
+		params:             &VideoMockSelectByIDsParams{ctx, ids},
+		expectationOrigins: VideoMockSelectByIDsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSelectByIDs.expectations = append(mmSelectByIDs.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.SelectByIDs return parameters for the expectation previously defined by the When method
+func (e *VideoMockSelectByIDsExpectation) Then(va1 []domain.Video, err error) *VideoMock {
+	e.results = &VideoMockSelectByIDsResults{va1, err}
+	return e.mock
+}
+
+// Times sets number of times Video.SelectByIDs should be invoked
+func (mmSelectByIDs *mVideoMockSelectByIDs) Times(n uint64) *mVideoMockSelectByIDs {
+	if n == 0 {
+		mmSelectByIDs.mock.t.Fatalf("Times of VideoMock.SelectByIDs mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSelectByIDs.expectedInvocations, n)
+	mmSelectByIDs.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSelectByIDs
+}
+
+func (mmSelectByIDs *mVideoMockSelectByIDs) invocationsDone() bool {
+	if len(mmSelectByIDs.expectations) == 0 && mmSelectByIDs.defaultExpectation == nil && mmSelectByIDs.mock.funcSelectByIDs == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSelectByIDs.mock.afterSelectByIDsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSelectByIDs.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SelectByIDs implements mm_repository.Video
+func (mmSelectByIDs *VideoMock) SelectByIDs(ctx context.Context, ids []uuid.UUID) (va1 []domain.Video, err error) {
+	mm_atomic.AddUint64(&mmSelectByIDs.beforeSelectByIDsCounter, 1)
+	defer mm_atomic.AddUint64(&mmSelectByIDs.afterSelectByIDsCounter, 1)
+
+	mmSelectByIDs.t.Helper()
+
+	if mmSelectByIDs.inspectFuncSelectByIDs != nil {
+		mmSelectByIDs.inspectFuncSelectByIDs(ctx, ids)
+	}
+
+	mm_params := VideoMockSelectByIDsParams{ctx, ids}
+
+	// Record call args
+	mmSelectByIDs.SelectByIDsMock.mutex.Lock()
+	mmSelectByIDs.SelectByIDsMock.callArgs = append(mmSelectByIDs.SelectByIDsMock.callArgs, &mm_params)
+	mmSelectByIDs.SelectByIDsMock.mutex.Unlock()
+
+	for _, e := range mmSelectByIDs.SelectByIDsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.va1, e.results.err
+		}
+	}
+
+	if mmSelectByIDs.SelectByIDsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSelectByIDs.SelectByIDsMock.defaultExpectation.Counter, 1)
+		mm_want := mmSelectByIDs.SelectByIDsMock.defaultExpectation.params
+		mm_want_ptrs := mmSelectByIDs.SelectByIDsMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockSelectByIDsParams{ctx, ids}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSelectByIDs.t.Errorf("VideoMock.SelectByIDs got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectByIDs.SelectByIDsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.ids != nil && !minimock.Equal(*mm_want_ptrs.ids, mm_got.ids) {
+				mmSelectByIDs.t.Errorf("VideoMock.SelectByIDs got unexpected parameter ids, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectByIDs.SelectByIDsMock.defaultExpectation.expectationOrigins.originIds, *mm_want_ptrs.ids, mm_got.ids, minimock.Diff(*mm_want_ptrs.ids, mm_got.ids))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSelectByIDs.t.Errorf("VideoMock.SelectByIDs got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSelectByIDs.SelectByIDsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSelectByIDs.SelectByIDsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSelectByIDs.t.Fatal("No results are set for the VideoMock.SelectByIDs")
+		}
+		return (*mm_results).va1, (*mm_results).err
+	}
+	if mmSelectByIDs.funcSelectByIDs != nil {
+		return mmSelectByIDs.funcSelectByIDs(ctx, ids)
+	}
+	mmSelectByIDs.t.Fatalf("Unexpected call to VideoMock.SelectByIDs. %v %v", ctx, ids)
+	return
+}
+
+// SelectByIDsAfterCounter returns a count of finished VideoMock.SelectByIDs invocations
+func (mmSelectByIDs *VideoMock) SelectByIDsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectByIDs.afterSelectByIDsCounter)
+}
+
+// SelectByIDsBeforeCounter returns a count of VideoMock.SelectByIDs invocations
+func (mmSelectByIDs *VideoMock) SelectByIDsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectByIDs.beforeSelectByIDsCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.SelectByIDs.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSelectByIDs *mVideoMockSelectByIDs) Calls() []*VideoMockSelectByIDsParams {
+	mmSelectByIDs.mutex.RLock()
+
+	argCopy := make([]*VideoMockSelectByIDsParams, len(mmSelectByIDs.callArgs))
+	copy(argCopy, mmSelectByIDs.callArgs)
+
+	mmSelectByIDs.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSelectByIDsDone returns true if the count of the SelectByIDs invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockSelectByIDsDone() bool {
+	if m.SelectByIDsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SelectByIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SelectByIDsMock.invocationsDone()
+}
+
+// MinimockSelectByIDsInspect logs each unmet expectation
+func (m *VideoMock) MinimockSelectByIDsInspect() {
+	for _, e := range m.SelectByIDsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.SelectByIDs at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSelectByIDsCounter := mm_atomic.LoadUint64(&m.afterSelectByIDsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SelectByIDsMock.defaultExpectation != nil && afterSelectByIDsCounter < 1 {
+		if m.SelectByIDsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.SelectByIDs at\n%s", m.SelectByIDsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.SelectByIDs at\n%s with params: %#v", m.SelectByIDsMock.defaultExpectation.expectationOrigins.origin, *m.SelectByIDsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSelectByIDs != nil && afterSelectByIDsCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.SelectByIDs at\n%s", m.funcSelectByIDsOrigin)
+	}
+
+	if !m.SelectByIDsMock.invocationsDone() && afterSelectByIDsCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.SelectByIDs at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SelectByIDsMock.expectedInvocations), m.SelectByIDsMock.expectedInvocationsOrigin, afterSelectByIDsCounter)
+	}
+}
+
 type mVideoMockUpdateName struct {
 	optional           bool
 	mock               *VideoMock
@@ -2796,6 +3149,8 @@ func (m *VideoMock) MinimockFinish() {
 
 			m.MinimockSelectByGroupIDInspect()
 
+			m.MinimockSelectByIDsInspect()
+
 			m.MinimockUpdateNameInspect()
 
 			m.MinimockUpdateStatusIfInspect()
@@ -2828,6 +3183,7 @@ func (m *VideoMock) minimockDone() bool {
 		m.MinimockInsertDone() &&
 		m.MinimockSelectDone() &&
 		m.MinimockSelectByGroupIDDone() &&
+		m.MinimockSelectByIDsDone() &&
 		m.MinimockUpdateNameDone() &&
 		m.MinimockUpdateStatusIfDone() &&
 		m.MinimockUpdateTimedOutDone()

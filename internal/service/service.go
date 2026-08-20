@@ -27,6 +27,7 @@ import (
 //go:generate minimock -i Outbox -o ./service_mocks/outbox_mock.go
 //go:generate minimock -i Profile -o ./service_mocks/profile_mock.go
 //go:generate minimock -i WatchProgress -o ./service_mocks/watch_progress_mock.go
+//go:generate minimock -i Assignment -o ./service_mocks/assignment_mock.go
 //go:generate minimock -i vilib-api/internal/s3.S3 -o ./service_mocks/s3_mock.go
 
 type Auth interface {
@@ -352,6 +353,22 @@ type WatchProgress interface {
 	OnDurationKnown(ctx context.Context, videoID uuid.UUID, durationMs int64) error
 }
 
+// Assignment реализует сервис назначений обязательного обучения — создание, чтение карточки
+// и «мои назначения» (§4 дизайна эпика Э3).
+type Assignment interface {
+	// Create создаёт назначение видео пользователям и/или группе (§4 дизайна эпика Э3, шаги
+	// 1–9): rejected — цели, не включённые в назначение (В-4: not_in_account/inactive/
+	// no_access), не ошибка.
+	Create(
+		ctx context.Context, accountID, initiatorID uuid.UUID, in domain.CreateAssignment,
+	) (domain.AssignmentDetails, []domain.RejectedTarget, error)
+	// Get собирает карточку назначения целиком: цели, счётчики, участников с покрытием и
+	// признаком доступа, журнал. Право чтения — В-8.
+	Get(ctx context.Context, accountID, initiatorID, id uuid.UUID) (domain.AssignmentDetails, error)
+	// ListMine собирает «мои назначения» пользователя во всех статусах (§4 дизайна эпика Э3).
+	ListMine(ctx context.Context, userID uuid.UUID) ([]domain.MyAssignment, error)
+}
+
 // Profile агрегирует контекст текущего пользователя для ручки GET /me (§2.3 дизайна эпика Э2).
 type Profile interface {
 	// Get собирает профиль пользователя userID: организацию текущей строки, все организации
@@ -376,6 +393,7 @@ type Service struct {
 	Outbox
 	Profile
 	WatchProgress
+	Assignment
 }
 
 func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *repository.Repository) *Service {
@@ -403,6 +421,17 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 		r.WatchSession,
 		r.AssignmentParticipant,
 		r.Video,
+		s,
+		cfg.Video,
+	)
+	s.Assignment = NewAssignmentService(
+		r.Assignment,
+		r.AssignmentTarget,
+		r.AssignmentParticipant,
+		r.AssignmentEvent,
+		r.WatchProgress,
+		r.Video,
+		r.GroupMember,
 		s,
 		cfg.Video,
 	)

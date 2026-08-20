@@ -153,6 +153,10 @@ type AssignmentTarget struct {
 	AssignmentID uuid.UUID
 	TargetType   AssignmentTargetType
 	TargetID     uuid.UUID
+	// Name — отображаемое имя цели (ФИО пользователя или название группы), резолвится
+	// сервисом при сборке карточки (AssignmentService.Get) — не хранится в БД, всегда пусто
+	// сразу после FromDB.
+	Name string
 }
 
 // FromDB заполняет AssignmentTarget строкой сгенерированной модели schema.AssignmentTarget.
@@ -263,14 +267,24 @@ type ParticipantDetails struct {
 	HasAccess   bool
 }
 
+// EventDetails — событие журнала назначения вместе с данными инициировавшего пользователя
+// (§4 дизайна эпика Э3): Actor == nil — событие сгенерировано системой (heartbeat, каскад).
+type EventDetails struct {
+	Event AssignmentEvent
+	Actor *User
+}
+
 // AssignmentDetails — карточка назначения целиком: само назначение, цели, счётчики, участники
 // и журнал событий (§4 дизайна эпика Э3, ручка GET .../assignments/{id}).
 type AssignmentDetails struct {
-	Assignment   Assignment
-	Targets      []AssignmentTarget
-	Counters     AssignmentCounters
-	Participants []ParticipantDetails
-	Events       []AssignmentEvent
+	Assignment Assignment
+	// CreatedByUser — данные назначившего (§5 контракта эпика Э3), резолвится сервисом одним
+	// запросом вместе с остальными пользователями карточки.
+	CreatedByUser User
+	Targets       []AssignmentTarget
+	Counters      AssignmentCounters
+	Participants  []ParticipantDetails
+	Events        []EventDetails
 }
 
 // MyAssignment — назначение в разрезе одного участника для ручки GET me/assignments (§4
@@ -285,10 +299,14 @@ type MyAssignment struct {
 }
 
 // RejectedTarget — пользователь, которого не удалось включить в назначение при создании (В-4),
-// вместе с причиной отказа.
+// вместе с причиной отказа. Имя/фамилия/email резолвятся сервисом из того же батча
+// пользователей, что и проверка доступа — без повторного запроса на уровне DTO.
 type RejectedTarget struct {
-	UserID uuid.UUID
-	Reason RejectedReason
+	UserID  uuid.UUID
+	Name    string
+	Surname string
+	Email   string
+	Reason  RejectedReason
 }
 
 // CreateAssignment — вход для создания назначения (§5 дизайна эпика Э3): DueAt/DueDays
