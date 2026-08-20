@@ -19,6 +19,9 @@ type RepositoryMock struct {
 	WatchProgress         *mock_repository.WatchProgressMock
 	WatchSession          *mock_repository.WatchSessionMock
 	AssignmentParticipant *mock_repository.AssignmentParticipantMock
+	Assignment            *mock_repository.AssignmentMock
+	AssignmentTarget      *mock_repository.AssignmentTargetMock
+	AssignmentEvent       *mock_repository.AssignmentEventMock
 }
 
 func (r *RepositoryMock) ToRepositories() *repository.Repository {
@@ -36,5 +39,8 @@ func (r *RepositoryMock) ToRepositories() *repository.Repository {
 		WatchProgress:         r.WatchProgress,
 		WatchSession:          r.WatchSession,
 		AssignmentParticipant: r.AssignmentParticipant,
+		Assignment:            r.Assignment,
+		AssignmentTarget:      r.AssignmentTarget,
+		AssignmentEvent:       r.AssignmentEvent,
 	}
 }

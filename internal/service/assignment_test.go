@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 	"vilib-api/config"
@@ -780,3 +781,528 @@ func TestService_AssignmentListMine_UsesCompletedCoverageForCompletedParticipant
 
 func ptrTime(t time.Time) *time.Time { return &t }
 func ptrInt64(v int64) *int64        { return &v }
+
+// activeAssignment — действующее назначение фикстуры в режиме "дата".
+func activeAssignment(f assignmentFixture) domain.Assignment {
+	dueAt := f.Now.Add(7 * 24 * time.Hour)
+
+	return domain.Assignment{
+		ID: f.AssignmentID, AccountID: f.AccountID, VideoID: &f.VideoID, VideoName: f.Video.Name,
+		GroupID: &f.GroupID, GroupName: "Продажи", CreatedBy: f.InitiatorID,
+		DueMode: domain.AssignmentDueModeDate, DueAt: &dueAt, Status: domain.AssignmentStatusActive,
+	}
+}
+
+// expectAssignmentCardCalls настраивает моки хвоста Get — сборки карточки назначения после
+// изменения (цели, участники, счётчики, журнал, автор).
+func expectAssignmentCardCalls(m assignmentMocks, assignment domain.Assignment) {
+	m.Assignment.SelectByIDMock.Return(assignment, nil)
+	m.Targets.SelectByAssignmentIDsMock.Return(nil, nil)
+	m.Participants.SelectByAssignmentIDsMock.Return(nil, nil)
+	m.Participants.CountByAssignmentIDsMock.Return(map[uuid.UUID]domain.AssignmentCounters{}, nil)
+	m.Events.SelectByAssignmentIDMock.Return(nil, nil)
+	m.User.GetByIDsMock.Return(nil, nil)
+}
+
+// TestService_AssignmentUpdateDue_RecalculatesParticipantsAndLogsEvent проверяет изменение
+// срока (Э3-Т20/КП-9): назначение и персональные сроки незавершённых участников обновляются,
+// в журнал пишется due_changed.
+func TestService_AssignmentUpdateDue_RecalculatesParticipantsAndLogsEvent(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	assignment := activeAssignment(f)
+	m.Access.CanManageAssignmentsMock.Return(nil)
+	expectAssignmentCardCalls(m, assignment)
+
+	dueDays := 10
+	var updatedMode domain.AssignmentDueMode
+	var updatedDays *int
+	m.Assignment.UpdateDueMock.Set(func(
+		_ context.Context, _ uuid.UUID, mode domain.AssignmentDueMode, _ *time.Time, days *int,
+	) (domain.Assignment, error) {
+		updatedMode, updatedDays = mode, days
+		return assignment, nil
+	})
+
+	var participantsMode domain.AssignmentDueMode
+	m.Participants.UpdateDueByAssignmentMock.Set(func(
+		_ context.Context, _ uuid.UUID, mode domain.AssignmentDueMode, _ *time.Time, _ *int,
+	) ([]uuid.UUID, error) {
+		participantsMode = mode
+		return []uuid.UUID{uuid.New()}, nil
+	})
+
+	var loggedType domain.AssignmentEventType
+	m.Events.InsertMock.Set(func(
+		_ context.Context, _ uuid.UUID, _ *uuid.UUID,
+		eventType domain.AssignmentEventType, _ *uuid.UUID, _ json.RawMessage, _ time.Time,
+	) (domain.AssignmentEvent, error) {
+		loggedType = eventType
+		return domain.AssignmentEvent{}, nil
+	})
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	mode := domain.AssignmentDueModeDays
+
+	_, err := svc.UpdateDue(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID, domain.UpdateAssignment{
+		DueMode: &mode, DueDays: &dueDays,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, domain.AssignmentDueModeDays, updatedMode)
+	require.NotNil(t, updatedDays)
+	require.Equal(t, dueDays, *updatedDays)
+	require.Equal(t, domain.AssignmentDueModeDays, participantsMode)
+	require.Equal(t, domain.AssignmentEventTypeDueChanged, loggedType)
+}
+
+// TestService_AssignmentUpdateDue_ValidatesNewDue проверяет, что новый срок проходит те же
+// проверки, что и при создании (В-6).
+func TestService_AssignmentUpdateDue_ValidatesNewDue(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	m.Assignment.SelectByIDMock.Return(activeAssignment(f), nil)
+	m.Access.CanManageAssignmentsMock.Return(nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	mode := domain.AssignmentDueModeDate
+	past := f.Now.Add(-time.Hour)
+
+	_, err := svc.UpdateDue(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID, domain.UpdateAssignment{
+		DueMode: &mode, DueAt: &past,
+	})
+
+	require.ErrorIs(t, err, service.ErrDueAtInvalid)
+}
+
+// TestService_AssignmentUpdateDue_CancelledIsConflict — отменённое назначение не редактируется.
+func TestService_AssignmentUpdateDue_CancelledIsConflict(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	cancelled := activeAssignment(f)
+	cancelled.Status = domain.AssignmentStatusCancelled
+	m.Assignment.SelectByIDMock.Return(cancelled, nil)
+	m.Access.CanManageAssignmentsMock.Return(nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	comment := "новый комментарий"
+
+	_, err := svc.UpdateDue(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID, domain.UpdateAssignment{
+		Comment: &comment,
+	})
+
+	require.ErrorIs(t, err, service.ErrAssignmentCancelled)
+}
+
+// TestService_AssignmentUpdateDue_ForeignAccountIsNotFound — назначение чужого аккаунта
+// невидимо (изоляция арендатора).
+func TestService_AssignmentUpdateDue_ForeignAccountIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	foreign := activeAssignment(f)
+	foreign.AccountID = uuid.New()
+	m.Assignment.SelectByIDMock.Return(foreign, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	comment := ""
+
+	_, err := svc.UpdateDue(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID, domain.UpdateAssignment{
+		Comment: &comment,
+	})
+
+	require.ErrorIs(t, err, service.ErrNotFound)
+}
+
+// TestService_AssignmentCancel_CancelsParticipantsAndLogsEvents проверяет отмену назначения
+// (Э3-Т21): незавершённые участники переходят в cancelled, на каждого пишется событие.
+func TestService_AssignmentCancel_CancelsParticipantsAndLogsEvents(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	m.Assignment.SelectByIDMock.Return(activeAssignment(f), nil)
+	m.Access.CanManageAssignmentsMock.Return(nil)
+	m.Assignment.CancelMock.Return(true, nil)
+
+	cancelledUsers := []uuid.UUID{uuid.New(), uuid.New()}
+	var participantReason domain.AssignmentParticipantCancelReason
+	m.Participants.CancelByAssignmentMock.Set(func(
+		_ context.Context, _ uuid.UUID, reason domain.AssignmentParticipantCancelReason, _ time.Time,
+	) ([]uuid.UUID, error) {
+		participantReason = reason
+		return cancelledUsers, nil
+	})
+
+	var loggedEvents []domain.AssignmentEvent
+	m.Events.InsertBatchMock.Set(func(
+		_ context.Context, e []domain.AssignmentEvent,
+	) ([]domain.AssignmentEvent, error) {
+		loggedEvents = e
+		return e, nil
+	})
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.Cancel(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID)
+
+	require.NoError(t, err)
+	require.Equal(t, domain.AssignmentParticipantCancelReasonAssignmentCancelled, participantReason)
+	require.Len(t, loggedEvents, len(cancelledUsers))
+	for _, event := range loggedEvents {
+		require.Equal(t, domain.AssignmentEventTypeParticipantCancelled, event.Type)
+	}
+}
+
+// TestService_AssignmentCancel_RepeatIsConflict — повторная отмена назначения возвращает 409.
+func TestService_AssignmentCancel_RepeatIsConflict(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	cancelled := activeAssignment(f)
+	cancelled.Status = domain.AssignmentStatusCancelled
+	m.Assignment.SelectByIDMock.Return(cancelled, nil)
+	m.Access.CanManageAssignmentsMock.Return(nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.Cancel(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID)
+
+	require.ErrorIs(t, err, service.ErrAssignmentCancelled)
+}
+
+// TestService_AssignmentRemoveParticipant_CompletedIsConflict — завершившего обучение
+// участника снять нельзя (Э3-Т22, Э3-Н1).
+func TestService_AssignmentRemoveParticipant_CompletedIsConflict(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	userID := uuid.New()
+	m.Assignment.SelectByIDMock.Return(activeAssignment(f), nil)
+	m.Access.CanManageAssignmentsMock.Return(nil)
+	m.Participants.SelectByAssignmentIDAndUserIDMock.Return(domain.AssignmentParticipant{
+		AssignmentID: f.AssignmentID, UserID: userID, Status: domain.AssignmentParticipantStatusCompleted,
+	}, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.RemoveParticipant(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID, userID)
+
+	require.ErrorIs(t, err, service.ErrParticipantCompleted)
+}
+
+// TestService_AssignmentRemoveParticipant_MissingIsNotFound — участника нет в назначении.
+func TestService_AssignmentRemoveParticipant_MissingIsNotFound(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	m.Assignment.SelectByIDMock.Return(activeAssignment(f), nil)
+	m.Access.CanManageAssignmentsMock.Return(nil)
+	m.Participants.SelectByAssignmentIDAndUserIDMock.Return(
+		domain.AssignmentParticipant{}, repository.ErrNotFound,
+	)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.RemoveParticipant(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID, uuid.New())
+
+	require.ErrorIs(t, err, service.ErrNotFound)
+}
+
+// TestService_AssignmentRemoveParticipant_CancelsAndLogs — снятие активного участника.
+func TestService_AssignmentRemoveParticipant_CancelsAndLogs(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	userID := uuid.New()
+	m.Assignment.SelectByIDMock.Return(activeAssignment(f), nil)
+	m.Access.CanManageAssignmentsMock.Return(nil)
+	m.Participants.SelectByAssignmentIDAndUserIDMock.Return(domain.AssignmentParticipant{
+		AssignmentID: f.AssignmentID, UserID: userID, Status: domain.AssignmentParticipantStatusInProgress,
+	}, nil)
+
+	var cancelReason domain.AssignmentParticipantCancelReason
+	m.Participants.CancelOneMock.Set(func(
+		_ context.Context, _, _ uuid.UUID, reason domain.AssignmentParticipantCancelReason, _ time.Time,
+	) (bool, error) {
+		cancelReason = reason
+		return true, nil
+	})
+
+	var loggedEvents []domain.AssignmentEvent
+	m.Events.InsertBatchMock.Set(func(
+		_ context.Context, e []domain.AssignmentEvent,
+	) ([]domain.AssignmentEvent, error) {
+		loggedEvents = e
+		return e, nil
+	})
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.RemoveParticipant(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID, userID)
+
+	require.NoError(t, err)
+	require.Equal(t, domain.AssignmentParticipantCancelReasonRemovedByManager, cancelReason)
+	require.Len(t, loggedEvents, 1)
+	require.Equal(t, domain.AssignmentEventTypeParticipantCancelled, loggedEvents[0].Type)
+	require.NotNil(t, loggedEvents[0].UserID)
+	require.Equal(t, userID, *loggedEvents[0].UserID)
+}
+
+// TestService_AssignmentOnMembersAdded_EnrollsNewcomers проверяет каскад добавления в группу
+// (Э3-Т3/КП-7): новичок получает персональную запись со сроком по режиму «N дней» от момента
+// зачисления.
+func TestService_AssignmentOnMembersAdded_EnrollsNewcomers(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	dueDays := 3
+	assignment := activeAssignment(f)
+	assignment.DueMode = domain.AssignmentDueModeDays
+	assignment.DueAt = nil
+	assignment.DueDays = &dueDays
+
+	m.Assignment.SelectActiveByTargetGroupMock.Return([]domain.Assignment{assignment}, nil)
+	m.Video.SelectMock.Return(&f.Video, nil)
+	m.Progress.SelectByVideoIDsMock.Return(nil, nil)
+
+	var enrolled []domain.AssignmentParticipant
+	m.Participants.InsertBatchMock.Set(func(
+		_ context.Context, p []domain.AssignmentParticipant,
+	) ([]domain.AssignmentParticipant, error) {
+		enrolled = p
+		return p, nil
+	})
+
+	var loggedEvents []domain.AssignmentEvent
+	m.Events.InsertBatchMock.Set(func(
+		_ context.Context, e []domain.AssignmentEvent,
+	) ([]domain.AssignmentEvent, error) {
+		loggedEvents = e
+		return e, nil
+	})
+
+	newcomerID := uuid.New()
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.OnMembersAdded(t.Context(), f.GroupID, []uuid.UUID{newcomerID})
+
+	require.NoError(t, err)
+	require.Len(t, enrolled, 1)
+	require.Equal(t, newcomerID, enrolled[0].UserID)
+	require.Equal(t, domain.AssignmentParticipantSourceGroup, enrolled[0].Source)
+	require.NotNil(t, enrolled[0].SourceGroupID)
+	require.Equal(t, f.GroupID, *enrolled[0].SourceGroupID)
+	require.Equal(t, f.Now.AddDate(0, 0, dueDays), enrolled[0].DueAt)
+	require.Equal(t, domain.AssignmentParticipantStatusAssigned, enrolled[0].Status)
+	require.Len(t, loggedEvents, 1)
+	require.Equal(t, domain.AssignmentEventTypeParticipantEnrolled, loggedEvents[0].Type)
+}
+
+// TestService_AssignmentOnMembersAdded_SkipsExpiredDateAssignment — правило В-5: назначение с
+// прошедшей фиксированной датой новичкам не выдаётся.
+func TestService_AssignmentOnMembersAdded_SkipsExpiredDateAssignment(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	expired := activeAssignment(f)
+	expired.DueAt = ptrTime(f.Now.Add(-time.Hour))
+	m.Assignment.SelectActiveByTargetGroupMock.Return([]domain.Assignment{expired}, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.OnMembersAdded(t.Context(), f.GroupID, []uuid.UUID{uuid.New()})
+
+	require.NoError(t, err)
+}
+
+// TestService_AssignmentOnMembersAdded_CompletesAlreadyWatched — новичок, досмотревший видео
+// раньше, зачисляется сразу выполненным (В-11).
+func TestService_AssignmentOnMembersAdded_CompletesAlreadyWatched(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	newcomerID := uuid.New()
+	video := f.Video
+	video.DurationMs = ptrInt64(100_000)
+
+	m.Assignment.SelectActiveByTargetGroupMock.Return([]domain.Assignment{activeAssignment(f)}, nil)
+	m.Video.SelectMock.Return(&video, nil)
+	m.Progress.SelectByVideoIDsMock.Return([]domain.WatchProgress{
+		{
+			UserID: newcomerID, VideoID: f.VideoID, CoveredMs: 100_000,
+			ThresholdReachedAt: ptrTime(f.Now.Add(-24 * time.Hour)),
+		},
+	}, nil)
+
+	var enrolled []domain.AssignmentParticipant
+	m.Participants.InsertBatchMock.Set(func(
+		_ context.Context, p []domain.AssignmentParticipant,
+	) ([]domain.AssignmentParticipant, error) {
+		enrolled = p
+		return p, nil
+	})
+
+	var loggedEvents []domain.AssignmentEvent
+	m.Events.InsertBatchMock.Set(func(
+		_ context.Context, e []domain.AssignmentEvent,
+	) ([]domain.AssignmentEvent, error) {
+		loggedEvents = e
+		return e, nil
+	})
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.OnMembersAdded(t.Context(), f.GroupID, []uuid.UUID{newcomerID})
+
+	require.NoError(t, err)
+	require.Len(t, enrolled, 1)
+	require.Equal(t, domain.AssignmentParticipantStatusCompleted, enrolled[0].Status)
+	require.Len(t, loggedEvents, 2, "зачисление и подтверждение просмотра")
+	require.Equal(t, domain.AssignmentEventTypeParticipantCompleted, loggedEvents[1].Type)
+}
+
+// TestService_AssignmentOnMemberRemoved_CancelsGroupParticipations проверяет каскад исключения
+// из группы (Э3-Т30): участия через группу отменяются с причиной left_group.
+func TestService_AssignmentOnMemberRemoved_CancelsGroupParticipations(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	userID := uuid.New()
+	var reason domain.AssignmentParticipantCancelReason
+	m.Participants.CancelBySourceGroupAndUserMock.Set(func(
+		_ context.Context, _, _ uuid.UUID, r domain.AssignmentParticipantCancelReason, _ time.Time,
+	) ([]uuid.UUID, error) {
+		reason = r
+		return []uuid.UUID{f.AssignmentID}, nil
+	})
+
+	var loggedEvents []domain.AssignmentEvent
+	m.Events.InsertBatchMock.Set(func(
+		_ context.Context, e []domain.AssignmentEvent,
+	) ([]domain.AssignmentEvent, error) {
+		loggedEvents = e
+		return e, nil
+	})
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.OnMemberRemoved(t.Context(), f.GroupID, userID)
+
+	require.NoError(t, err)
+	require.Equal(t, domain.AssignmentParticipantCancelReasonLeftGroup, reason)
+	require.Len(t, loggedEvents, 1)
+	require.Equal(t, domain.AssignmentEventTypeParticipantCancelled, loggedEvents[0].Type)
+}
+
+// TestService_AssignmentOnVideoDeleted_CancelsAssignments проверяет каскад удаления видео
+// (Э3-Т28): назначение и незавершённые участия отменяются с причиной video_deleted.
+func TestService_AssignmentOnVideoDeleted_CancelsAssignments(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	m.Assignment.SelectActiveByVideoIDsMock.Return([]domain.Assignment{activeAssignment(f)}, nil)
+
+	var assignmentReason domain.AssignmentCancelReason
+	var actor *uuid.UUID
+	m.Assignment.CancelMock.Set(func(
+		_ context.Context, _ uuid.UUID, cancelledBy *uuid.UUID,
+		reason domain.AssignmentCancelReason, _ time.Time,
+	) (bool, error) {
+		assignmentReason, actor = reason, cancelledBy
+		return true, nil
+	})
+
+	m.Events.InsertMock.Return(domain.AssignmentEvent{}, nil)
+
+	var participantReason domain.AssignmentParticipantCancelReason
+	m.Participants.CancelByAssignmentMock.Set(func(
+		_ context.Context, _ uuid.UUID, reason domain.AssignmentParticipantCancelReason, _ time.Time,
+	) ([]uuid.UUID, error) {
+		participantReason = reason
+		return []uuid.UUID{uuid.New()}, nil
+	})
+	m.Events.InsertBatchMock.Return(nil, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.OnVideoDeleted(t.Context(), f.VideoID)
+
+	require.NoError(t, err)
+	require.Equal(t, domain.AssignmentCancelReasonVideoDeleted, assignmentReason)
+	require.Nil(t, actor, "системная отмена выполняется без инициатора")
+	require.Equal(t, domain.AssignmentParticipantCancelReasonVideoDeleted, participantReason)
+}
+
+// TestService_AssignmentOnGroupDeleted_CancelsAssignments проверяет каскад удаления группы
+// (Э3-Т31): назначения видео группы отменяются с причиной group_deleted.
+func TestService_AssignmentOnGroupDeleted_CancelsAssignments(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	m.Assignment.SelectActiveByGroupIDMock.Return([]domain.Assignment{activeAssignment(f)}, nil)
+	m.Assignment.CancelMock.Return(true, nil)
+	m.Events.InsertMock.Return(domain.AssignmentEvent{}, nil)
+
+	var participantReason domain.AssignmentParticipantCancelReason
+	m.Participants.CancelByAssignmentMock.Set(func(
+		_ context.Context, _ uuid.UUID, reason domain.AssignmentParticipantCancelReason, _ time.Time,
+	) ([]uuid.UUID, error) {
+		participantReason = reason
+		return nil, nil
+	})
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+
+	err := svc.OnGroupDeleted(t.Context(), f.GroupID)
+
+	require.NoError(t, err)
+	require.Equal(t, domain.AssignmentParticipantCancelReasonGroupDeleted, participantReason)
+}

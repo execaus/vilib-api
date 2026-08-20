@@ -2230,6 +2230,7 @@ type videoDeleteMocks struct {
 	GroupMember *service_mocks.GroupMemberMock
 	S3          *service_mocks.S3Mock
 	Video       *repository_mocks.VideoMock
+	Assignment  *service_mocks.AssignmentMock
 }
 
 func newVideoDeleteMocks(mc *minimock.Controller) videoDeleteMocks {
@@ -2238,6 +2239,7 @@ func newVideoDeleteMocks(mc *minimock.Controller) videoDeleteMocks {
 		GroupMember: service_mocks.NewGroupMemberMock(mc),
 		S3:          service_mocks.NewS3Mock(mc),
 		Video:       repository_mocks.NewVideoMock(mc),
+		Assignment:  service_mocks.NewAssignmentMock(mc),
 	}
 }
 
@@ -2246,7 +2248,7 @@ func newVideoDeleteService(
 	cfg service.VideoServiceConfig,
 	opts ...service.VideoServiceOption,
 ) *service.VideoService {
-	svc := &service.Service{Access: m.Access, GroupMember: m.GroupMember}
+	svc := &service.Service{Access: m.Access, GroupMember: m.GroupMember, Assignment: m.Assignment}
 	return service.NewVideoService(m.S3, m.Video, svc, cfg, opts...)
 }
 
@@ -2329,6 +2331,7 @@ func TestService_Video_Delete(t *testing.T) {
 			Return(nil)
 		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
 		repoErr := errors.New("db unavailable")
+		m.Assignment.OnVideoDeletedMock.Expect(minimock.AnyContext, testVideoID).Return(nil)
 		m.Video.DeleteMock.Expect(minimock.AnyContext, testVideoID).Return(repoErr)
 
 		videoSvc := newVideoDeleteService(m, service.VideoServiceConfig{Bucket: testBucket})
@@ -2347,6 +2350,7 @@ func TestService_Video_Delete(t *testing.T) {
 			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
 			Return(nil)
 		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
+		m.Assignment.OnVideoDeletedMock.Expect(minimock.AnyContext, testVideoID).Return(nil)
 		m.Video.DeleteMock.Expect(minimock.AnyContext, testVideoID).Return(nil)
 
 		var cleanedBucket, cleanedPrefix string
@@ -2386,6 +2390,7 @@ func TestService_Video_Delete(t *testing.T) {
 			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
 			Return(nil)
 		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
+		m.Assignment.OnVideoDeletedMock.Expect(minimock.AnyContext, testVideoID).Return(nil)
 		m.Video.DeleteMock.Expect(minimock.AnyContext, testVideoID).Return(nil)
 
 		var attempts int

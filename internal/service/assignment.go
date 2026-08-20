@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"slices"
 	"strings"
@@ -179,13 +180,19 @@ func (s *AssignmentService) resolveAssignableVideo(
 // §4 дизайна эпика Э3, шаг 3): "date" — обязателен и строго в будущем; "days" — целое число
 // от 1 до 3650.
 func validateAssignmentDue(in domain.CreateAssignment, now time.Time) error {
-	switch in.DueMode {
+	return validateDue(in.DueMode, in.DueAt, in.DueDays, now)
+}
+
+// validateDue — общая проверка срока для создания и изменения назначения: "date" — дата
+// задана и строго в будущем; "days" — целое число от 1 до 3650.
+func validateDue(mode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int, now time.Time) error {
+	switch mode {
 	case domain.AssignmentDueModeDate:
-		if in.DueAt == nil || !in.DueAt.After(now) {
+		if dueAt == nil || !dueAt.After(now) {
 			return ErrDueAtInvalid
 		}
 	case domain.AssignmentDueModeDays:
-		if in.DueDays == nil || *in.DueDays < assignmentMinDueDays || *in.DueDays > assignmentMaxDueDays {
+		if dueDays == nil || *dueDays < assignmentMinDueDays || *dueDays > assignmentMaxDueDays {
 			return ErrDueDaysInvalid
 		}
 	default:
@@ -442,11 +449,19 @@ func (s *AssignmentService) progressByUser(
 // assignmentDueAt вычисляет персональный срок участника по режиму назначения: "date" — общий
 // due_at; "days" — enrolled_at (здесь — момент зачисления) плюс due_days.
 func assignmentDueAt(in domain.CreateAssignment, enrolledAt time.Time) time.Time {
-	if in.DueMode == domain.AssignmentDueModeDays && in.DueDays != nil {
-		return enrolledAt.AddDate(0, 0, *in.DueDays)
+	return participantDueAt(in.DueMode, in.DueAt, in.DueDays, enrolledAt)
+}
+
+// participantDueAt вычисляет персональный срок по режиму назначения — общая формула для
+// создания назначения и зачисления новичков группы (каскад OnMembersAdded).
+func participantDueAt(
+	mode domain.AssignmentDueMode, dueAt *time.Time, dueDays *int, enrolledAt time.Time,
+) time.Time {
+	if mode == domain.AssignmentDueModeDays && dueDays != nil {
+		return enrolledAt.AddDate(0, 0, *dueDays)
 	}
-	if in.DueAt != nil {
-		return *in.DueAt
+	if dueAt != nil {
+		return *dueAt
 	}
 
 	return enrolledAt
@@ -1049,4 +1064,490 @@ func dedupeUUIDs(ids []uuid.UUID) []uuid.UUID {
 	}
 
 	return result
+}
+
+// assignmentDueChangedEventPayload — детали события "due_changed" журнала назначения:
+// прежний и новый срок в терминах режима (Э3-Т32).
+type assignmentDueChangedEventPayload struct {
+	OldDueMode string     `json:"old_due_mode"`
+	OldDueAt   *time.Time `json:"old_due_at,omitempty"`
+	OldDueDays *int       `json:"old_due_days,omitempty"`
+	NewDueMode string     `json:"new_due_mode"`
+	NewDueAt   *time.Time `json:"new_due_at,omitempty"`
+	NewDueDays *int       `json:"new_due_days,omitempty"`
+}
+
+// UpdateDue меняет срок и/или комментарий назначения (§4 дизайна эпика Э3): отменённое
+// назначение не редактируется (409), новый срок валидируется как при создании и
+// пересчитывается всем незавершённым участникам — завершённые записи неприкосновенны
+// (Э3-Н1, КП-9: completed_at не меняется ни одним методом).
+func (s *AssignmentService) UpdateDue(
+	ctx context.Context, accountID, initiatorID, id uuid.UUID, patch domain.UpdateAssignment,
+) (domain.AssignmentDetails, error) {
+	now := s.now()
+
+	assignment, err := s.assignmentForManage(ctx, accountID, initiatorID, id)
+	if err != nil {
+		return domain.AssignmentDetails{}, err
+	}
+	if assignment.Status == domain.AssignmentStatusCancelled {
+		return domain.AssignmentDetails{}, ErrAssignmentCancelled
+	}
+
+	if patch.HasDue() {
+		if err = s.applyDuePatch(ctx, assignment, patch, initiatorID, now); err != nil {
+			return domain.AssignmentDetails{}, err
+		}
+	}
+
+	if patch.Comment != nil {
+		if _, err = s.repo.UpdateComment(ctx, id, *patch.Comment); err != nil {
+			zap.L().Error(err.Error())
+			return domain.AssignmentDetails{}, err
+		}
+	}
+
+	return s.Get(ctx, accountID, initiatorID, id)
+}
+
+// applyDuePatch валидирует новый срок, сохраняет его в назначении, пересчитывает персональные
+// сроки незавершённых участников и пишет событие due_changed.
+func (s *AssignmentService) applyDuePatch(
+	ctx context.Context,
+	assignment domain.Assignment, patch domain.UpdateAssignment,
+	initiatorID uuid.UUID, now time.Time,
+) error {
+	if err := validateDue(*patch.DueMode, patch.DueAt, patch.DueDays, now); err != nil {
+		return err
+	}
+
+	if _, err := s.repo.UpdateDue(ctx, assignment.ID, *patch.DueMode, patch.DueAt, patch.DueDays); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if _, err := s.participants.UpdateDueByAssignment(
+		ctx, assignment.ID, *patch.DueMode, patch.DueAt, patch.DueDays,
+	); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	payload, err := json.Marshal(assignmentDueChangedEventPayload{
+		OldDueMode: string(assignment.DueMode), OldDueAt: assignment.DueAt, OldDueDays: assignment.DueDays,
+		NewDueMode: string(*patch.DueMode), NewDueAt: patch.DueAt, NewDueDays: patch.DueDays,
+	})
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if _, err = s.events.Insert(
+		ctx, assignment.ID, nil, domain.AssignmentEventTypeDueChanged, &initiatorID, payload, now,
+	); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// Cancel отменяет назначение целиком (§4 дизайна эпика Э3): переводит в cancelled само
+// назначение и всех незавершённых участников, пишет журнал. Повторная отмена — 409.
+func (s *AssignmentService) Cancel(ctx context.Context, accountID, initiatorID, id uuid.UUID) error {
+	now := s.now()
+
+	assignment, err := s.assignmentForManage(ctx, accountID, initiatorID, id)
+	if err != nil {
+		return err
+	}
+	if assignment.Status == domain.AssignmentStatusCancelled {
+		return ErrAssignmentCancelled
+	}
+
+	cancelled, err := s.repo.Cancel(ctx, id, &initiatorID, domain.AssignmentCancelReasonManual, now)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+	if !cancelled {
+		// Гонка: назначение отменили между чтением и записью — для клиента это тот же 409.
+		return ErrAssignmentCancelled
+	}
+
+	return s.cancelParticipantsWithEvents(
+		ctx, id, domain.AssignmentParticipantCancelReasonAssignmentCancelled, &initiatorID, now,
+	)
+}
+
+// RemoveParticipant снимает одного участника с назначения (§4 дизайна эпика Э3): завершившего
+// обучение снять нельзя (409 — Э3-Н1), отсутствующего — 404, у отменённого назначения — 409.
+func (s *AssignmentService) RemoveParticipant(
+	ctx context.Context, accountID, initiatorID, id, userID uuid.UUID,
+) error {
+	now := s.now()
+
+	assignment, err := s.assignmentForManage(ctx, accountID, initiatorID, id)
+	if err != nil {
+		return err
+	}
+	if assignment.Status == domain.AssignmentStatusCancelled {
+		return ErrAssignmentCancelled
+	}
+
+	participant, err := s.participants.SelectByAssignmentIDAndUserID(ctx, id, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
+		}
+		zap.L().Error(err.Error())
+
+		return err
+	}
+	if participant.Status == domain.AssignmentParticipantStatusCompleted {
+		return ErrParticipantCompleted
+	}
+
+	removed, err := s.participants.CancelOne(
+		ctx, id, userID, domain.AssignmentParticipantCancelReasonRemovedByManager, now,
+	)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+	if !removed {
+		// Участник уже снят или завершил обучение в параллельной транзакции.
+		return ErrParticipantCompleted
+	}
+
+	return s.recordParticipantCancelledEvents(
+		ctx, id, []uuid.UUID{userID},
+		domain.AssignmentParticipantCancelReasonRemovedByManager, &initiatorID, now,
+	)
+}
+
+// assignmentForManage читает назначение и проверяет право управления им (§2 дизайна эпика Э3,
+// В-8): область определяется группой видео на момент создания; если группа уже удалена,
+// управлять назначением может только обладатель аккаунтного права.
+func (s *AssignmentService) assignmentForManage(
+	ctx context.Context, accountID, initiatorID, id uuid.UUID,
+) (domain.Assignment, error) {
+	assignment, err := s.repo.SelectByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return domain.Assignment{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+
+		return domain.Assignment{}, err
+	}
+	if assignment.AccountID != accountID {
+		return domain.Assignment{}, ErrNotFound
+	}
+
+	if assignment.GroupID != nil {
+		if err = s.srv.Access.CanManageAssignments(ctx, accountID, initiatorID, *assignment.GroupID); err != nil {
+			return domain.Assignment{}, err
+		}
+
+		return assignment, nil
+	}
+
+	all, _, err := s.srv.Access.ManagedAssignmentGroups(ctx, accountID, initiatorID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.Assignment{}, err
+	}
+	if !all {
+		return domain.Assignment{}, ErrForbidden
+	}
+
+	return assignment, nil
+}
+
+// cancelParticipantsWithEvents отменяет незавершённых участников назначения и пишет по
+// событию на каждого — общий хвост ручной отмены и системных каскадов.
+func (s *AssignmentService) cancelParticipantsWithEvents(
+	ctx context.Context,
+	assignmentID uuid.UUID,
+	reason domain.AssignmentParticipantCancelReason,
+	actorID *uuid.UUID, now time.Time,
+) error {
+	cancelledUsers, err := s.participants.CancelByAssignment(ctx, assignmentID, reason, now)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return s.recordParticipantCancelledEvents(ctx, assignmentID, cancelledUsers, reason, actorID, now)
+}
+
+// recordParticipantCancelledEvents пишет событие participant_cancelled на каждого отменённого
+// участника (Э3-Т32). Событие отмены назначения целиком пишется отдельно — вызывающим кодом.
+func (s *AssignmentService) recordParticipantCancelledEvents(
+	ctx context.Context,
+	assignmentID uuid.UUID, userIDs []uuid.UUID,
+	reason domain.AssignmentParticipantCancelReason,
+	actorID *uuid.UUID, now time.Time,
+) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+
+	payload, err := json.Marshal(map[string]any{"reason": reason})
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	events := make([]domain.AssignmentEvent, len(userIDs))
+	for i := range userIDs {
+		events[i] = domain.AssignmentEvent{
+			AssignmentID: assignmentID, UserID: &userIDs[i],
+			Type:    domain.AssignmentEventTypeParticipantCancelled,
+			ActorID: actorID, Payload: payload, CreatedAt: now,
+		}
+	}
+
+	if _, err = s.events.InsertBatch(ctx, events); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// OnMembersAdded зачисляет новых участников группы в действующие назначения, адресованные
+// этой группе (§4 «Каскады» дизайна эпика Э3, Э3-Т3): срок считается по правилу В-5 —
+// в режиме «дата» истёкшее назначение новичку не выдаётся, в режиме «N дней» срок отсчитывается
+// от момента зачисления. Метод системный: вызывается из саги добавления участников уже после
+// проверки прав на управление группой, поэтому прав не проверяет.
+func (s *AssignmentService) OnMembersAdded(ctx context.Context, groupID uuid.UUID, userIDs []uuid.UUID) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+
+	now := s.now()
+
+	assignments, err := s.repo.SelectActiveByTargetGroup(ctx, groupID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	for _, assignment := range assignments {
+		if !assignmentEnrollsNewcomers(assignment, now) {
+			continue
+		}
+		if err = s.enrollGroupMembers(ctx, assignment, groupID, userIDs, now); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// assignmentEnrollsNewcomers сообщает, зачисляются ли в назначение новые участники группы:
+// назначение с фиксированной датой после её наступления новичкам не выдаётся (В-5), у
+// назначения без видео (видео удалено) зачислять нечего.
+func assignmentEnrollsNewcomers(assignment domain.Assignment, now time.Time) bool {
+	if assignment.VideoID == nil {
+		return false
+	}
+
+	if assignment.DueMode == domain.AssignmentDueModeDate {
+		return assignment.DueAt != nil && assignment.DueAt.After(now)
+	}
+
+	return true
+}
+
+// enrollGroupMembers создаёт персональные записи новых участников группы в одном назначении
+// и пишет журнал. Повторно добавленный в группу сотрудник с отменённой записью реактивируется,
+// а завершивший обучение не дублируется — это обеспечивает ON CONFLICT репозитория (Э3-Т30).
+func (s *AssignmentService) enrollGroupMembers(
+	ctx context.Context,
+	assignment domain.Assignment, groupID uuid.UUID, userIDs []uuid.UUID, now time.Time,
+) error {
+	video, err := s.video.Select(ctx, *assignment.VideoID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	progressByUser, err := s.progressByUser(ctx, video.ID)
+	if err != nil {
+		return err
+	}
+
+	thresholdPct := assignmentThresholdPercent(s.cfg.WatchCompletionThreshold)
+	sourceGroupID := groupID
+
+	rows := make([]domain.AssignmentParticipant, len(userIDs))
+	for i, userID := range userIDs {
+		participant := domain.AssignmentParticipant{
+			AssignmentID: assignment.ID, UserID: userID,
+			Source: domain.AssignmentParticipantSourceGroup, SourceGroupID: &sourceGroupID,
+			EnrolledAt: now,
+			DueAt:      participantDueAt(assignment.DueMode, assignment.DueAt, assignment.DueDays, now),
+		}
+		applyInitialParticipantProgress(&participant, progressByUser[userID], video.DurationMs, thresholdPct)
+		rows[i] = participant
+	}
+
+	enrolled, err := s.participants.InsertBatch(ctx, rows)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return s.recordGroupEnrolledEvents(ctx, assignment.ID, enrolled, now)
+}
+
+// recordGroupEnrolledEvents пишет журнал зачисления новичков группы: participant_enrolled с
+// признаком joined (сотрудник добавлен в группу после создания назначения) и
+// participant_completed для тех, кто досмотрел видео заранее (В-11).
+func (s *AssignmentService) recordGroupEnrolledEvents(
+	ctx context.Context, assignmentID uuid.UUID, participants []domain.AssignmentParticipant, now time.Time,
+) error {
+	if len(participants) == 0 {
+		return nil
+	}
+
+	enrolledPayload, err := json.Marshal(map[string]any{
+		"source": domain.AssignmentParticipantSourceGroup, "joined": true,
+	})
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	events := make([]domain.AssignmentEvent, 0, 2*len(participants))
+	for i := range participants {
+		events = append(events, domain.AssignmentEvent{
+			AssignmentID: assignmentID, UserID: &participants[i].UserID,
+			Type: domain.AssignmentEventTypeParticipantEnrolled, Payload: enrolledPayload, CreatedAt: now,
+		})
+
+		if participants[i].Status != domain.AssignmentParticipantStatusCompleted {
+			continue
+		}
+
+		completed, completeErr := participantCompletedEvent(assignmentID, participants[i], now)
+		if completeErr != nil {
+			zap.L().Error(completeErr.Error())
+			return completeErr
+		}
+		events = append(events, completed)
+	}
+
+	if _, err = s.events.InsertBatch(ctx, events); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return nil
+}
+
+// OnMemberRemoved отменяет участия исключённого из группы сотрудника, полученные через эту
+// группу (§4 «Каскады» дизайна эпика Э3, Э3-Т30): личные назначения не затрагиваются,
+// завершённые записи остаются как есть. Метод системный — вызывается из саги удаления
+// участника после проверки прав.
+func (s *AssignmentService) OnMemberRemoved(ctx context.Context, groupID, userID uuid.UUID) error {
+	now := s.now()
+
+	assignmentIDs, err := s.participants.CancelBySourceGroupAndUser(
+		ctx, groupID, userID, domain.AssignmentParticipantCancelReasonLeftGroup, now,
+	)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	for _, assignmentID := range assignmentIDs {
+		if err = s.recordParticipantCancelledEvents(
+			ctx, assignmentID, []uuid.UUID{userID},
+			domain.AssignmentParticipantCancelReasonLeftGroup, nil, now,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// OnVideoDeleted отменяет действующие назначения удаляемого видео (§4 «Каскады» дизайна
+// эпика Э3, Э3-Т28): незавершённые участия переходят в cancelled, завершённые остаются со
+// снимком названия видео. Вызывается из саги удаления видео до удаления строки.
+func (s *AssignmentService) OnVideoDeleted(ctx context.Context, videoID uuid.UUID) error {
+	assignments, err := s.repo.SelectActiveByVideoIDs(ctx, []uuid.UUID{videoID})
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return s.cancelAssignments(
+		ctx, assignments,
+		domain.AssignmentCancelReasonVideoDeleted, domain.AssignmentParticipantCancelReasonVideoDeleted,
+	)
+}
+
+// OnGroupDeleted отменяет действующие назначения видео удаляемой группы (§4 «Каскады» дизайна
+// эпика Э3, Э3-Т31). Вызывается из саги удаления группы до каскадного удаления её данных.
+func (s *AssignmentService) OnGroupDeleted(ctx context.Context, groupID uuid.UUID) error {
+	assignments, err := s.repo.SelectActiveByGroupID(ctx, groupID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	return s.cancelAssignments(
+		ctx, assignments,
+		domain.AssignmentCancelReasonGroupDeleted, domain.AssignmentParticipantCancelReasonGroupDeleted,
+	)
+}
+
+// cancelAssignments отменяет перечисленные назначения системно (без инициатора) и пишет
+// журнал: cancelled на назначение и participant_cancelled на каждого незавершённого участника.
+func (s *AssignmentService) cancelAssignments(
+	ctx context.Context,
+	assignments []domain.Assignment,
+	reason domain.AssignmentCancelReason,
+	participantReason domain.AssignmentParticipantCancelReason,
+) error {
+	if len(assignments) == 0 {
+		return nil
+	}
+
+	now := s.now()
+
+	payload, err := json.Marshal(map[string]any{"reason": reason})
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	for _, assignment := range assignments {
+		cancelled, cancelErr := s.repo.Cancel(ctx, assignment.ID, nil, reason, now)
+		if cancelErr != nil {
+			zap.L().Error(cancelErr.Error())
+			return cancelErr
+		}
+		if !cancelled {
+			continue
+		}
+
+		if _, err = s.events.Insert(
+			ctx, assignment.ID, nil, domain.AssignmentEventTypeCancelled, nil, payload, now,
+		); err != nil {
+			zap.L().Error(err.Error())
+			return err
+		}
+
+		if err = s.cancelParticipantsWithEvents(ctx, assignment.ID, participantReason, nil, now); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

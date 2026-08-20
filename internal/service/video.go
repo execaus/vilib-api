@@ -1214,6 +1214,14 @@ func (s *VideoService) Delete(
 		return err
 	}
 
+	// Каскад обязательного обучения: назначения этого видео отменяются до удаления строки
+	// видео (§4 «Каскады» дизайна эпика Э3, Э3-Т28) — после удаления связь уже потеряна
+	// (FK ON DELETE SET NULL), а снимок названия остаётся в самом назначении.
+	if err := s.srv.Assignment.OnVideoDeleted(ctx, videoID); err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
 	// Удаление видео: сначала БД-транзакция, объекты хранилища — после коммита (Э1-Т21).
 	if err := s.repo.Delete(ctx, videoID); err != nil {
 		zap.L().Error(err.Error())
