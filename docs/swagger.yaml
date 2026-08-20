@@ -46,6 +46,132 @@ definitions:
           $ref: '#/definitions/dto.GroupMember'
         type: array
     type: object
+  dto.AssignmentCounters:
+    properties:
+      assigned:
+        type: integer
+      cancelled:
+        type: integer
+      completed:
+        type: integer
+      in_progress:
+        type: integer
+      overdue:
+        type: integer
+      total:
+        type: integer
+    type: object
+  dto.AssignmentDetails:
+    properties:
+      cancel_reason:
+        type: string
+      cancelled_at:
+        type: string
+      comment:
+        type: string
+      counters:
+        $ref: '#/definitions/dto.AssignmentCounters'
+      created_at:
+        type: string
+      created_by:
+        $ref: '#/definitions/dto.AssignmentUser'
+      due_at:
+        type: string
+      due_days:
+        type: integer
+      due_mode:
+        type: string
+      events:
+        items:
+          $ref: '#/definitions/dto.AssignmentEvent'
+        type: array
+      group_id:
+        type: string
+      group_name:
+        type: string
+      id:
+        type: string
+      participants:
+        items:
+          $ref: '#/definitions/dto.AssignmentParticipant'
+        type: array
+      status:
+        type: string
+      targets:
+        items:
+          $ref: '#/definitions/dto.AssignmentTarget'
+        type: array
+      video_id:
+        type: string
+      video_name:
+        type: string
+    type: object
+  dto.AssignmentEvent:
+    properties:
+      actor:
+        $ref: '#/definitions/dto.AssignmentUser'
+      created_at:
+        type: string
+      id:
+        type: integer
+      payload:
+        type: object
+      type:
+        type: string
+      user_id:
+        type: string
+    type: object
+  dto.AssignmentParticipant:
+    properties:
+      cancel_reason:
+        type: string
+      cancelled_at:
+        type: string
+      completed_at:
+        type: string
+      completed_late:
+        type: boolean
+      coverage_pct:
+        type: integer
+      due_at:
+        type: string
+      enrolled_at:
+        type: string
+      has_access:
+        type: boolean
+      is_overdue:
+        type: boolean
+      source:
+        type: string
+      source_group_id:
+        type: string
+      status:
+        type: string
+      user:
+        $ref: '#/definitions/dto.AssignmentUser'
+    type: object
+  dto.AssignmentTarget:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+    type: object
+  dto.AssignmentUser:
+    properties:
+      email:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+      surname:
+        type: string
+    type: object
   dto.ChangePasswordRequest:
     properties:
       new_password:
@@ -120,6 +246,43 @@ definitions:
     properties:
       account_role:
         $ref: '#/definitions/dto.AccountRole'
+    type: object
+  dto.CreateAssignmentRequest:
+    properties:
+      comment:
+        maxLength: 500
+        type: string
+      due_at:
+        type: string
+      due_days:
+        type: integer
+      due_mode:
+        enum:
+        - date
+        - days
+        type: string
+      groups:
+        items:
+          type: string
+        type: array
+      users:
+        items:
+          type: string
+        type: array
+      video_id:
+        type: string
+    required:
+    - due_mode
+    - video_id
+    type: object
+  dto.CreateAssignmentResponse:
+    properties:
+      assignment:
+        $ref: '#/definitions/dto.AssignmentDetails'
+      rejected:
+        items:
+          $ref: '#/definitions/dto.RejectedTarget'
+        type: array
     type: object
   dto.CreateGroupRoleRequest:
     properties:
@@ -220,6 +383,11 @@ definitions:
         items:
           $ref: '#/definitions/dto.Video'
         type: array
+    type: object
+  dto.GetAssignmentResponse:
+    properties:
+      assignment:
+        $ref: '#/definitions/dto.AssignmentDetails'
     type: object
   dto.GetGroupMembersResponse:
     properties:
@@ -345,6 +513,65 @@ definitions:
       surname:
         type: string
     type: object
+  dto.MyAssignment:
+    properties:
+      assigned_by:
+        $ref: '#/definitions/dto.AssignmentUser'
+      cancelled_at:
+        type: string
+      comment:
+        type: string
+      completed_at:
+        type: string
+      completed_late:
+        type: boolean
+      coverage_pct:
+        type: integer
+      due_at:
+        type: string
+      enrolled_at:
+        type: string
+      id:
+        type: string
+      is_overdue:
+        type: boolean
+      source:
+        type: string
+      status:
+        type: string
+      video:
+        $ref: '#/definitions/dto.MyAssignmentVideo'
+    type: object
+  dto.MyAssignmentVideo:
+    properties:
+      duration_ms:
+        type: integer
+      group_id:
+        type: string
+      group_name:
+        type: string
+      id:
+        type: string
+      is_deleted:
+        type: boolean
+      name:
+        type: string
+      status:
+        type: integer
+      status_name:
+        type: string
+    type: object
+  dto.MyAssignmentsResponse:
+    properties:
+      active_count:
+        type: integer
+      assignments:
+        items:
+          $ref: '#/definitions/dto.MyAssignment'
+        type: array
+      overdue_count:
+        type: integer
+    type: object
   dto.MyGroup:
     properties:
       id:
@@ -377,6 +604,19 @@ definitions:
     - surname
     type: object
   dto.RegisterResponse:
+    type: object
+  dto.RejectedTarget:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      reason:
+        type: string
+      surname:
+        type: string
+      user_id:
+        type: string
     type: object
   dto.RenameVideoRequest:
     properties:
@@ -687,6 +927,105 @@ paths:
       summary: Проверка работоспособности сервиса
       tags:
       - health
+  /api/v1/accounts/{accountId}/assignments:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Назначает видео пользователям и/или группе со сроком и комментарием (§4
+        дизайна эпика Э3): раскрывает цели в персональные записи, отклонённые (нет
+        доступа/деактивирован/не в аккаунте) возвращаются в rejected, а не ошибкой.
+        Цель-группа допустима только для группы, которой принадлежит видео.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: Тело запроса
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateAssignmentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.CreateAssignmentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Назначение обязательного обучения
+      tags:
+      - assignments
+  /api/v1/accounts/{accountId}/assignments/{assignmentId}:
+    get:
+      description: |-
+        Возвращает назначение целиком: цели, счётчики, участников с покрытием и
+        признаком доступа к видео, журнал изменений (§4 дизайна эпика Э3). Право
+        чтения — назначивший видит своё назначение всегда, иначе — обладатель права
+        назначения в области (В-8).
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID назначения
+        in: path
+        name: assignmentId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.GetAssignmentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Карточка назначения обязательного обучения
+      tags:
+      - assignments
   /api/v1/accounts/{accountId}/roles:
     get:
       description: Возвращает список всех ролей аккаунта
@@ -2419,6 +2758,28 @@ paths:
       summary: Профиль текущего пользователя
       tags:
       - profile
+  /api/v1/me/assignments:
+    get:
+      description: |-
+        Возвращает назначения текущего пользователя во всех статусах вместе со
+        сводкой активных и просроченных (§4, §5 дизайна эпика Э3) — используется для
+        экрана «Мои назначения», бейджей в каталоге/плеере и счётчика в навигации.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.MyAssignmentsResponse'
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Мои назначения
+      tags:
+      - assignments
 securityDefinitions:
   BearerAuth:
     in: header

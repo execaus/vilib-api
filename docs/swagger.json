@@ -29,6 +29,147 @@
                 }
             }
         },
+        "/api/v1/accounts/{accountId}/assignments": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Назначает видео пользователям и/или группе со сроком и комментарием (§4\nдизайна эпика Э3): раскрывает цели в персональные записи, отклонённые (нет\nдоступа/деактивирован/не в аккаунте) возвращаются в rejected, а не ошибкой.\nЦель-группа допустима только для группы, которой принадлежит видео.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assignments"
+                ],
+                "summary": "Назначение обязательного обучения",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Тело запроса",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateAssignmentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateAssignmentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{accountId}/assignments/{assignmentId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает назначение целиком: цели, счётчики, участников с покрытием и\nпризнаком доступа к видео, журнал изменений (§4 дизайна эпика Э3). Право\nчтения — назначивший видит своё назначение всегда, иначе — обладатель права\nназначения в области (В-8).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assignments"
+                ],
+                "summary": "Карточка назначения обязательного обучения",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID назначения",
+                        "name": "assignmentId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.GetAssignmentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        },
         "/api/v1/accounts/{accountId}/roles": {
             "get": {
                 "security": [
@@ -2605,6 +2746,37 @@
                     }
                 }
             }
+        },
+        "/api/v1/me/assignments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает назначения текущего пользователя во всех статусах вместе со\nсводкой активных и просроченных (§4, §5 дизайна эпика Э3) — используется для\nэкрана «Мои назначения», бейджей в каталоге/плеере и счётчика в навигации.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assignments"
+                ],
+                "summary": "Мои назначения",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.MyAssignmentsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -2672,6 +2844,198 @@
                     "items": {
                         "$ref": "#/definitions/dto.GroupMember"
                     }
+                }
+            }
+        },
+        "dto.AssignmentCounters": {
+            "type": "object",
+            "properties": {
+                "assigned": {
+                    "type": "integer"
+                },
+                "cancelled": {
+                    "type": "integer"
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "in_progress": {
+                    "type": "integer"
+                },
+                "overdue": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.AssignmentDetails": {
+            "type": "object",
+            "properties": {
+                "cancel_reason": {
+                    "type": "string"
+                },
+                "cancelled_at": {
+                    "type": "string"
+                },
+                "comment": {
+                    "type": "string"
+                },
+                "counters": {
+                    "$ref": "#/definitions/dto.AssignmentCounters"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "$ref": "#/definitions/dto.AssignmentUser"
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "due_days": {
+                    "type": "integer"
+                },
+                "due_mode": {
+                    "type": "string"
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AssignmentEvent"
+                    }
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "participants": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AssignmentParticipant"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                },
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AssignmentTarget"
+                    }
+                },
+                "video_id": {
+                    "type": "string"
+                },
+                "video_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AssignmentEvent": {
+            "type": "object",
+            "properties": {
+                "actor": {
+                    "$ref": "#/definitions/dto.AssignmentUser"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "payload": {
+                    "type": "object"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AssignmentParticipant": {
+            "type": "object",
+            "properties": {
+                "cancel_reason": {
+                    "type": "string"
+                },
+                "cancelled_at": {
+                    "type": "string"
+                },
+                "completed_at": {
+                    "type": "string"
+                },
+                "completed_late": {
+                    "type": "boolean"
+                },
+                "coverage_pct": {
+                    "type": "integer"
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "enrolled_at": {
+                    "type": "string"
+                },
+                "has_access": {
+                    "type": "boolean"
+                },
+                "is_overdue": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "source_group_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/dto.AssignmentUser"
+                }
+            }
+        },
+        "dto.AssignmentTarget": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AssignmentUser": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "surname": {
+                    "type": "string"
                 }
             }
         },
@@ -2769,6 +3133,61 @@
             "properties": {
                 "account_role": {
                     "$ref": "#/definitions/dto.AccountRole"
+                }
+            }
+        },
+        "dto.CreateAssignmentRequest": {
+            "type": "object",
+            "required": [
+                "due_mode",
+                "video_id"
+            ],
+            "properties": {
+                "comment": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "due_days": {
+                    "type": "integer"
+                },
+                "due_mode": {
+                    "type": "string",
+                    "enum": [
+                        "date",
+                        "days"
+                    ]
+                },
+                "groups": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "video_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.CreateAssignmentResponse": {
+            "type": "object",
+            "properties": {
+                "assignment": {
+                    "$ref": "#/definitions/dto.AssignmentDetails"
+                },
+                "rejected": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.RejectedTarget"
+                    }
                 }
             }
         },
@@ -2920,6 +3339,14 @@
                     "items": {
                         "$ref": "#/definitions/dto.Video"
                     }
+                }
+            }
+        },
+        "dto.GetAssignmentResponse": {
+            "type": "object",
+            "properties": {
+                "assignment": {
+                    "$ref": "#/definitions/dto.AssignmentDetails"
                 }
             }
         },
@@ -3113,6 +3540,96 @@
                 }
             }
         },
+        "dto.MyAssignment": {
+            "type": "object",
+            "properties": {
+                "assigned_by": {
+                    "$ref": "#/definitions/dto.AssignmentUser"
+                },
+                "cancelled_at": {
+                    "type": "string"
+                },
+                "comment": {
+                    "type": "string"
+                },
+                "completed_at": {
+                    "type": "string"
+                },
+                "completed_late": {
+                    "type": "boolean"
+                },
+                "coverage_pct": {
+                    "type": "integer"
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "enrolled_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_overdue": {
+                    "type": "boolean"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "video": {
+                    "$ref": "#/definitions/dto.MyAssignmentVideo"
+                }
+            }
+        },
+        "dto.MyAssignmentVideo": {
+            "type": "object",
+            "properties": {
+                "duration_ms": {
+                    "type": "integer"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_deleted": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "status_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.MyAssignmentsResponse": {
+            "type": "object",
+            "properties": {
+                "active_count": {
+                    "type": "integer"
+                },
+                "assignments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.MyAssignment"
+                    }
+                },
+                "overdue_count": {
+                    "type": "integer"
+                }
+            }
+        },
         "dto.MyGroup": {
             "type": "object",
             "properties": {
@@ -3159,6 +3676,26 @@
         },
         "dto.RegisterResponse": {
             "type": "object"
+        },
+        "dto.RejectedTarget": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "surname": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
         },
         "dto.RenameVideoRequest": {
             "type": "object",

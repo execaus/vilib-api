@@ -25,6 +25,7 @@ const (
 	pathKeyGroupRoleID
 	pathKeyGroupMemberUserID
 	pathKeyProfile
+	pathKeyAssignmentID
 )
 
 //nolint:gochecknoglobals // URL-константы — принятая конвенция проекта (rules/CODESTYLE_GOLANG_API.md).
@@ -52,6 +53,10 @@ var (
 	GetVideoHLSMasterURL   = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/hls/master.m3u8")
 	GetVideoHLSPlaylistURL = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/hls/%s/playlist.m3u8")
 	VideoProgressURL       = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/progress")
+
+	CreateAssignmentURL = NewURLSupplier("accounts/%s/assignments")
+	GetAssignmentURL    = NewURLSupplier("accounts/%s/assignments/%s")
+	MyAssignmentsURL    = "me/assignments"
 
 	ListUsersURL         = NewURLSupplier("accounts/%s/users")
 	ReactivateUserURL    = NewURLSupplier("accounts/%s/users/%s/reactivate")
@@ -251,6 +256,15 @@ func (h *Handler) GetRouter() *gin.Engine {
 		h.RequireAuthMiddleware,
 		h.GetVideoProgress,
 	)
+
+	// Назначения обязательного обучения (§4, §5 дизайна эпика Э3).
+	v1.POST(CreateAssignmentURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateAssignment)
+	v1.GET(
+		GetAssignmentURL.WithPathParams(pathKeyAccountID, pathKeyAssignmentID),
+		h.RequireAuthMiddleware,
+		h.GetAssignment,
+	)
+	v1.GET(MyAssignmentsURL, h.RequireAuthMiddleware, h.GetMyAssignments)
 
 	return engine
 }
