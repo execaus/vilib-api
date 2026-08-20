@@ -49,9 +49,9 @@ type AssignmentParticipantMock struct {
 	beforeCompleteByUserVideoCounter uint64
 	CompleteByUserVideoMock          mAssignmentParticipantMockCompleteByUserVideo
 
-	funcCountByAssignmentIDs          func(ctx context.Context, assignmentIDs []uuid.UUID) (m1 map[uuid.UUID]domain.AssignmentCounters, err error)
+	funcCountByAssignmentIDs          func(ctx context.Context, assignmentIDs []uuid.UUID, includeDeactivated bool) (m1 map[uuid.UUID]domain.AssignmentCounters, err error)
 	funcCountByAssignmentIDsOrigin    string
-	inspectFuncCountByAssignmentIDs   func(ctx context.Context, assignmentIDs []uuid.UUID)
+	inspectFuncCountByAssignmentIDs   func(ctx context.Context, assignmentIDs []uuid.UUID, includeDeactivated bool)
 	afterCountByAssignmentIDsCounter  uint64
 	beforeCountByAssignmentIDsCounter uint64
 	CountByAssignmentIDsMock          mAssignmentParticipantMockCountByAssignmentIDs
@@ -1946,14 +1946,16 @@ type AssignmentParticipantMockCountByAssignmentIDsExpectation struct {
 
 // AssignmentParticipantMockCountByAssignmentIDsParams contains parameters of the AssignmentParticipant.CountByAssignmentIDs
 type AssignmentParticipantMockCountByAssignmentIDsParams struct {
-	ctx           context.Context
-	assignmentIDs []uuid.UUID
+	ctx                context.Context
+	assignmentIDs      []uuid.UUID
+	includeDeactivated bool
 }
 
 // AssignmentParticipantMockCountByAssignmentIDsParamPtrs contains pointers to parameters of the AssignmentParticipant.CountByAssignmentIDs
 type AssignmentParticipantMockCountByAssignmentIDsParamPtrs struct {
-	ctx           *context.Context
-	assignmentIDs *[]uuid.UUID
+	ctx                *context.Context
+	assignmentIDs      *[]uuid.UUID
+	includeDeactivated *bool
 }
 
 // AssignmentParticipantMockCountByAssignmentIDsResults contains results of the AssignmentParticipant.CountByAssignmentIDs
@@ -1964,9 +1966,10 @@ type AssignmentParticipantMockCountByAssignmentIDsResults struct {
 
 // AssignmentParticipantMockCountByAssignmentIDsOrigins contains origins of expectations of the AssignmentParticipant.CountByAssignmentIDs
 type AssignmentParticipantMockCountByAssignmentIDsExpectationOrigins struct {
-	origin              string
-	originCtx           string
-	originAssignmentIDs string
+	origin                   string
+	originCtx                string
+	originAssignmentIDs      string
+	originIncludeDeactivated string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -1980,7 +1983,7 @@ func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Op
 }
 
 // Expect sets up expected params for AssignmentParticipant.CountByAssignmentIDs
-func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Expect(ctx context.Context, assignmentIDs []uuid.UUID) *mAssignmentParticipantMockCountByAssignmentIDs {
+func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Expect(ctx context.Context, assignmentIDs []uuid.UUID, includeDeactivated bool) *mAssignmentParticipantMockCountByAssignmentIDs {
 	if mmCountByAssignmentIDs.mock.funcCountByAssignmentIDs != nil {
 		mmCountByAssignmentIDs.mock.t.Fatalf("AssignmentParticipantMock.CountByAssignmentIDs mock is already set by Set")
 	}
@@ -1993,7 +1996,7 @@ func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Ex
 		mmCountByAssignmentIDs.mock.t.Fatalf("AssignmentParticipantMock.CountByAssignmentIDs mock is already set by ExpectParams functions")
 	}
 
-	mmCountByAssignmentIDs.defaultExpectation.params = &AssignmentParticipantMockCountByAssignmentIDsParams{ctx, assignmentIDs}
+	mmCountByAssignmentIDs.defaultExpectation.params = &AssignmentParticipantMockCountByAssignmentIDsParams{ctx, assignmentIDs, includeDeactivated}
 	mmCountByAssignmentIDs.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmCountByAssignmentIDs.expectations {
 		if minimock.Equal(e.params, mmCountByAssignmentIDs.defaultExpectation.params) {
@@ -2050,8 +2053,31 @@ func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Ex
 	return mmCountByAssignmentIDs
 }
 
+// ExpectIncludeDeactivatedParam3 sets up expected param includeDeactivated for AssignmentParticipant.CountByAssignmentIDs
+func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) ExpectIncludeDeactivatedParam3(includeDeactivated bool) *mAssignmentParticipantMockCountByAssignmentIDs {
+	if mmCountByAssignmentIDs.mock.funcCountByAssignmentIDs != nil {
+		mmCountByAssignmentIDs.mock.t.Fatalf("AssignmentParticipantMock.CountByAssignmentIDs mock is already set by Set")
+	}
+
+	if mmCountByAssignmentIDs.defaultExpectation == nil {
+		mmCountByAssignmentIDs.defaultExpectation = &AssignmentParticipantMockCountByAssignmentIDsExpectation{}
+	}
+
+	if mmCountByAssignmentIDs.defaultExpectation.params != nil {
+		mmCountByAssignmentIDs.mock.t.Fatalf("AssignmentParticipantMock.CountByAssignmentIDs mock is already set by Expect")
+	}
+
+	if mmCountByAssignmentIDs.defaultExpectation.paramPtrs == nil {
+		mmCountByAssignmentIDs.defaultExpectation.paramPtrs = &AssignmentParticipantMockCountByAssignmentIDsParamPtrs{}
+	}
+	mmCountByAssignmentIDs.defaultExpectation.paramPtrs.includeDeactivated = &includeDeactivated
+	mmCountByAssignmentIDs.defaultExpectation.expectationOrigins.originIncludeDeactivated = minimock.CallerInfo(1)
+
+	return mmCountByAssignmentIDs
+}
+
 // Inspect accepts an inspector function that has same arguments as the AssignmentParticipant.CountByAssignmentIDs
-func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Inspect(f func(ctx context.Context, assignmentIDs []uuid.UUID)) *mAssignmentParticipantMockCountByAssignmentIDs {
+func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Inspect(f func(ctx context.Context, assignmentIDs []uuid.UUID, includeDeactivated bool)) *mAssignmentParticipantMockCountByAssignmentIDs {
 	if mmCountByAssignmentIDs.mock.inspectFuncCountByAssignmentIDs != nil {
 		mmCountByAssignmentIDs.mock.t.Fatalf("Inspect function is already set for AssignmentParticipantMock.CountByAssignmentIDs")
 	}
@@ -2076,7 +2102,7 @@ func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Re
 }
 
 // Set uses given function f to mock the AssignmentParticipant.CountByAssignmentIDs method
-func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Set(f func(ctx context.Context, assignmentIDs []uuid.UUID) (m1 map[uuid.UUID]domain.AssignmentCounters, err error)) *AssignmentParticipantMock {
+func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Set(f func(ctx context.Context, assignmentIDs []uuid.UUID, includeDeactivated bool) (m1 map[uuid.UUID]domain.AssignmentCounters, err error)) *AssignmentParticipantMock {
 	if mmCountByAssignmentIDs.defaultExpectation != nil {
 		mmCountByAssignmentIDs.mock.t.Fatalf("Default expectation is already set for the AssignmentParticipant.CountByAssignmentIDs method")
 	}
@@ -2092,14 +2118,14 @@ func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) Se
 
 // When sets expectation for the AssignmentParticipant.CountByAssignmentIDs which will trigger the result defined by the following
 // Then helper
-func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) When(ctx context.Context, assignmentIDs []uuid.UUID) *AssignmentParticipantMockCountByAssignmentIDsExpectation {
+func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) When(ctx context.Context, assignmentIDs []uuid.UUID, includeDeactivated bool) *AssignmentParticipantMockCountByAssignmentIDsExpectation {
 	if mmCountByAssignmentIDs.mock.funcCountByAssignmentIDs != nil {
 		mmCountByAssignmentIDs.mock.t.Fatalf("AssignmentParticipantMock.CountByAssignmentIDs mock is already set by Set")
 	}
 
 	expectation := &AssignmentParticipantMockCountByAssignmentIDsExpectation{
 		mock:               mmCountByAssignmentIDs.mock,
-		params:             &AssignmentParticipantMockCountByAssignmentIDsParams{ctx, assignmentIDs},
+		params:             &AssignmentParticipantMockCountByAssignmentIDsParams{ctx, assignmentIDs, includeDeactivated},
 		expectationOrigins: AssignmentParticipantMockCountByAssignmentIDsExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmCountByAssignmentIDs.expectations = append(mmCountByAssignmentIDs.expectations, expectation)
@@ -2134,17 +2160,17 @@ func (mmCountByAssignmentIDs *mAssignmentParticipantMockCountByAssignmentIDs) in
 }
 
 // CountByAssignmentIDs implements mm_repository.AssignmentParticipant
-func (mmCountByAssignmentIDs *AssignmentParticipantMock) CountByAssignmentIDs(ctx context.Context, assignmentIDs []uuid.UUID) (m1 map[uuid.UUID]domain.AssignmentCounters, err error) {
+func (mmCountByAssignmentIDs *AssignmentParticipantMock) CountByAssignmentIDs(ctx context.Context, assignmentIDs []uuid.UUID, includeDeactivated bool) (m1 map[uuid.UUID]domain.AssignmentCounters, err error) {
 	mm_atomic.AddUint64(&mmCountByAssignmentIDs.beforeCountByAssignmentIDsCounter, 1)
 	defer mm_atomic.AddUint64(&mmCountByAssignmentIDs.afterCountByAssignmentIDsCounter, 1)
 
 	mmCountByAssignmentIDs.t.Helper()
 
 	if mmCountByAssignmentIDs.inspectFuncCountByAssignmentIDs != nil {
-		mmCountByAssignmentIDs.inspectFuncCountByAssignmentIDs(ctx, assignmentIDs)
+		mmCountByAssignmentIDs.inspectFuncCountByAssignmentIDs(ctx, assignmentIDs, includeDeactivated)
 	}
 
-	mm_params := AssignmentParticipantMockCountByAssignmentIDsParams{ctx, assignmentIDs}
+	mm_params := AssignmentParticipantMockCountByAssignmentIDsParams{ctx, assignmentIDs, includeDeactivated}
 
 	// Record call args
 	mmCountByAssignmentIDs.CountByAssignmentIDsMock.mutex.Lock()
@@ -2163,7 +2189,7 @@ func (mmCountByAssignmentIDs *AssignmentParticipantMock) CountByAssignmentIDs(ct
 		mm_want := mmCountByAssignmentIDs.CountByAssignmentIDsMock.defaultExpectation.params
 		mm_want_ptrs := mmCountByAssignmentIDs.CountByAssignmentIDsMock.defaultExpectation.paramPtrs
 
-		mm_got := AssignmentParticipantMockCountByAssignmentIDsParams{ctx, assignmentIDs}
+		mm_got := AssignmentParticipantMockCountByAssignmentIDsParams{ctx, assignmentIDs, includeDeactivated}
 
 		if mm_want_ptrs != nil {
 
@@ -2175,6 +2201,11 @@ func (mmCountByAssignmentIDs *AssignmentParticipantMock) CountByAssignmentIDs(ct
 			if mm_want_ptrs.assignmentIDs != nil && !minimock.Equal(*mm_want_ptrs.assignmentIDs, mm_got.assignmentIDs) {
 				mmCountByAssignmentIDs.t.Errorf("AssignmentParticipantMock.CountByAssignmentIDs got unexpected parameter assignmentIDs, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmCountByAssignmentIDs.CountByAssignmentIDsMock.defaultExpectation.expectationOrigins.originAssignmentIDs, *mm_want_ptrs.assignmentIDs, mm_got.assignmentIDs, minimock.Diff(*mm_want_ptrs.assignmentIDs, mm_got.assignmentIDs))
+			}
+
+			if mm_want_ptrs.includeDeactivated != nil && !minimock.Equal(*mm_want_ptrs.includeDeactivated, mm_got.includeDeactivated) {
+				mmCountByAssignmentIDs.t.Errorf("AssignmentParticipantMock.CountByAssignmentIDs got unexpected parameter includeDeactivated, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCountByAssignmentIDs.CountByAssignmentIDsMock.defaultExpectation.expectationOrigins.originIncludeDeactivated, *mm_want_ptrs.includeDeactivated, mm_got.includeDeactivated, minimock.Diff(*mm_want_ptrs.includeDeactivated, mm_got.includeDeactivated))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
@@ -2189,9 +2220,9 @@ func (mmCountByAssignmentIDs *AssignmentParticipantMock) CountByAssignmentIDs(ct
 		return (*mm_results).m1, (*mm_results).err
 	}
 	if mmCountByAssignmentIDs.funcCountByAssignmentIDs != nil {
-		return mmCountByAssignmentIDs.funcCountByAssignmentIDs(ctx, assignmentIDs)
+		return mmCountByAssignmentIDs.funcCountByAssignmentIDs(ctx, assignmentIDs, includeDeactivated)
 	}
-	mmCountByAssignmentIDs.t.Fatalf("Unexpected call to AssignmentParticipantMock.CountByAssignmentIDs. %v %v", ctx, assignmentIDs)
+	mmCountByAssignmentIDs.t.Fatalf("Unexpected call to AssignmentParticipantMock.CountByAssignmentIDs. %v %v %v", ctx, assignmentIDs, includeDeactivated)
 	return
 }
 

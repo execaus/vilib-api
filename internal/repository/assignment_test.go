@@ -360,5 +360,204 @@ func TestRepository_AssignmentSelectActiveByGroupID_ReturnsAssignmentsOfGroupVid
 	})
 }
 
+func TestRepository_AssignmentSelectByFilter_ScopeAllSeesWholeAccount(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		fixture := newTestAccountAndVideo(t, r, f)
+		otherGroup, err := r.UserGroup.Insert(t.Context(), fixture.AccountID, f.Beer().Name())
+		require.NoError(t, err)
+		otherVideo, err := r.Video.Insert(
+			t.Context(),
+			f.Beer().Name(),
+			otherGroup.ID,
+			fixture.Video.Author,
+			domain.VideoStatusReady,
+		)
+		require.NoError(t, err)
+
+		first, err := r.Assignment.Insert(
+			t.Context(), fixture.AccountID, fixture.Video.ID, fixture.Video.Name,
+			fixture.Video.GroupID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDays, nil, ptrInt(5), "",
+		)
+		require.NoError(t, err)
+		second, err := r.Assignment.Insert(
+			t.Context(), fixture.AccountID, otherVideo.ID, otherVideo.Name,
+			otherGroup.ID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDays, nil, ptrInt(5), "",
+		)
+		require.NoError(t, err)
+
+		got, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: fixture.AccountID,
+			Scope:     repository.AssignmentScope{All: true},
+		})
+
+		require.NoError(t, err)
+		require.ElementsMatch(t, []uuid.UUID{first.ID, second.ID}, assignmentIDs(got))
+	})
+}
+
+func TestRepository_AssignmentSelectByFilter_ScopeLimitsToGroupsOrOwnAssignments(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		fixture := newTestAccountAndVideo(t, r, f)
+		otherGroup, err := r.UserGroup.Insert(t.Context(), fixture.AccountID, f.Beer().Name())
+		require.NoError(t, err)
+		otherVideo, err := r.Video.Insert(
+			t.Context(),
+			f.Beer().Name(),
+			otherGroup.ID,
+			fixture.Video.Author,
+			domain.VideoStatusReady,
+		)
+		require.NoError(t, err)
+		foreignCreator := newTestUser(t, r, f, fixture.AccountRoleID)
+
+		// Назначение в области (группа видео принадлежит списку GroupIDs).
+		inGroup, err := r.Assignment.Insert(
+			t.Context(), fixture.AccountID, fixture.Video.ID, fixture.Video.Name,
+			fixture.Video.GroupID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDays, nil, ptrInt(5), "",
+		)
+		require.NoError(t, err)
+
+		// Собственное назначение инициатора вне области групп — видно по created_by.
+		ownedOutsideGroup, err := r.Assignment.Insert(
+			t.Context(), fixture.AccountID, otherVideo.ID, otherVideo.Name,
+			otherGroup.ID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDays, nil, ptrInt(5), "",
+		)
+		require.NoError(t, err)
+
+		// Чужое назначение вне области групп — не видно.
+		_, err = r.Assignment.Insert(
+			t.Context(), fixture.AccountID, otherVideo.ID, otherVideo.Name,
+			otherGroup.ID, f.Beer().Name(), foreignCreator.ID,
+			domain.AssignmentDueModeDays, nil, ptrInt(5), "",
+		)
+		require.NoError(t, err)
+
+		got, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: fixture.AccountID,
+			Scope: repository.AssignmentScope{
+				All: false, GroupIDs: []uuid.UUID{fixture.Video.GroupID}, CreatedBy: fixture.Video.Author,
+			},
+		})
+
+		require.NoError(t, err)
+		require.ElementsMatch(t, []uuid.UUID{inGroup.ID, ownedOutsideGroup.ID}, assignmentIDs(got))
+	})
+}
+
+func TestRepository_AssignmentSelectByFilter_FiltersByGroupVideoStatusAndUser(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+		other, otherFixture := newTestAssignment(t, r, f)
+		require.NotEqual(t, assignment.ID, other.ID)
+
+		_, err := r.Assignment.Cancel(
+			t.Context(), other.ID, nil, domain.AssignmentCancelReasonManual,
+			time.Now().UTC().Truncate(time.Millisecond),
+		)
+		require.NoError(t, err)
+
+		participant := newTestUser(t, r, f, fixture.AccountRoleID)
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		_, err = r.AssignmentParticipant.InsertBatch(t.Context(), []domain.AssignmentParticipant{
+			{
+				AssignmentID: assignment.ID, UserID: participant.ID,
+				Status: domain.AssignmentParticipantStatusAssigned, Source: domain.AssignmentParticipantSourcePersonal,
+				EnrolledAt: now, DueAt: now.Add(24 * time.Hour),
+			},
+		})
+		require.NoError(t, err)
+
+		scopeAll := repository.AssignmentScope{All: true}
+
+		byGroup, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: fixture.AccountID, Scope: scopeAll, GroupID: &fixture.Video.GroupID,
+		})
+		require.NoError(t, err)
+		require.ElementsMatch(t, []uuid.UUID{assignment.ID}, assignmentIDs(byGroup))
+
+		byVideo, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: fixture.AccountID, Scope: scopeAll, VideoID: &fixture.Video.ID,
+		})
+		require.NoError(t, err)
+		require.ElementsMatch(t, []uuid.UUID{assignment.ID}, assignmentIDs(byVideo))
+
+		cancelledStatus := domain.AssignmentStatusCancelled
+		byStatus, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: otherFixture.AccountID, Scope: repository.AssignmentScope{All: true}, Status: &cancelledStatus,
+		})
+		require.NoError(t, err)
+		require.ElementsMatch(t, []uuid.UUID{other.ID}, assignmentIDs(byStatus))
+
+		byUser, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: fixture.AccountID, Scope: scopeAll, UserID: &participant.ID,
+		})
+		require.NoError(t, err)
+		require.ElementsMatch(t, []uuid.UUID{assignment.ID}, assignmentIDs(byUser))
+	})
+}
+
+func TestRepository_AssignmentSelectByFilter_FiltersByDueRange(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		fixture := newTestAccountAndVideo(t, r, f)
+
+		inRangeDueAt := time.Now().Add(5 * 24 * time.Hour).UTC().Truncate(time.Millisecond)
+		outOfRangeDueAt := time.Now().Add(60 * 24 * time.Hour).UTC().Truncate(time.Millisecond)
+
+		inRange, err := r.Assignment.Insert(
+			t.Context(), fixture.AccountID, fixture.Video.ID, fixture.Video.Name,
+			fixture.Video.GroupID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDate, &inRangeDueAt, nil, "",
+		)
+		require.NoError(t, err)
+		_, err = r.Assignment.Insert(
+			t.Context(), fixture.AccountID, fixture.Video.ID, fixture.Video.Name,
+			fixture.Video.GroupID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDate, &outOfRangeDueAt, nil, "",
+		)
+		require.NoError(t, err)
+		// due_mode=days назначение без due_at — вне диапазона по построению фильтра.
+		_, err = r.Assignment.Insert(
+			t.Context(), fixture.AccountID, fixture.Video.ID, fixture.Video.Name,
+			fixture.Video.GroupID, f.Beer().Name(), fixture.Video.Author,
+			domain.AssignmentDueModeDays, nil, ptrInt(5), "",
+		)
+		require.NoError(t, err)
+
+		dueFrom := time.Now().UTC()
+		dueTo := time.Now().Add(10 * 24 * time.Hour).UTC()
+
+		got, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: fixture.AccountID, Scope: repository.AssignmentScope{All: true},
+			DueFrom: &dueFrom, DueTo: &dueTo,
+		})
+
+		require.NoError(t, err)
+		require.ElementsMatch(t, []uuid.UUID{inRange.ID}, assignmentIDs(got))
+	})
+}
+
+// assignmentIDs собирает идентификаторы назначений для сравнения без учёта порядка —
+// SelectByFilter не гарантирует сортировку (сортировка на клиенте, §5 дизайна эпика Э3).
+func assignmentIDs(assignments []domain.Assignment) []uuid.UUID {
+	ids := make([]uuid.UUID, len(assignments))
+	for i, a := range assignments {
+		ids[i] = a.ID
+	}
+
+	return ids
+}
+
 // ptrInt — указатель на литерал int для необязательных полей репозитория.
 func ptrInt(v int) *int { return &v }

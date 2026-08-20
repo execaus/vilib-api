@@ -46,6 +46,43 @@ definitions:
           $ref: '#/definitions/dto.GroupMember'
         type: array
     type: object
+  dto.Assignment:
+    properties:
+      cancel_reason:
+        type: string
+      cancelled_at:
+        type: string
+      comment:
+        type: string
+      counters:
+        $ref: '#/definitions/dto.AssignmentCounters'
+      created_at:
+        type: string
+      created_by:
+        $ref: '#/definitions/dto.AssignmentUser'
+      due_at:
+        type: string
+      due_days:
+        type: integer
+      due_mode:
+        type: string
+      group_id:
+        type: string
+      group_name:
+        type: string
+      id:
+        type: string
+      status:
+        type: string
+      targets:
+        items:
+          $ref: '#/definitions/dto.AssignmentTarget'
+        type: array
+      video_id:
+        type: string
+      video_name:
+        type: string
+    type: object
   dto.AssignmentCounters:
     properties:
       assigned:
@@ -119,6 +156,47 @@ definitions:
       type:
         type: string
       user_id:
+        type: string
+    type: object
+  dto.AssignmentListItem:
+    properties:
+      cancel_reason:
+        type: string
+      cancelled_at:
+        type: string
+      comment:
+        type: string
+      counters:
+        $ref: '#/definitions/dto.AssignmentCounters'
+      created_at:
+        type: string
+      created_by:
+        $ref: '#/definitions/dto.AssignmentUser'
+      due_at:
+        type: string
+      due_days:
+        type: integer
+      due_mode:
+        type: string
+      group_id:
+        type: string
+      group_name:
+        type: string
+      id:
+        type: string
+      participants:
+        items:
+          $ref: '#/definitions/dto.AssignmentParticipant'
+        type: array
+      status:
+        type: string
+      targets:
+        items:
+          $ref: '#/definitions/dto.AssignmentTarget'
+        type: array
+      video_id:
+        type: string
+      video_name:
         type: string
     type: object
   dto.AssignmentParticipant:
@@ -467,6 +545,20 @@ definitions:
         description: Status — состояние сервиса, при успешной проверке всегда "ok".
         type: string
     type: object
+  dto.ListAssignmentsResponse:
+    properties:
+      assignments:
+        items:
+          $ref: '#/definitions/dto.AssignmentListItem'
+        type: array
+    type: object
+  dto.ListUserAssignmentsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/dto.UserAssignmentItem'
+        type: array
+    type: object
   dto.LoginRequest:
     properties:
       email:
@@ -798,6 +890,13 @@ definitions:
       surname:
         type: string
     type: object
+  dto.UserAssignmentItem:
+    properties:
+      assignment:
+        $ref: '#/definitions/dto.Assignment'
+      participant:
+        $ref: '#/definitions/dto.AssignmentParticipant'
+    type: object
   dto.UserGroup:
     properties:
       account_id:
@@ -948,6 +1047,73 @@ paths:
       tags:
       - health
   /api/v1/accounts/{accountId}/assignments:
+    get:
+      description: |-
+        Возвращает назначения аккаунта с фильтрами и счётчиками статусов (§4, §5, §6
+        дизайна эпика Э3, В-53). Область видимости — правило В-8: назначивший видит
+        свои назначения всегда, иначе — только область права (аккаунт целиком или
+        список групп); нет области — пустой список, не ошибка. include_deactivated=false
+        (по умолчанию) исключает деактивированных из счётчиков и участников.
+        expand_participants=true добавляет в каждый элемент список участников — основа
+        сводки «сотрудник × видео» (С-7).
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы видео
+        in: query
+        name: group_id
+        type: string
+      - description: ID видео
+        in: query
+        name: video_id
+        type: string
+      - description: ID участника
+        in: query
+        name: user_id
+        type: string
+      - description: 'Статус назначения: active, cancelled'
+        in: query
+        name: status
+        type: string
+      - description: Начало диапазона срока (RFC3339)
+        in: query
+        name: due_from
+        type: string
+      - description: Конец диапазона срока (RFC3339)
+        in: query
+        name: due_to
+        type: string
+      - description: Включать деактивированных участников
+        in: query
+        name: include_deactivated
+        type: boolean
+      - description: Добавить участников в каждый элемент
+        in: query
+        name: expand_participants
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ListAssignmentsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Список/отчёт по назначениям
+      tags:
+      - assignments
     post:
       consumes:
       - application/json
@@ -2643,6 +2809,48 @@ paths:
       summary: Обновление пользователя
       tags:
       - users
+  /api/v1/accounts/{accountId}/users/{userId}/assignments:
+    get:
+      description: |-
+        Возвращает все назначения одного сотрудника с учётом области В-8 (§4, §6
+        дизайна эпика Э3, В-53): назначивший видит свои назначения этого сотрудника
+        всегда, иначе — только назначения из своей области (аккаунт целиком или список
+        групп). Сотрудник не состоит в аккаунте — 404.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID сотрудника
+        in: path
+        name: userId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ListUserAssignmentsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Отчёт по назначениям сотрудника
+      tags:
+      - assignments
   /api/v1/accounts/{accountId}/users/{userId}/reactivate:
     post:
       description: Реактивирует ранее деактивированного пользователя в аккаунте

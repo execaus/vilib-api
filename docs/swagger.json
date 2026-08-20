@@ -30,6 +30,98 @@
             }
         },
         "/api/v1/accounts/{accountId}/assignments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает назначения аккаунта с фильтрами и счётчиками статусов (§4, §5, §6\nдизайна эпика Э3, В-53). Область видимости — правило В-8: назначивший видит\nсвои назначения всегда, иначе — только область права (аккаунт целиком или\nсписок групп); нет области — пустой список, не ошибка. include_deactivated=false\n(по умолчанию) исключает деактивированных из счётчиков и участников.\nexpand_participants=true добавляет в каждый элемент список участников — основа\nсводки «сотрудник × видео» (С-7).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assignments"
+                ],
+                "summary": "Список/отчёт по назначениям",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы видео",
+                        "name": "group_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "video_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID участника",
+                        "name": "user_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Статус назначения: active, cancelled",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Начало диапазона срока (RFC3339)",
+                        "name": "due_from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Конец диапазона срока (RFC3339)",
+                        "name": "due_to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Включать деактивированных участников",
+                        "name": "include_deactivated",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Добавить участников в каждый элемент",
+                        "name": "expand_participants",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ListAssignmentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -2546,6 +2638,65 @@
                 }
             }
         },
+        "/api/v1/accounts/{accountId}/users/{userId}/assignments": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает все назначения одного сотрудника с учётом области В-8 (§4, §6\nдизайна эпика Э3, В-53): назначивший видит свои назначения этого сотрудника\nвсегда, иначе — только назначения из своей области (аккаунт целиком или список\nгрупп). Сотрудник не состоит в аккаунте — 404.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "assignments"
+                ],
+                "summary": "Отчёт по назначениям сотрудника",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID сотрудника",
+                        "name": "userId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ListUserAssignmentsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        },
         "/api/v1/accounts/{accountId}/users/{userId}/reactivate": {
             "post": {
                 "security": [
@@ -3069,6 +3220,62 @@
                 }
             }
         },
+        "dto.Assignment": {
+            "type": "object",
+            "properties": {
+                "cancel_reason": {
+                    "type": "string"
+                },
+                "cancelled_at": {
+                    "type": "string"
+                },
+                "comment": {
+                    "type": "string"
+                },
+                "counters": {
+                    "$ref": "#/definitions/dto.AssignmentCounters"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "$ref": "#/definitions/dto.AssignmentUser"
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "due_days": {
+                    "type": "integer"
+                },
+                "due_mode": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AssignmentTarget"
+                    }
+                },
+                "video_id": {
+                    "type": "string"
+                },
+                "video_name": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.AssignmentCounters": {
             "type": "object",
             "properties": {
@@ -3179,6 +3386,68 @@
                     "type": "string"
                 },
                 "user_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.AssignmentListItem": {
+            "type": "object",
+            "properties": {
+                "cancel_reason": {
+                    "type": "string"
+                },
+                "cancelled_at": {
+                    "type": "string"
+                },
+                "comment": {
+                    "type": "string"
+                },
+                "counters": {
+                    "$ref": "#/definitions/dto.AssignmentCounters"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "$ref": "#/definitions/dto.AssignmentUser"
+                },
+                "due_at": {
+                    "type": "string"
+                },
+                "due_days": {
+                    "type": "integer"
+                },
+                "due_mode": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "participants": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AssignmentParticipant"
+                    }
+                },
+                "status": {
+                    "type": "string"
+                },
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AssignmentTarget"
+                    }
+                },
+                "video_id": {
+                    "type": "string"
+                },
+                "video_name": {
                     "type": "string"
                 }
             }
@@ -3692,6 +3961,28 @@
                 }
             }
         },
+        "dto.ListAssignmentsResponse": {
+            "type": "object",
+            "properties": {
+                "assignments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.AssignmentListItem"
+                    }
+                }
+            }
+        },
+        "dto.ListUserAssignmentsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.UserAssignmentItem"
+                    }
+                }
+            }
+        },
         "dto.LoginRequest": {
             "type": "object",
             "required": [
@@ -4187,6 +4478,17 @@
                 },
                 "surname": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.UserAssignmentItem": {
+            "type": "object",
+            "properties": {
+                "assignment": {
+                    "$ref": "#/definitions/dto.Assignment"
+                },
+                "participant": {
+                    "$ref": "#/definitions/dto.AssignmentParticipant"
                 }
             }
         },

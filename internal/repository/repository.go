@@ -272,6 +272,30 @@ type WatchSession interface {
 	DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
+// AssignmentScope — область видимости назначений по правилу чтения В-8 (§2 дизайна эпика Э3):
+// All=true — виден весь аккаунт (аккаунтное право/Owner); иначе — назначения групп из GroupIDs
+// плюс собственные назначения инициатора (CreatedBy) независимо от области.
+type AssignmentScope struct {
+	All       bool
+	GroupIDs  []uuid.UUID
+	CreatedBy uuid.UUID
+}
+
+// AssignmentFilter — фильтры списка/отчёта назначений (§4, §5 дизайна эпика Э3,
+// Assignment.SelectByFilter): nil-поле фильтр не применяет.
+type AssignmentFilter struct {
+	AccountID uuid.UUID
+	Scope     AssignmentScope
+	GroupID   *uuid.UUID
+	VideoID   *uuid.UUID
+	// UserID фильтрует назначения, в которых есть персональная запись указанного пользователя
+	// (в любом статусе).
+	UserID  *uuid.UUID
+	Status  *domain.AssignmentStatus
+	DueFrom *time.Time
+	DueTo   *time.Time
+}
+
 // Assignment — репозиторий назначений обязательного обучения (§1.1, §4 дизайна эпика Э3).
 type Assignment interface {
 	// Insert создаёт назначение в статусе active со снимком названия видео и группы
@@ -315,6 +339,10 @@ type Assignment interface {
 	// SelectActiveByGroupID выбирает действующие назначения видео указанной группы (каскад
 	// OnGroupDeleted).
 	SelectActiveByGroupID(ctx context.Context, groupID uuid.UUID) ([]domain.Assignment, error)
+	// SelectByFilter выбирает назначения аккаунта по области В-8 и дополнительным фильтрам
+	// списка/отчёта (AssignmentService.List/ListForUser, §4, §5 дизайна эпика Э3). Сортировка
+	// — на стороне клиента, метод её не гарантирует.
+	SelectByFilter(ctx context.Context, f AssignmentFilter) ([]domain.Assignment, error)
 }
 
 // AssignmentTarget — репозиторий целей назначения: конкретный пользователь или группа
@@ -344,10 +372,13 @@ type AssignmentParticipant interface {
 	// (AssignmentService.ListMine).
 	SelectByUserID(ctx context.Context, userID uuid.UUID) ([]domain.AssignmentParticipant, error)
 	// CountByAssignmentIDs агрегирует счётчики статусов участников по каждому назначению
-	// (включая просроченных) одним запросом GROUP BY.
+	// (включая просроченных) одним запросом GROUP BY. includeDeactivated=false исключает из
+	// счётчиков участников с деактивированной строкой пользователя (JOIN на users, §4 дизайна
+	// эпика Э3, В-53).
 	CountByAssignmentIDs(
 		ctx context.Context,
 		assignmentIDs []uuid.UUID,
+		includeDeactivated bool,
 	) (map[uuid.UUID]domain.AssignmentCounters, error)
 	// UpdateStatusByUserVideo переводит статус участника из from в to для всех активных
 	// назначений видео videoID, в которых участвует userID. Возвращает id обновлённых

@@ -209,7 +209,7 @@ func TestRepository_AssignmentParticipantCountByAssignmentIDs_AggregatesStatuses
 		})
 		require.NoError(t, err)
 
-		counters, err := r.AssignmentParticipant.CountByAssignmentIDs(t.Context(), []uuid.UUID{assignment.ID})
+		counters, err := r.AssignmentParticipant.CountByAssignmentIDs(t.Context(), []uuid.UUID{assignment.ID}, true)
 
 		require.NoError(t, err)
 		got := counters[assignment.ID]
@@ -222,11 +222,57 @@ func TestRepository_AssignmentParticipantCountByAssignmentIDs_AggregatesStatuses
 	})
 }
 
+func TestRepository_AssignmentParticipantCountByAssignmentIDs_ExcludesDeactivatedWhenNotIncluded(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		assignment, fixture := newTestAssignment(t, r, f)
+		now := time.Now().UTC().Truncate(time.Millisecond)
+
+		activeUser := newTestUser(t, r, f, fixture.AccountRoleID)
+		deactivatedUser := newTestUser(t, r, f, fixture.AccountRoleID)
+
+		_, err := r.AssignmentParticipant.InsertBatch(t.Context(), []domain.AssignmentParticipant{
+			{
+				AssignmentID: assignment.ID, UserID: activeUser.ID,
+				Status: domain.AssignmentParticipantStatusAssigned, Source: domain.AssignmentParticipantSourcePersonal,
+				EnrolledAt: now, DueAt: now.Add(-time.Hour), // просрочен
+			},
+			{
+				AssignmentID: assignment.ID, UserID: deactivatedUser.ID,
+				Status: domain.AssignmentParticipantStatusAssigned, Source: domain.AssignmentParticipantSourcePersonal,
+				EnrolledAt: now, DueAt: now.Add(-time.Hour), // тоже просрочен, но деактивирован
+			},
+		})
+		require.NoError(t, err)
+
+		require.NoError(t, r.User.Deactivate(t.Context(), deactivatedUser.ID))
+
+		withoutDeactivated, err := r.AssignmentParticipant.CountByAssignmentIDs(
+			t.Context(),
+			[]uuid.UUID{assignment.ID},
+			false,
+		)
+		require.NoError(t, err)
+		require.Equal(t, 1, withoutDeactivated[assignment.ID].Total)
+		require.Equal(t, 1, withoutDeactivated[assignment.ID].Overdue)
+
+		withDeactivated, err := r.AssignmentParticipant.CountByAssignmentIDs(
+			t.Context(),
+			[]uuid.UUID{assignment.ID},
+			true,
+		)
+		require.NoError(t, err)
+		require.Equal(t, 2, withDeactivated[assignment.ID].Total)
+		require.Equal(t, 2, withDeactivated[assignment.ID].Overdue)
+	})
+}
+
 func TestRepository_AssignmentParticipantCountByAssignmentIDs_EmptyInputNoQuery(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
-		got, err := r.AssignmentParticipant.CountByAssignmentIDs(t.Context(), nil)
+		got, err := r.AssignmentParticipant.CountByAssignmentIDs(t.Context(), nil, true)
 
 		require.NoError(t, err)
 		require.Empty(t, got)

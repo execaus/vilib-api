@@ -254,19 +254,23 @@ func (r *AssignmentParticipantRepository) SelectByUserID(
 
 // countByAssignmentIDsSQLTemplate — агрегат статусов участников по назначениям одним GROUP BY
 // (§4 дизайна эпика Э3): overdue считает только незавершённых с истёкшим персональным сроком.
+// JOIN на users нужен только для фильтра включения деактивированных (В-53) — единственный JOIN
+// в отчёте, оправдан дизайном (§4).
 const countByAssignmentIDsSQLTemplate = `
-SELECT assignment_id,
-	count(*) FILTER (WHERE status = 'assigned')::int AS assigned,
-	count(*) FILTER (WHERE status = 'in_progress')::int AS in_progress,
-	count(*) FILTER (WHERE status = 'completed')::int AS completed,
-	count(*) FILTER (WHERE status = 'cancelled')::int AS cancelled,
+SELECT ap.assignment_id,
+	count(*) FILTER (WHERE ap.status = 'assigned')::int AS assigned,
+	count(*) FILTER (WHERE ap.status = 'in_progress')::int AS in_progress,
+	count(*) FILTER (WHERE ap.status = 'completed')::int AS completed,
+	count(*) FILTER (WHERE ap.status = 'cancelled')::int AS cancelled,
 	count(*)::int AS total,
 	count(*) FILTER (
-		WHERE status IN ('assigned', 'in_progress') AND due_at < now()
+		WHERE ap.status IN ('assigned', 'in_progress') AND ap.due_at < now()
 	)::int AS overdue
-FROM assignment_participants
-WHERE assignment_id IN (%s)
-GROUP BY assignment_id
+FROM assignment_participants ap
+INNER JOIN users u ON u.user_id = ap.user_id
+WHERE ap.assignment_id IN (%s)
+  AND (? OR u.deactivated_at IS NULL)
+GROUP BY ap.assignment_id
 `
 
 // assignmentCounterRow — строка сканирования результата countByAssignmentIDsSQLTemplate.
@@ -283,9 +287,11 @@ type assignmentCounterRow struct {
 // CountByAssignmentIDs агрегирует счётчики статусов участников по каждому назначению одним
 // запросом (§4 дизайна эпика Э3) — назначения без ни одной строки в результате не
 // присутствуют в возвращённой карте (вызывающая сторона трактует отсутствие как нулевые
-// счётчики). Пустой список идентификаторов не порождает запроса к БД.
+// счётчики). includeDeactivated=false исключает из счётчиков участников с деактивированной
+// строкой пользователя (В-53, критерий Э3-Т29/КП-8). Пустой список идентификаторов не
+// порождает запроса к БД.
 func (r *AssignmentParticipantRepository) CountByAssignmentIDs(
-	ctx context.Context, assignmentIDs []uuid.UUID,
+	ctx context.Context, assignmentIDs []uuid.UUID, includeDeactivated bool,
 ) (map[uuid.UUID]domain.AssignmentCounters, error) {
 	result := make(map[uuid.UUID]domain.AssignmentCounters, len(assignmentIDs))
 	if len(assignmentIDs) == 0 {
@@ -295,11 +301,12 @@ func (r *AssignmentParticipantRepository) CountByAssignmentIDs(
 	exec := r.provider.GetExecutor(ctx)
 
 	placeholders := make([]string, len(assignmentIDs))
-	args := make([]any, len(assignmentIDs))
+	args := make([]any, len(assignmentIDs), len(assignmentIDs)+1)
 	for i, id := range assignmentIDs {
 		placeholders[i] = "?"
 		args[i] = id
 	}
+	args = append(args, includeDeactivated)
 
 	query := psql.RawQuery(fmt.Sprintf(countByAssignmentIDsSQLTemplate, strings.Join(placeholders, ", ")), args...)
 

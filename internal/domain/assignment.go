@@ -335,3 +335,43 @@ type CreateAssignment struct {
 	DueDays *int
 	Comment string
 }
+
+// AssignmentFilter — фильтры списка/отчёта назначений (§4, §5 дизайна эпика Э3, В-53,
+// AssignmentService.List): nil-поле фильтр не применяет.
+type AssignmentFilter struct {
+	GroupID *uuid.UUID
+	VideoID *uuid.UUID
+	// UserID фильтрует назначения, где есть персональная запись указанного пользователя
+	// (в любом статусе).
+	UserID  *uuid.UUID
+	Status  *AssignmentStatus
+	DueFrom *time.Time
+	DueTo   *time.Time
+	// IncludeDeactivated=false (по умолчанию) исключает из счётчиков и списка участников
+	// пользователей с деактивированной строкой (Э3-Т29, КП-8).
+	IncludeDeactivated bool
+	// ExpandParticipants добавляет в каждый элемент список участников — основа сводки
+	// «сотрудник × видео» (С-7).
+	ExpandParticipants bool
+}
+
+// AssignmentListItem — элемент списка/отчёта по назначениям (§5 контракта эпика Э3, GET
+// .../assignments, В-53): назначение с целями и счётчиками; Participants — только при
+// ExpandParticipants (nil иначе, не путать с пустым списком).
+type AssignmentListItem struct {
+	Assignment    Assignment
+	CreatedByUser User
+	Targets       []AssignmentTarget
+	Counters      AssignmentCounters
+	Participants  []ParticipantDetails
+}
+
+// UserAssignmentItem — назначение в разрезе одного участника для отчёта по сотруднику (§5
+// контракта эпика Э3, GET .../users/{id}/assignments, В-53).
+type UserAssignmentItem struct {
+	Assignment    Assignment
+	CreatedByUser User
+	Targets       []AssignmentTarget
+	Counters      AssignmentCounters
+	Participant   ParticipantDetails
+}

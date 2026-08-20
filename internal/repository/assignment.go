@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/stephenafamo/bob"
 	"github.com/stephenafamo/bob/dialect/psql"
+	"github.com/stephenafamo/bob/dialect/psql/dialect"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"github.com/stephenafamo/bob/dialect/psql/um"
 	"go.uber.org/zap"
@@ -289,6 +290,71 @@ func (r *AssignmentRepository) SelectActiveByGroupID(
 		sm.Where(schema.Assignments.Columns.GroupID.EQ(psql.Arg(groupID))),
 		sm.Where(schema.Assignments.Columns.Status.EQ(psql.Arg(string(domain.AssignmentStatusActive)))),
 	).All(ctx, exec)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return assignmentsFromDB(assignmentsDB), nil
+}
+
+// assignmentScopeExpr переводит область В-8 (AssignmentScope) в SQL-условие: назначение видно,
+// если область — весь аккаунт, либо оно принадлежит одной из групп области, либо его создал
+// сам инициатор (собственные назначения видны независимо от области, §2 дизайна эпика Э3).
+func assignmentScopeExpr(scope AssignmentScope) psql.Expression {
+	createdByExpr := schema.Assignments.Columns.CreatedBy.EQ(psql.Arg(scope.CreatedBy))
+	if scope.All {
+		return createdByExpr
+	}
+	if len(scope.GroupIDs) == 0 {
+		return createdByExpr
+	}
+
+	groupArgs := make([]bob.Expression, len(scope.GroupIDs))
+	for i, id := range scope.GroupIDs {
+		groupArgs[i] = psql.Arg(id)
+	}
+
+	return psql.Or(schema.Assignments.Columns.GroupID.In(groupArgs...), createdByExpr)
+}
+
+// SelectByFilter выбирает назначения аккаунта по области В-8 и дополнительным фильтрам списка/
+// отчёта (§4, §5 дизайна эпика Э3, AssignmentService.List/ListForUser). Область all=true не
+// сужает выборку никаким условием сверх account_id — назначение видно целиком по аккаунтному
+// праву.
+func (r *AssignmentRepository) SelectByFilter(ctx context.Context, f AssignmentFilter) ([]domain.Assignment, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	mods := []bob.Mod[*dialect.SelectQuery]{
+		sm.Where(schema.Assignments.Columns.AccountID.EQ(psql.Arg(f.AccountID))),
+	}
+	if !f.Scope.All {
+		mods = append(mods, sm.Where(assignmentScopeExpr(f.Scope)))
+	}
+	if f.GroupID != nil {
+		mods = append(mods, sm.Where(schema.Assignments.Columns.GroupID.EQ(psql.Arg(*f.GroupID))))
+	}
+	if f.VideoID != nil {
+		mods = append(mods, sm.Where(schema.Assignments.Columns.VideoID.EQ(psql.Arg(*f.VideoID))))
+	}
+	if f.Status != nil {
+		mods = append(mods, sm.Where(schema.Assignments.Columns.Status.EQ(psql.Arg(string(*f.Status)))))
+	}
+	if f.DueFrom != nil {
+		mods = append(mods, sm.Where(schema.Assignments.Columns.DueAt.GTE(psql.Arg(*f.DueFrom))))
+	}
+	if f.DueTo != nil {
+		mods = append(mods, sm.Where(schema.Assignments.Columns.DueAt.LTE(psql.Arg(*f.DueTo))))
+	}
+	if f.UserID != nil {
+		mods = append(mods, sm.Where(psql.Raw(
+			"exists (select 1 from assignment_participants ap "+
+				"where ap.assignment_id = assignments.assignment_id and ap.user_id = ?)",
+			*f.UserID,
+		)))
+	}
+
+	assignmentsDB, err := schema.Assignments.Query(mods...).All(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return nil, err

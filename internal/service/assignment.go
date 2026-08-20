@@ -659,7 +659,8 @@ func (s *AssignmentService) Get(
 		return domain.AssignmentDetails{}, err
 	}
 
-	counters, err := s.participants.CountByAssignmentIDs(ctx, []uuid.UUID{id})
+	// Get не скрывает деактивированных (флаг is_active — фильтр на клиенте, §4 дизайна эпика Э3).
+	counters, err := s.participants.CountByAssignmentIDs(ctx, []uuid.UUID{id}, true)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.AssignmentDetails{}, err
@@ -1052,6 +1053,430 @@ func buildMyAssignment(
 		Participant: p, Assignment: assignment, Video: video,
 		AssignedBy: authorByID[assignment.CreatedBy], CoveragePct: coverage,
 	}
+}
+
+// assignmentScope переводит область чтения В-8 в репозиторный Scope (§2, §4 дизайна эпика Э3,
+// В-53): назначивший всегда видит свои назначения (CreatedBy); обладатель аккаунтного права —
+// весь аккаунт (All); иначе — только перечисленные группы.
+func (s *AssignmentService) assignmentScope(
+	ctx context.Context, accountID, initiatorID uuid.UUID,
+) (repository.AssignmentScope, error) {
+	all, groups, err := s.srv.Access.ManagedAssignmentGroups(ctx, accountID, initiatorID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return repository.AssignmentScope{}, err
+	}
+
+	return repository.AssignmentScope{All: all, GroupIDs: groups, CreatedBy: initiatorID}, nil
+}
+
+// List собирает список/отчёт по назначениям с фильтрами (§4, §5, §6 дизайна эпика Э3, В-53):
+// область — правило В-8, счётчики — один батч на все назначения, участники — только при
+// f.ExpandParticipants (сводка «сотрудник × видео», С-7). Нет области — пустой список, не
+// ошибка (инициатор без прав просто не видит чужих назначений).
+func (s *AssignmentService) List(
+	ctx context.Context, accountID, initiatorID uuid.UUID, f domain.AssignmentFilter,
+) ([]domain.AssignmentListItem, error) {
+	scope, err := s.assignmentScope(ctx, accountID, initiatorID)
+	if err != nil {
+		return nil, err
+	}
+
+	assignments, err := s.repo.SelectByFilter(ctx, repository.AssignmentFilter{
+		AccountID: accountID, Scope: scope,
+		GroupID: f.GroupID, VideoID: f.VideoID, UserID: f.UserID,
+		Status: f.Status, DueFrom: f.DueFrom, DueTo: f.DueTo,
+	})
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+	if len(assignments) == 0 {
+		return nil, nil
+	}
+
+	return s.buildListItems(ctx, accountID, assignments, f.ExpandParticipants, f.IncludeDeactivated)
+}
+
+// buildListItems собирает элементы списка назначений батчами (§4 дизайна эпика Э3, «батчи
+// вместо JOIN»): цели, счётчики и авторы — всегда одним запросом на все назначения; участники
+// — только при expandParticipants.
+func (s *AssignmentService) buildListItems(
+	ctx context.Context, accountID uuid.UUID, assignments []domain.Assignment,
+	expandParticipants, includeDeactivated bool,
+) ([]domain.AssignmentListItem, error) {
+	ids := assignmentIDsOf(assignments)
+	assignmentByID := assignmentMapByID(assignments)
+
+	targets, err := s.targets.SelectByAssignmentIDs(ctx, ids)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	participants, err := s.expandParticipantsForList(ctx, ids, expandParticipants)
+	if err != nil {
+		return nil, err
+	}
+
+	userByID, err := s.usersForAssignments(ctx, assignments, targets, participants)
+	if err != nil {
+		return nil, err
+	}
+
+	counters, err := s.participants.CountByAssignmentIDs(ctx, ids, includeDeactivated)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	targetsByAssignment := groupTargetsByAssignment(targets, assignmentByID, userByID)
+
+	participantsByAssignment, err := s.groupedParticipantDetails(
+		ctx, accountID, assignmentByID, participants, userByID, includeDeactivated,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]domain.AssignmentListItem, len(assignments))
+	for i, a := range assignments {
+		items[i] = domain.AssignmentListItem{
+			Assignment: a, CreatedByUser: userByID[a.CreatedBy],
+			Targets: targetsByAssignment[a.ID], Counters: counters[a.ID],
+			Participants: participantsByAssignment[a.ID],
+		}
+	}
+
+	return items, nil
+}
+
+// expandParticipantsForList выбирает участников всех переданных назначений одним запросом,
+// если expandParticipants; иначе — nil без запроса к БД.
+func (s *AssignmentService) expandParticipantsForList(
+	ctx context.Context, assignmentIDs []uuid.UUID, expandParticipants bool,
+) ([]domain.AssignmentParticipant, error) {
+	if !expandParticipants {
+		return nil, nil
+	}
+
+	participants, err := s.participants.SelectByAssignmentIDs(ctx, assignmentIDs)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	return participants, nil
+}
+
+// groupedParticipantDetails строит участников с покрытием и доступом, сгруппированных по
+// назначению (§4 дизайна эпика Э3, Get — тот же расчёт, но батчем на список): при
+// !includeDeactivated деактивированные участники исключаются из результата (Э3-Т29, В-53).
+func (s *AssignmentService) groupedParticipantDetails(
+	ctx context.Context, accountID uuid.UUID,
+	assignmentByID map[uuid.UUID]domain.Assignment, participants []domain.AssignmentParticipant,
+	userByID map[uuid.UUID]domain.User, includeDeactivated bool,
+) (map[uuid.UUID][]domain.ParticipantDetails, error) {
+	// Пустая карта вместо nil — nilnil не путает «нет участников» с ошибкой чтения.
+	empty := map[uuid.UUID][]domain.ParticipantDetails{}
+	if len(participants) == 0 {
+		return empty, nil
+	}
+	if !includeDeactivated {
+		participants = filterActiveParticipants(participants, userByID)
+	}
+	if len(participants) == 0 {
+		return empty, nil
+	}
+
+	details, err := s.participantDetailsBatch(ctx, accountID, assignmentByID, participants, userByID)
+	if err != nil {
+		return nil, err
+	}
+
+	byAssignment := make(map[uuid.UUID][]domain.ParticipantDetails, len(assignmentByID))
+	for _, d := range details {
+		id := d.Participant.AssignmentID
+		byAssignment[id] = append(byAssignment[id], d)
+	}
+
+	return byAssignment, nil
+}
+
+// filterActiveParticipants исключает участников с деактивированной строкой пользователя.
+func filterActiveParticipants(
+	participants []domain.AssignmentParticipant, userByID map[uuid.UUID]domain.User,
+) []domain.AssignmentParticipant {
+	active := make([]domain.AssignmentParticipant, 0, len(participants))
+	for _, p := range participants {
+		if user, ok := userByID[p.UserID]; ok && !user.IsActive() {
+			continue
+		}
+		active = append(active, p)
+	}
+
+	return active
+}
+
+// participantDetailsBatch собирает ParticipantDetails для произвольного набора участников
+// сразу нескольких назначений одним проходом по батчам прогресса/длительности видео (§4
+// дизайна эпика Э3, «батчи вместо JOIN» — в отличие от Get, где назначение всегда одно).
+// Результат выровнен по индексу входного среза participants.
+func (s *AssignmentService) participantDetailsBatch(
+	ctx context.Context, accountID uuid.UUID,
+	assignmentByID map[uuid.UUID]domain.Assignment, participants []domain.AssignmentParticipant,
+	userByID map[uuid.UUID]domain.User,
+) ([]domain.ParticipantDetails, error) {
+	progressByVideoUser, durationByVideo, err := s.progressForAssignments(ctx, assignmentByID)
+	if err != nil {
+		return nil, err
+	}
+
+	details := make([]domain.ParticipantDetails, len(participants))
+	for i, p := range participants {
+		assignment := assignmentByID[p.AssignmentID]
+
+		var (
+			progressByUser map[uuid.UUID]domain.WatchProgress
+			durationMs     *int64
+		)
+		if assignment.VideoID != nil {
+			progressByUser = progressByVideoUser[*assignment.VideoID]
+			durationMs = durationByVideo[*assignment.VideoID]
+		}
+
+		details[i] = domain.ParticipantDetails{
+			Participant: p, User: userByID[p.UserID],
+			CoveragePct: participantCoveragePct(p, progressByUser, durationMs),
+			HasAccess:   s.participantHasAccess(ctx, accountID, assignment, p),
+		}
+	}
+
+	return details, nil
+}
+
+// progressForAssignments батчем выбирает длительность и прогресс просмотра всех видео
+// перечисленных назначений — один запрос на видео и один на прогресс вместо запроса на
+// назначение (§4 дизайна эпика Э3, «батчи вместо JOIN»).
+func (s *AssignmentService) progressForAssignments(
+	ctx context.Context, assignmentByID map[uuid.UUID]domain.Assignment,
+) (map[uuid.UUID]map[uuid.UUID]domain.WatchProgress, map[uuid.UUID]*int64, error) {
+	videoIDs := make([]uuid.UUID, 0, len(assignmentByID))
+	for _, a := range assignmentByID {
+		if a.VideoID != nil {
+			videoIDs = append(videoIDs, *a.VideoID)
+		}
+	}
+	videoIDs = dedupeUUIDs(videoIDs)
+	if len(videoIDs) == 0 {
+		return nil, nil, nil
+	}
+
+	videos, err := s.video.SelectByIDs(ctx, videoIDs)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, nil, err
+	}
+	durationByVideo := make(map[uuid.UUID]*int64, len(videos))
+	for _, v := range videos {
+		durationByVideo[v.ID] = v.DurationMs
+	}
+
+	progresses, err := s.progress.SelectByVideoIDs(ctx, videoIDs)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, nil, err
+	}
+	byVideoUser := make(map[uuid.UUID]map[uuid.UUID]domain.WatchProgress, len(videoIDs))
+	for _, p := range progresses {
+		m, ok := byVideoUser[p.VideoID]
+		if !ok {
+			m = make(map[uuid.UUID]domain.WatchProgress)
+			byVideoUser[p.VideoID] = m
+		}
+		m[p.UserID] = p
+	}
+
+	return byVideoUser, durationByVideo, nil
+}
+
+// usersForAssignments батчем резолвит всех пользователей, нужных для сборки списка назначений
+// одним запросом: авторов, персональные цели, участников (§4 дизайна эпика Э3, «батчи вместо
+// JOIN»).
+func (s *AssignmentService) usersForAssignments(
+	ctx context.Context,
+	assignments []domain.Assignment, targets []domain.AssignmentTarget, participants []domain.AssignmentParticipant,
+) (map[uuid.UUID]domain.User, error) {
+	ids := make([]uuid.UUID, 0, len(assignments)+len(targets)+len(participants))
+	for _, a := range assignments {
+		ids = append(ids, a.CreatedBy)
+	}
+	for _, t := range targets {
+		if t.TargetType == domain.AssignmentTargetTypeUser {
+			ids = append(ids, t.TargetID)
+		}
+	}
+	for _, p := range participants {
+		ids = append(ids, p.UserID)
+	}
+
+	return s.usersByID(ctx, ids)
+}
+
+// assignmentIDsOf собирает идентификаторы назначений.
+func assignmentIDsOf(assignments []domain.Assignment) []uuid.UUID {
+	ids := make([]uuid.UUID, len(assignments))
+	for i, a := range assignments {
+		ids[i] = a.ID
+	}
+
+	return ids
+}
+
+// assignmentMapByID индексирует назначения по идентификатору.
+func assignmentMapByID(assignments []domain.Assignment) map[uuid.UUID]domain.Assignment {
+	byID := make(map[uuid.UUID]domain.Assignment, len(assignments))
+	for _, a := range assignments {
+		byID[a.ID] = a
+	}
+
+	return byID
+}
+
+// groupTargetsByAssignment резолвит отображаемые имена целей и группирует их по назначению
+// (§4 дизайна эпика Э3, Get — тот же расчёт имени, но на батч назначений).
+func groupTargetsByAssignment(
+	targets []domain.AssignmentTarget,
+	assignmentByID map[uuid.UUID]domain.Assignment, userByID map[uuid.UUID]domain.User,
+) map[uuid.UUID][]domain.AssignmentTarget {
+	byAssignment := make(map[uuid.UUID][]domain.AssignmentTarget, len(assignmentByID))
+	for _, t := range targets {
+		t.Name = assignmentTargetName(t, assignmentByID[t.AssignmentID], userByID)
+		byAssignment[t.AssignmentID] = append(byAssignment[t.AssignmentID], t)
+	}
+
+	return byAssignment
+}
+
+// assignmentInScope проверяет попадание назначения в область В-8: назначивший видит своё
+// назначение всегда, иначе — вся область (All) либо группа назначения входит в GroupIDs.
+func assignmentInScope(a domain.Assignment, scope repository.AssignmentScope) bool {
+	if scope.All || a.CreatedBy == scope.CreatedBy {
+		return true
+	}
+
+	return a.GroupID != nil && slices.Contains(scope.GroupIDs, *a.GroupID)
+}
+
+// ensureUserInAccount проверяет, что userID состоит в accountID — роль пользователя
+// принадлежит accountID (как UserService.Update). Пользователь не найден или роль из другого
+// аккаунта — ErrNotFound.
+func (s *AssignmentService) ensureUserInAccount(ctx context.Context, accountID, userID uuid.UUID) error {
+	users, err := s.srv.User.GetByID(ctx, userID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+	if len(users) == 0 {
+		return ErrNotFound
+	}
+
+	accountByRole, err := s.accountIDsByRole(ctx, []uuid.UUID{users[0].RoleID})
+	if err != nil {
+		return err
+	}
+	if accountByRole[users[0].RoleID] != accountID {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+// ListForUser собирает отчёт по всем назначениям одного сотрудника (§4, §6 дизайна эпика Э3,
+// В-53): участия пользователя, отфильтрованные областью В-8 инициатора (назначивший видит
+// свои, иначе — только назначения из своей области); userID должен состоять в accountID.
+func (s *AssignmentService) ListForUser(
+	ctx context.Context, accountID, initiatorID, userID uuid.UUID,
+) ([]domain.UserAssignmentItem, error) {
+	if err := s.ensureUserInAccount(ctx, accountID, userID); err != nil {
+		return nil, err
+	}
+
+	scope, err := s.assignmentScope(ctx, accountID, initiatorID)
+	if err != nil {
+		return nil, err
+	}
+
+	participants, err := s.participants.SelectByUserID(ctx, userID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+	if len(participants) == 0 {
+		return nil, nil
+	}
+
+	allAssignmentByID, err := s.assignmentsByIDs(ctx, participants)
+	if err != nil {
+		return nil, err
+	}
+
+	inScope := make([]domain.AssignmentParticipant, 0, len(participants))
+	for _, p := range participants {
+		if assignment, ok := allAssignmentByID[p.AssignmentID]; ok && assignment.AccountID == accountID &&
+			assignmentInScope(assignment, scope) {
+			inScope = append(inScope, p)
+		}
+	}
+	if len(inScope) == 0 {
+		return nil, nil
+	}
+
+	assignments := make([]domain.Assignment, len(inScope))
+	for i, p := range inScope {
+		assignments[i] = allAssignmentByID[p.AssignmentID]
+	}
+	// Сужаем карту до назначений в области — прогресс/длительность видео batch'ится только по
+	// ним (§4 дизайна эпика Э3, «батчи вместо JOIN»), а не по всем участиям пользователя.
+	assignmentByID := assignmentMapByID(assignments)
+
+	targets, err := s.targets.SelectByAssignmentIDs(ctx, assignmentIDsOf(assignments))
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	userByID, err := s.usersForAssignments(ctx, assignments, targets, inScope)
+	if err != nil {
+		return nil, err
+	}
+
+	// Отчёт по сотруднику не скрывает деактивированных (это сам целевой сотрудник — состояние
+	// его активности виден клиенту отдельно, скрывать отчёт по нему смысла нет).
+	counters, err := s.participants.CountByAssignmentIDs(ctx, assignmentIDsOf(assignments), true)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	targetsByAssignment := groupTargetsByAssignment(targets, assignmentByID, userByID)
+
+	details, err := s.participantDetailsBatch(ctx, accountID, assignmentByID, inScope, userByID)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]domain.UserAssignmentItem, len(inScope))
+	for i, p := range inScope {
+		assignment := assignmentByID[p.AssignmentID]
+		items[i] = domain.UserAssignmentItem{
+			Assignment: assignment, CreatedByUser: userByID[assignment.CreatedBy],
+			Targets: targetsByAssignment[assignment.ID], Counters: counters[assignment.ID],
+			Participant: details[i],
+		}
+	}
+
+	return items, nil
 }
 
 // dedupeUUIDs возвращает уникальные идентификаторы в порядке первого появления.

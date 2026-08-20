@@ -11,6 +11,7 @@ import (
 	"time"
 	mm_time "time"
 	"vilib-api/internal/domain"
+	mm_repository "vilib-api/internal/repository"
 
 	"github.com/gojuno/minimock/v3"
 	"github.com/google/uuid"
@@ -55,6 +56,13 @@ type AssignmentMock struct {
 	afterSelectActiveByVideoIDsCounter  uint64
 	beforeSelectActiveByVideoIDsCounter uint64
 	SelectActiveByVideoIDsMock          mAssignmentMockSelectActiveByVideoIDs
+
+	funcSelectByFilter          func(ctx context.Context, f mm_repository.AssignmentFilter) (aa1 []domain.Assignment, err error)
+	funcSelectByFilterOrigin    string
+	inspectFuncSelectByFilter   func(ctx context.Context, f mm_repository.AssignmentFilter)
+	afterSelectByFilterCounter  uint64
+	beforeSelectByFilterCounter uint64
+	SelectByFilterMock          mAssignmentMockSelectByFilter
 
 	funcSelectByID          func(ctx context.Context, id uuid.UUID) (a1 domain.Assignment, err error)
 	funcSelectByIDOrigin    string
@@ -107,6 +115,9 @@ func NewAssignmentMock(t minimock.Tester) *AssignmentMock {
 
 	m.SelectActiveByVideoIDsMock = mAssignmentMockSelectActiveByVideoIDs{mock: m}
 	m.SelectActiveByVideoIDsMock.callArgs = []*AssignmentMockSelectActiveByVideoIDsParams{}
+
+	m.SelectByFilterMock = mAssignmentMockSelectByFilter{mock: m}
+	m.SelectByFilterMock.callArgs = []*AssignmentMockSelectByFilterParams{}
 
 	m.SelectByIDMock = mAssignmentMockSelectByID{mock: m}
 	m.SelectByIDMock.callArgs = []*AssignmentMockSelectByIDParams{}
@@ -2212,6 +2223,349 @@ func (m *AssignmentMock) MinimockSelectActiveByVideoIDsInspect() {
 	}
 }
 
+type mAssignmentMockSelectByFilter struct {
+	optional           bool
+	mock               *AssignmentMock
+	defaultExpectation *AssignmentMockSelectByFilterExpectation
+	expectations       []*AssignmentMockSelectByFilterExpectation
+
+	callArgs []*AssignmentMockSelectByFilterParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AssignmentMockSelectByFilterExpectation specifies expectation struct of the Assignment.SelectByFilter
+type AssignmentMockSelectByFilterExpectation struct {
+	mock               *AssignmentMock
+	params             *AssignmentMockSelectByFilterParams
+	paramPtrs          *AssignmentMockSelectByFilterParamPtrs
+	expectationOrigins AssignmentMockSelectByFilterExpectationOrigins
+	results            *AssignmentMockSelectByFilterResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AssignmentMockSelectByFilterParams contains parameters of the Assignment.SelectByFilter
+type AssignmentMockSelectByFilterParams struct {
+	ctx context.Context
+	f   mm_repository.AssignmentFilter
+}
+
+// AssignmentMockSelectByFilterParamPtrs contains pointers to parameters of the Assignment.SelectByFilter
+type AssignmentMockSelectByFilterParamPtrs struct {
+	ctx *context.Context
+	f   *mm_repository.AssignmentFilter
+}
+
+// AssignmentMockSelectByFilterResults contains results of the Assignment.SelectByFilter
+type AssignmentMockSelectByFilterResults struct {
+	aa1 []domain.Assignment
+	err error
+}
+
+// AssignmentMockSelectByFilterOrigins contains origins of expectations of the Assignment.SelectByFilter
+type AssignmentMockSelectByFilterExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originF   string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) Optional() *mAssignmentMockSelectByFilter {
+	mmSelectByFilter.optional = true
+	return mmSelectByFilter
+}
+
+// Expect sets up expected params for Assignment.SelectByFilter
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) Expect(ctx context.Context, f mm_repository.AssignmentFilter) *mAssignmentMockSelectByFilter {
+	if mmSelectByFilter.mock.funcSelectByFilter != nil {
+		mmSelectByFilter.mock.t.Fatalf("AssignmentMock.SelectByFilter mock is already set by Set")
+	}
+
+	if mmSelectByFilter.defaultExpectation == nil {
+		mmSelectByFilter.defaultExpectation = &AssignmentMockSelectByFilterExpectation{}
+	}
+
+	if mmSelectByFilter.defaultExpectation.paramPtrs != nil {
+		mmSelectByFilter.mock.t.Fatalf("AssignmentMock.SelectByFilter mock is already set by ExpectParams functions")
+	}
+
+	mmSelectByFilter.defaultExpectation.params = &AssignmentMockSelectByFilterParams{ctx, f}
+	mmSelectByFilter.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSelectByFilter.expectations {
+		if minimock.Equal(e.params, mmSelectByFilter.defaultExpectation.params) {
+			mmSelectByFilter.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSelectByFilter.defaultExpectation.params)
+		}
+	}
+
+	return mmSelectByFilter
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Assignment.SelectByFilter
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) ExpectCtxParam1(ctx context.Context) *mAssignmentMockSelectByFilter {
+	if mmSelectByFilter.mock.funcSelectByFilter != nil {
+		mmSelectByFilter.mock.t.Fatalf("AssignmentMock.SelectByFilter mock is already set by Set")
+	}
+
+	if mmSelectByFilter.defaultExpectation == nil {
+		mmSelectByFilter.defaultExpectation = &AssignmentMockSelectByFilterExpectation{}
+	}
+
+	if mmSelectByFilter.defaultExpectation.params != nil {
+		mmSelectByFilter.mock.t.Fatalf("AssignmentMock.SelectByFilter mock is already set by Expect")
+	}
+
+	if mmSelectByFilter.defaultExpectation.paramPtrs == nil {
+		mmSelectByFilter.defaultExpectation.paramPtrs = &AssignmentMockSelectByFilterParamPtrs{}
+	}
+	mmSelectByFilter.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSelectByFilter.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSelectByFilter
+}
+
+// ExpectFParam2 sets up expected param f for Assignment.SelectByFilter
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) ExpectFParam2(f mm_repository.AssignmentFilter) *mAssignmentMockSelectByFilter {
+	if mmSelectByFilter.mock.funcSelectByFilter != nil {
+		mmSelectByFilter.mock.t.Fatalf("AssignmentMock.SelectByFilter mock is already set by Set")
+	}
+
+	if mmSelectByFilter.defaultExpectation == nil {
+		mmSelectByFilter.defaultExpectation = &AssignmentMockSelectByFilterExpectation{}
+	}
+
+	if mmSelectByFilter.defaultExpectation.params != nil {
+		mmSelectByFilter.mock.t.Fatalf("AssignmentMock.SelectByFilter mock is already set by Expect")
+	}
+
+	if mmSelectByFilter.defaultExpectation.paramPtrs == nil {
+		mmSelectByFilter.defaultExpectation.paramPtrs = &AssignmentMockSelectByFilterParamPtrs{}
+	}
+	mmSelectByFilter.defaultExpectation.paramPtrs.f = &f
+	mmSelectByFilter.defaultExpectation.expectationOrigins.originF = minimock.CallerInfo(1)
+
+	return mmSelectByFilter
+}
+
+// Inspect accepts an inspector function that has same arguments as the Assignment.SelectByFilter
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) Inspect(f func(ctx context.Context, f mm_repository.AssignmentFilter)) *mAssignmentMockSelectByFilter {
+	if mmSelectByFilter.mock.inspectFuncSelectByFilter != nil {
+		mmSelectByFilter.mock.t.Fatalf("Inspect function is already set for AssignmentMock.SelectByFilter")
+	}
+
+	mmSelectByFilter.mock.inspectFuncSelectByFilter = f
+
+	return mmSelectByFilter
+}
+
+// Return sets up results that will be returned by Assignment.SelectByFilter
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) Return(aa1 []domain.Assignment, err error) *AssignmentMock {
+	if mmSelectByFilter.mock.funcSelectByFilter != nil {
+		mmSelectByFilter.mock.t.Fatalf("AssignmentMock.SelectByFilter mock is already set by Set")
+	}
+
+	if mmSelectByFilter.defaultExpectation == nil {
+		mmSelectByFilter.defaultExpectation = &AssignmentMockSelectByFilterExpectation{mock: mmSelectByFilter.mock}
+	}
+	mmSelectByFilter.defaultExpectation.results = &AssignmentMockSelectByFilterResults{aa1, err}
+	mmSelectByFilter.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSelectByFilter.mock
+}
+
+// Set uses given function f to mock the Assignment.SelectByFilter method
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) Set(f func(ctx context.Context, f mm_repository.AssignmentFilter) (aa1 []domain.Assignment, err error)) *AssignmentMock {
+	if mmSelectByFilter.defaultExpectation != nil {
+		mmSelectByFilter.mock.t.Fatalf("Default expectation is already set for the Assignment.SelectByFilter method")
+	}
+
+	if len(mmSelectByFilter.expectations) > 0 {
+		mmSelectByFilter.mock.t.Fatalf("Some expectations are already set for the Assignment.SelectByFilter method")
+	}
+
+	mmSelectByFilter.mock.funcSelectByFilter = f
+	mmSelectByFilter.mock.funcSelectByFilterOrigin = minimock.CallerInfo(1)
+	return mmSelectByFilter.mock
+}
+
+// When sets expectation for the Assignment.SelectByFilter which will trigger the result defined by the following
+// Then helper
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) When(ctx context.Context, f mm_repository.AssignmentFilter) *AssignmentMockSelectByFilterExpectation {
+	if mmSelectByFilter.mock.funcSelectByFilter != nil {
+		mmSelectByFilter.mock.t.Fatalf("AssignmentMock.SelectByFilter mock is already set by Set")
+	}
+
+	expectation := &AssignmentMockSelectByFilterExpectation{
+		mock:               mmSelectByFilter.mock,
+		params:             &AssignmentMockSelectByFilterParams{ctx, f},
+		expectationOrigins: AssignmentMockSelectByFilterExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSelectByFilter.expectations = append(mmSelectByFilter.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Assignment.SelectByFilter return parameters for the expectation previously defined by the When method
+func (e *AssignmentMockSelectByFilterExpectation) Then(aa1 []domain.Assignment, err error) *AssignmentMock {
+	e.results = &AssignmentMockSelectByFilterResults{aa1, err}
+	return e.mock
+}
+
+// Times sets number of times Assignment.SelectByFilter should be invoked
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) Times(n uint64) *mAssignmentMockSelectByFilter {
+	if n == 0 {
+		mmSelectByFilter.mock.t.Fatalf("Times of AssignmentMock.SelectByFilter mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSelectByFilter.expectedInvocations, n)
+	mmSelectByFilter.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSelectByFilter
+}
+
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) invocationsDone() bool {
+	if len(mmSelectByFilter.expectations) == 0 && mmSelectByFilter.defaultExpectation == nil && mmSelectByFilter.mock.funcSelectByFilter == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSelectByFilter.mock.afterSelectByFilterCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSelectByFilter.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SelectByFilter implements mm_repository.Assignment
+func (mmSelectByFilter *AssignmentMock) SelectByFilter(ctx context.Context, f mm_repository.AssignmentFilter) (aa1 []domain.Assignment, err error) {
+	mm_atomic.AddUint64(&mmSelectByFilter.beforeSelectByFilterCounter, 1)
+	defer mm_atomic.AddUint64(&mmSelectByFilter.afterSelectByFilterCounter, 1)
+
+	mmSelectByFilter.t.Helper()
+
+	if mmSelectByFilter.inspectFuncSelectByFilter != nil {
+		mmSelectByFilter.inspectFuncSelectByFilter(ctx, f)
+	}
+
+	mm_params := AssignmentMockSelectByFilterParams{ctx, f}
+
+	// Record call args
+	mmSelectByFilter.SelectByFilterMock.mutex.Lock()
+	mmSelectByFilter.SelectByFilterMock.callArgs = append(mmSelectByFilter.SelectByFilterMock.callArgs, &mm_params)
+	mmSelectByFilter.SelectByFilterMock.mutex.Unlock()
+
+	for _, e := range mmSelectByFilter.SelectByFilterMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.aa1, e.results.err
+		}
+	}
+
+	if mmSelectByFilter.SelectByFilterMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSelectByFilter.SelectByFilterMock.defaultExpectation.Counter, 1)
+		mm_want := mmSelectByFilter.SelectByFilterMock.defaultExpectation.params
+		mm_want_ptrs := mmSelectByFilter.SelectByFilterMock.defaultExpectation.paramPtrs
+
+		mm_got := AssignmentMockSelectByFilterParams{ctx, f}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSelectByFilter.t.Errorf("AssignmentMock.SelectByFilter got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectByFilter.SelectByFilterMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.f != nil && !minimock.Equal(*mm_want_ptrs.f, mm_got.f) {
+				mmSelectByFilter.t.Errorf("AssignmentMock.SelectByFilter got unexpected parameter f, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectByFilter.SelectByFilterMock.defaultExpectation.expectationOrigins.originF, *mm_want_ptrs.f, mm_got.f, minimock.Diff(*mm_want_ptrs.f, mm_got.f))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSelectByFilter.t.Errorf("AssignmentMock.SelectByFilter got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSelectByFilter.SelectByFilterMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSelectByFilter.SelectByFilterMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSelectByFilter.t.Fatal("No results are set for the AssignmentMock.SelectByFilter")
+		}
+		return (*mm_results).aa1, (*mm_results).err
+	}
+	if mmSelectByFilter.funcSelectByFilter != nil {
+		return mmSelectByFilter.funcSelectByFilter(ctx, f)
+	}
+	mmSelectByFilter.t.Fatalf("Unexpected call to AssignmentMock.SelectByFilter. %v %v", ctx, f)
+	return
+}
+
+// SelectByFilterAfterCounter returns a count of finished AssignmentMock.SelectByFilter invocations
+func (mmSelectByFilter *AssignmentMock) SelectByFilterAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectByFilter.afterSelectByFilterCounter)
+}
+
+// SelectByFilterBeforeCounter returns a count of AssignmentMock.SelectByFilter invocations
+func (mmSelectByFilter *AssignmentMock) SelectByFilterBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectByFilter.beforeSelectByFilterCounter)
+}
+
+// Calls returns a list of arguments used in each call to AssignmentMock.SelectByFilter.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSelectByFilter *mAssignmentMockSelectByFilter) Calls() []*AssignmentMockSelectByFilterParams {
+	mmSelectByFilter.mutex.RLock()
+
+	argCopy := make([]*AssignmentMockSelectByFilterParams, len(mmSelectByFilter.callArgs))
+	copy(argCopy, mmSelectByFilter.callArgs)
+
+	mmSelectByFilter.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSelectByFilterDone returns true if the count of the SelectByFilter invocations corresponds
+// the number of defined expectations
+func (m *AssignmentMock) MinimockSelectByFilterDone() bool {
+	if m.SelectByFilterMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SelectByFilterMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SelectByFilterMock.invocationsDone()
+}
+
+// MinimockSelectByFilterInspect logs each unmet expectation
+func (m *AssignmentMock) MinimockSelectByFilterInspect() {
+	for _, e := range m.SelectByFilterMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AssignmentMock.SelectByFilter at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSelectByFilterCounter := mm_atomic.LoadUint64(&m.afterSelectByFilterCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SelectByFilterMock.defaultExpectation != nil && afterSelectByFilterCounter < 1 {
+		if m.SelectByFilterMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AssignmentMock.SelectByFilter at\n%s", m.SelectByFilterMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AssignmentMock.SelectByFilter at\n%s with params: %#v", m.SelectByFilterMock.defaultExpectation.expectationOrigins.origin, *m.SelectByFilterMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSelectByFilter != nil && afterSelectByFilterCounter < 1 {
+		m.t.Errorf("Expected call to AssignmentMock.SelectByFilter at\n%s", m.funcSelectByFilterOrigin)
+	}
+
+	if !m.SelectByFilterMock.invocationsDone() && afterSelectByFilterCounter > 0 {
+		m.t.Errorf("Expected %d calls to AssignmentMock.SelectByFilter at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SelectByFilterMock.expectedInvocations), m.SelectByFilterMock.expectedInvocationsOrigin, afterSelectByFilterCounter)
+	}
+}
+
 type mAssignmentMockSelectByID struct {
 	optional           bool
 	mock               *AssignmentMock
@@ -3722,6 +4076,8 @@ func (m *AssignmentMock) MinimockFinish() {
 
 			m.MinimockSelectActiveByVideoIDsInspect()
 
+			m.MinimockSelectByFilterInspect()
+
 			m.MinimockSelectByIDInspect()
 
 			m.MinimockSelectByIDsInspect()
@@ -3757,6 +4113,7 @@ func (m *AssignmentMock) minimockDone() bool {
 		m.MinimockSelectActiveByGroupIDDone() &&
 		m.MinimockSelectActiveByTargetGroupDone() &&
 		m.MinimockSelectActiveByVideoIDsDone() &&
+		m.MinimockSelectByFilterDone() &&
 		m.MinimockSelectByIDDone() &&
 		m.MinimockSelectByIDsDone() &&
 		m.MinimockUpdateCommentDone() &&

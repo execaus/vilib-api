@@ -289,6 +289,119 @@ type GetAssignmentResponse struct {
 	Assignment AssignmentDetails `json:"assignment"`
 }
 
+// AssignmentListQuery — query-параметры GET .../assignments (§5 контракта эпика Э3, В-53):
+// пустой group_id/video_id/user_id/status — фильтр не применяется. Идентификаторы — строки:
+// form-биндинг gin не умеет парсить uuid.UUID как единственное значение (это массив [16]byte,
+// не реализующий BindUnmarshaler) — парсятся вручную в ToDomain.
+type AssignmentListQuery struct {
+	GroupID            string     `form:"group_id"`
+	VideoID            string     `form:"video_id"`
+	UserID             string     `form:"user_id"`
+	Status             string     `form:"status"              binding:"omitempty,oneof=active cancelled"`
+	DueFrom            *time.Time `form:"due_from"`
+	DueTo              *time.Time `form:"due_to"`
+	IncludeDeactivated bool       `form:"include_deactivated"`
+	ExpandParticipants bool       `form:"expand_participants"`
+}
+
+// ToDomain конвертирует query-параметры списка назначений в domain.AssignmentFilter. Пустая
+// строка идентификатора фильтр не выставляет — парсинг инлайн на месте (не отдельной функцией
+// с сигнатурой (*uuid.UUID, error): «нет значения» — не ошибка и не invalid-значение при
+// nil-ошибке одновременно, что путает nilnil).
+func (q *AssignmentListQuery) ToDomain() (domain.AssignmentFilter, error) {
+	f := domain.AssignmentFilter{
+		DueFrom: q.DueFrom, DueTo: q.DueTo,
+		IncludeDeactivated: q.IncludeDeactivated, ExpandParticipants: q.ExpandParticipants,
+	}
+
+	for _, field := range []struct {
+		raw string
+		out **uuid.UUID
+	}{
+		{q.GroupID, &f.GroupID}, {q.VideoID, &f.VideoID}, {q.UserID, &f.UserID},
+	} {
+		if field.raw == "" {
+			continue
+		}
+
+		id, err := uuid.Parse(field.raw)
+		if err != nil {
+			return domain.AssignmentFilter{}, err
+		}
+		*field.out = &id
+	}
+
+	if q.Status != "" {
+		status := domain.AssignmentStatus(q.Status)
+		f.Status = &status
+	}
+
+	return f, nil
+}
+
+// AssignmentListItem — элемент списка/отчёта по назначениям (§5 контракта эпика Э3, GET
+// .../assignments, В-53): назначение и, при expand_participants, его участники.
+type AssignmentListItem struct {
+	Assignment
+
+	Participants []AssignmentParticipant `json:"participants,omitempty"`
+}
+
+// FromDomain заполняет AssignmentListItem доменным элементом списка назначений.
+func (i *AssignmentListItem) FromDomain(item domain.AssignmentListItem) {
+	i.Assignment.FromDomain(item.Assignment, item.CreatedByUser, item.Targets, item.Counters)
+
+	if item.Participants == nil {
+		return
+	}
+
+	i.Participants = make([]AssignmentParticipant, len(item.Participants))
+	for j, p := range item.Participants {
+		i.Participants[j].FromDomain(p)
+	}
+}
+
+// ListAssignmentsResponse — ответ на список/отчёт по назначениям (§5 контракта эпика Э3,
+// GET .../assignments, В-53).
+type ListAssignmentsResponse struct {
+	Assignments []AssignmentListItem `json:"assignments"`
+}
+
+// FromDomain заполняет ListAssignmentsResponse доменным списком элементов назначений.
+func (r *ListAssignmentsResponse) FromDomain(items []domain.AssignmentListItem) {
+	r.Assignments = make([]AssignmentListItem, len(items))
+	for i, item := range items {
+		r.Assignments[i].FromDomain(item)
+	}
+}
+
+// UserAssignmentItem — назначение в разрезе одного участника для отчёта по сотруднику (§5
+// контракта эпика Э3, GET .../users/{id}/assignments, В-53).
+type UserAssignmentItem struct {
+	Assignment  Assignment            `json:"assignment"`
+	Participant AssignmentParticipant `json:"participant"`
+}
+
+// FromDomain заполняет UserAssignmentItem доменным элементом отчёта по сотруднику.
+func (i *UserAssignmentItem) FromDomain(item domain.UserAssignmentItem) {
+	i.Assignment.FromDomain(item.Assignment, item.CreatedByUser, item.Targets, item.Counters)
+	i.Participant.FromDomain(item.Participant)
+}
+
+// ListUserAssignmentsResponse — ответ на отчёт по сотруднику (§5 контракта эпика Э3,
+// GET .../users/{id}/assignments, В-53).
+type ListUserAssignmentsResponse struct {
+	Items []UserAssignmentItem `json:"items"`
+}
+
+// FromDomain заполняет ListUserAssignmentsResponse доменным отчётом по сотруднику.
+func (r *ListUserAssignmentsResponse) FromDomain(items []domain.UserAssignmentItem) {
+	r.Items = make([]UserAssignmentItem, len(items))
+	for i, item := range items {
+		r.Items[i].FromDomain(item)
+	}
+}
+
 // MyAssignmentVideo — видео назначения в контексте «моих назначений»: текущее состояние или
 // снимок, если видео удалено (§5 контракта эпика Э3).
 type MyAssignmentVideo struct {
