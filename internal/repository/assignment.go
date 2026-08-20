@@ -350,11 +350,14 @@ func assignmentDueRangeExpr(dueFrom, dueTo *time.Time) psql.Expression {
 	fullArgs = append(fullArgs, args...)
 	fullArgs = append(fullArgs, args...)
 
+	// Внешние скобки обязательны: bob соединяет условия WHERE через AND без группировки,
+	// и без них дизъюнкция разорвала бы соседние условия (в том числе account_id) по
+	// приоритету операторов — назначения чужого аккаунта попали бы в выборку.
 	sqlExpr := fmt.Sprintf(
-		"(%s) OR EXISTS ("+
+		"((%s) OR EXISTS ("+
 			"SELECT 1 FROM assignment_participants ap "+
 			"WHERE ap.assignment_id = assignments.assignment_id "+
-			"AND ap.status <> 'cancelled' AND (%s))",
+			"AND ap.status <> 'cancelled' AND (%s)))",
 		strings.Join(assignmentConds, " AND "),
 		strings.Join(participantConds, " AND "),
 	)

@@ -642,3 +642,87 @@ func assignmentIDs(assignments []domain.Assignment) []uuid.UUID {
 
 // ptrInt — указатель на литерал int для необязательных полей репозитория.
 func ptrInt(v int) *int { return &v }
+
+// TestRepository_AssignmentSelectByFilter_DueRangeKeepsAccountIsolation проверяет, что
+// дизъюнкция внутри условия периода (В-61) не ломает приоритет операторов в WHERE: назначение
+// чужого аккаунта, персональный срок участника которого попадает в период, в выборку не
+// попадает.
+func TestRepository_AssignmentSelectByFilter_DueRangeKeepsAccountIsolation(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		own, ownFixture := newTestAssignment(t, r, f)
+		foreign, foreignFixture := newTestAssignment(t, r, f)
+
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		dueAt := now.Add(48 * time.Hour)
+
+		// У обоих назначений есть участник с персональным сроком внутри периода.
+		insertTestParticipant(
+			t, r, own.ID, newTestUser(t, r, f, ownFixture.AccountRoleID).ID,
+			domain.AssignmentParticipantStatusAssigned,
+			domain.AssignmentParticipantSourcePersonal, nil, now, dueAt,
+		)
+		insertTestParticipant(
+			t, r, foreign.ID, newTestUser(t, r, f, foreignFixture.AccountRoleID).ID,
+			domain.AssignmentParticipantStatusAssigned,
+			domain.AssignmentParticipantSourcePersonal, nil, now, dueAt,
+		)
+
+		from := now
+		to := now.Add(72 * time.Hour)
+
+		found, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: ownFixture.AccountID,
+			Scope:     repository.AssignmentScope{All: true},
+			DueFrom:   &from,
+			DueTo:     &to,
+		})
+
+		require.NoError(t, err)
+		for _, a := range found {
+			require.Equal(t, ownFixture.AccountID, a.AccountID,
+				"фильтр периода не должен выводить назначения чужого аккаунта")
+		}
+	})
+}
+
+// TestRepository_AssignmentSelectByFilter_ScopeKeepsAccountIsolation проверяет ту же защиту
+// приоритета операторов для области видимости В-8: дизъюнкция «группа инициатора ИЛИ его
+// собственные назначения» не должна выпускать назначения чужого аккаунта, созданные тем же
+// пользователем.
+func TestRepository_AssignmentSelectByFilter_ScopeKeepsAccountIsolation(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		own, ownFixture := newTestAssignment(t, r, f)
+		foreignFixture := newTestAccountAndVideo(t, r, f)
+
+		// Назначение чужого аккаунта, созданное тем же пользователем, что и своё.
+		foreign, err := r.Assignment.Insert(
+			t.Context(),
+			foreignFixture.AccountID, foreignFixture.Video.ID, foreignFixture.Video.Name,
+			foreignFixture.Video.GroupID, f.Beer().Name(), ownFixture.Video.Author,
+			domain.AssignmentDueModeDays, nil, ptrInt(7), "",
+		)
+		require.NoError(t, err)
+
+		found, err := r.Assignment.SelectByFilter(t.Context(), repository.AssignmentFilter{
+			AccountID: ownFixture.AccountID,
+			Scope: repository.AssignmentScope{
+				GroupIDs:  []uuid.UUID{ownFixture.Video.GroupID, foreignFixture.Video.GroupID},
+				CreatedBy: ownFixture.Video.Author,
+			},
+		})
+
+		require.NoError(t, err)
+		ids := make([]uuid.UUID, len(found))
+		for i, a := range found {
+			require.Equal(t, ownFixture.AccountID, a.AccountID,
+				"область видимости не должна выпускать назначения чужого аккаунта")
+			ids[i] = a.ID
+		}
+		require.Contains(t, ids, own.ID)
+		require.NotContains(t, ids, foreign.ID)
+	})
+}
