@@ -8,6 +8,7 @@ import (
 	"context"
 	"sync"
 	mm_atomic "sync/atomic"
+	"time"
 	mm_time "time"
 	"vilib-api/internal/domain"
 
@@ -19,6 +20,13 @@ import (
 type WatchProgressMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
+
+	funcCleanupStaleSessions          func(ctx context.Context, now time.Time) (i1 int64, err error)
+	funcCleanupStaleSessionsOrigin    string
+	inspectFuncCleanupStaleSessions   func(ctx context.Context, now time.Time)
+	afterCleanupStaleSessionsCounter  uint64
+	beforeCleanupStaleSessionsCounter uint64
+	CleanupStaleSessionsMock          mWatchProgressMockCleanupStaleSessions
 
 	funcGet          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID, videoID uuid.UUID) (w1 domain.WatchState, err error)
 	funcGetOrigin    string
@@ -50,6 +58,9 @@ func NewWatchProgressMock(t minimock.Tester) *WatchProgressMock {
 		controller.RegisterMocker(m)
 	}
 
+	m.CleanupStaleSessionsMock = mWatchProgressMockCleanupStaleSessions{mock: m}
+	m.CleanupStaleSessionsMock.callArgs = []*WatchProgressMockCleanupStaleSessionsParams{}
+
 	m.GetMock = mWatchProgressMockGet{mock: m}
 	m.GetMock.callArgs = []*WatchProgressMockGetParams{}
 
@@ -62,6 +73,349 @@ func NewWatchProgressMock(t minimock.Tester) *WatchProgressMock {
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mWatchProgressMockCleanupStaleSessions struct {
+	optional           bool
+	mock               *WatchProgressMock
+	defaultExpectation *WatchProgressMockCleanupStaleSessionsExpectation
+	expectations       []*WatchProgressMockCleanupStaleSessionsExpectation
+
+	callArgs []*WatchProgressMockCleanupStaleSessionsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// WatchProgressMockCleanupStaleSessionsExpectation specifies expectation struct of the WatchProgress.CleanupStaleSessions
+type WatchProgressMockCleanupStaleSessionsExpectation struct {
+	mock               *WatchProgressMock
+	params             *WatchProgressMockCleanupStaleSessionsParams
+	paramPtrs          *WatchProgressMockCleanupStaleSessionsParamPtrs
+	expectationOrigins WatchProgressMockCleanupStaleSessionsExpectationOrigins
+	results            *WatchProgressMockCleanupStaleSessionsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// WatchProgressMockCleanupStaleSessionsParams contains parameters of the WatchProgress.CleanupStaleSessions
+type WatchProgressMockCleanupStaleSessionsParams struct {
+	ctx context.Context
+	now time.Time
+}
+
+// WatchProgressMockCleanupStaleSessionsParamPtrs contains pointers to parameters of the WatchProgress.CleanupStaleSessions
+type WatchProgressMockCleanupStaleSessionsParamPtrs struct {
+	ctx *context.Context
+	now *time.Time
+}
+
+// WatchProgressMockCleanupStaleSessionsResults contains results of the WatchProgress.CleanupStaleSessions
+type WatchProgressMockCleanupStaleSessionsResults struct {
+	i1  int64
+	err error
+}
+
+// WatchProgressMockCleanupStaleSessionsOrigins contains origins of expectations of the WatchProgress.CleanupStaleSessions
+type WatchProgressMockCleanupStaleSessionsExpectationOrigins struct {
+	origin    string
+	originCtx string
+	originNow string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) Optional() *mWatchProgressMockCleanupStaleSessions {
+	mmCleanupStaleSessions.optional = true
+	return mmCleanupStaleSessions
+}
+
+// Expect sets up expected params for WatchProgress.CleanupStaleSessions
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) Expect(ctx context.Context, now time.Time) *mWatchProgressMockCleanupStaleSessions {
+	if mmCleanupStaleSessions.mock.funcCleanupStaleSessions != nil {
+		mmCleanupStaleSessions.mock.t.Fatalf("WatchProgressMock.CleanupStaleSessions mock is already set by Set")
+	}
+
+	if mmCleanupStaleSessions.defaultExpectation == nil {
+		mmCleanupStaleSessions.defaultExpectation = &WatchProgressMockCleanupStaleSessionsExpectation{}
+	}
+
+	if mmCleanupStaleSessions.defaultExpectation.paramPtrs != nil {
+		mmCleanupStaleSessions.mock.t.Fatalf("WatchProgressMock.CleanupStaleSessions mock is already set by ExpectParams functions")
+	}
+
+	mmCleanupStaleSessions.defaultExpectation.params = &WatchProgressMockCleanupStaleSessionsParams{ctx, now}
+	mmCleanupStaleSessions.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCleanupStaleSessions.expectations {
+		if minimock.Equal(e.params, mmCleanupStaleSessions.defaultExpectation.params) {
+			mmCleanupStaleSessions.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCleanupStaleSessions.defaultExpectation.params)
+		}
+	}
+
+	return mmCleanupStaleSessions
+}
+
+// ExpectCtxParam1 sets up expected param ctx for WatchProgress.CleanupStaleSessions
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) ExpectCtxParam1(ctx context.Context) *mWatchProgressMockCleanupStaleSessions {
+	if mmCleanupStaleSessions.mock.funcCleanupStaleSessions != nil {
+		mmCleanupStaleSessions.mock.t.Fatalf("WatchProgressMock.CleanupStaleSessions mock is already set by Set")
+	}
+
+	if mmCleanupStaleSessions.defaultExpectation == nil {
+		mmCleanupStaleSessions.defaultExpectation = &WatchProgressMockCleanupStaleSessionsExpectation{}
+	}
+
+	if mmCleanupStaleSessions.defaultExpectation.params != nil {
+		mmCleanupStaleSessions.mock.t.Fatalf("WatchProgressMock.CleanupStaleSessions mock is already set by Expect")
+	}
+
+	if mmCleanupStaleSessions.defaultExpectation.paramPtrs == nil {
+		mmCleanupStaleSessions.defaultExpectation.paramPtrs = &WatchProgressMockCleanupStaleSessionsParamPtrs{}
+	}
+	mmCleanupStaleSessions.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCleanupStaleSessions.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmCleanupStaleSessions
+}
+
+// ExpectNowParam2 sets up expected param now for WatchProgress.CleanupStaleSessions
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) ExpectNowParam2(now time.Time) *mWatchProgressMockCleanupStaleSessions {
+	if mmCleanupStaleSessions.mock.funcCleanupStaleSessions != nil {
+		mmCleanupStaleSessions.mock.t.Fatalf("WatchProgressMock.CleanupStaleSessions mock is already set by Set")
+	}
+
+	if mmCleanupStaleSessions.defaultExpectation == nil {
+		mmCleanupStaleSessions.defaultExpectation = &WatchProgressMockCleanupStaleSessionsExpectation{}
+	}
+
+	if mmCleanupStaleSessions.defaultExpectation.params != nil {
+		mmCleanupStaleSessions.mock.t.Fatalf("WatchProgressMock.CleanupStaleSessions mock is already set by Expect")
+	}
+
+	if mmCleanupStaleSessions.defaultExpectation.paramPtrs == nil {
+		mmCleanupStaleSessions.defaultExpectation.paramPtrs = &WatchProgressMockCleanupStaleSessionsParamPtrs{}
+	}
+	mmCleanupStaleSessions.defaultExpectation.paramPtrs.now = &now
+	mmCleanupStaleSessions.defaultExpectation.expectationOrigins.originNow = minimock.CallerInfo(1)
+
+	return mmCleanupStaleSessions
+}
+
+// Inspect accepts an inspector function that has same arguments as the WatchProgress.CleanupStaleSessions
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) Inspect(f func(ctx context.Context, now time.Time)) *mWatchProgressMockCleanupStaleSessions {
+	if mmCleanupStaleSessions.mock.inspectFuncCleanupStaleSessions != nil {
+		mmCleanupStaleSessions.mock.t.Fatalf("Inspect function is already set for WatchProgressMock.CleanupStaleSessions")
+	}
+
+	mmCleanupStaleSessions.mock.inspectFuncCleanupStaleSessions = f
+
+	return mmCleanupStaleSessions
+}
+
+// Return sets up results that will be returned by WatchProgress.CleanupStaleSessions
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) Return(i1 int64, err error) *WatchProgressMock {
+	if mmCleanupStaleSessions.mock.funcCleanupStaleSessions != nil {
+		mmCleanupStaleSessions.mock.t.Fatalf("WatchProgressMock.CleanupStaleSessions mock is already set by Set")
+	}
+
+	if mmCleanupStaleSessions.defaultExpectation == nil {
+		mmCleanupStaleSessions.defaultExpectation = &WatchProgressMockCleanupStaleSessionsExpectation{mock: mmCleanupStaleSessions.mock}
+	}
+	mmCleanupStaleSessions.defaultExpectation.results = &WatchProgressMockCleanupStaleSessionsResults{i1, err}
+	mmCleanupStaleSessions.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCleanupStaleSessions.mock
+}
+
+// Set uses given function f to mock the WatchProgress.CleanupStaleSessions method
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) Set(f func(ctx context.Context, now time.Time) (i1 int64, err error)) *WatchProgressMock {
+	if mmCleanupStaleSessions.defaultExpectation != nil {
+		mmCleanupStaleSessions.mock.t.Fatalf("Default expectation is already set for the WatchProgress.CleanupStaleSessions method")
+	}
+
+	if len(mmCleanupStaleSessions.expectations) > 0 {
+		mmCleanupStaleSessions.mock.t.Fatalf("Some expectations are already set for the WatchProgress.CleanupStaleSessions method")
+	}
+
+	mmCleanupStaleSessions.mock.funcCleanupStaleSessions = f
+	mmCleanupStaleSessions.mock.funcCleanupStaleSessionsOrigin = minimock.CallerInfo(1)
+	return mmCleanupStaleSessions.mock
+}
+
+// When sets expectation for the WatchProgress.CleanupStaleSessions which will trigger the result defined by the following
+// Then helper
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) When(ctx context.Context, now time.Time) *WatchProgressMockCleanupStaleSessionsExpectation {
+	if mmCleanupStaleSessions.mock.funcCleanupStaleSessions != nil {
+		mmCleanupStaleSessions.mock.t.Fatalf("WatchProgressMock.CleanupStaleSessions mock is already set by Set")
+	}
+
+	expectation := &WatchProgressMockCleanupStaleSessionsExpectation{
+		mock:               mmCleanupStaleSessions.mock,
+		params:             &WatchProgressMockCleanupStaleSessionsParams{ctx, now},
+		expectationOrigins: WatchProgressMockCleanupStaleSessionsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmCleanupStaleSessions.expectations = append(mmCleanupStaleSessions.expectations, expectation)
+	return expectation
+}
+
+// Then sets up WatchProgress.CleanupStaleSessions return parameters for the expectation previously defined by the When method
+func (e *WatchProgressMockCleanupStaleSessionsExpectation) Then(i1 int64, err error) *WatchProgressMock {
+	e.results = &WatchProgressMockCleanupStaleSessionsResults{i1, err}
+	return e.mock
+}
+
+// Times sets number of times WatchProgress.CleanupStaleSessions should be invoked
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) Times(n uint64) *mWatchProgressMockCleanupStaleSessions {
+	if n == 0 {
+		mmCleanupStaleSessions.mock.t.Fatalf("Times of WatchProgressMock.CleanupStaleSessions mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCleanupStaleSessions.expectedInvocations, n)
+	mmCleanupStaleSessions.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCleanupStaleSessions
+}
+
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) invocationsDone() bool {
+	if len(mmCleanupStaleSessions.expectations) == 0 && mmCleanupStaleSessions.defaultExpectation == nil && mmCleanupStaleSessions.mock.funcCleanupStaleSessions == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCleanupStaleSessions.mock.afterCleanupStaleSessionsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCleanupStaleSessions.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CleanupStaleSessions implements mm_service.WatchProgress
+func (mmCleanupStaleSessions *WatchProgressMock) CleanupStaleSessions(ctx context.Context, now time.Time) (i1 int64, err error) {
+	mm_atomic.AddUint64(&mmCleanupStaleSessions.beforeCleanupStaleSessionsCounter, 1)
+	defer mm_atomic.AddUint64(&mmCleanupStaleSessions.afterCleanupStaleSessionsCounter, 1)
+
+	mmCleanupStaleSessions.t.Helper()
+
+	if mmCleanupStaleSessions.inspectFuncCleanupStaleSessions != nil {
+		mmCleanupStaleSessions.inspectFuncCleanupStaleSessions(ctx, now)
+	}
+
+	mm_params := WatchProgressMockCleanupStaleSessionsParams{ctx, now}
+
+	// Record call args
+	mmCleanupStaleSessions.CleanupStaleSessionsMock.mutex.Lock()
+	mmCleanupStaleSessions.CleanupStaleSessionsMock.callArgs = append(mmCleanupStaleSessions.CleanupStaleSessionsMock.callArgs, &mm_params)
+	mmCleanupStaleSessions.CleanupStaleSessionsMock.mutex.Unlock()
+
+	for _, e := range mmCleanupStaleSessions.CleanupStaleSessionsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.i1, e.results.err
+		}
+	}
+
+	if mmCleanupStaleSessions.CleanupStaleSessionsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCleanupStaleSessions.CleanupStaleSessionsMock.defaultExpectation.Counter, 1)
+		mm_want := mmCleanupStaleSessions.CleanupStaleSessionsMock.defaultExpectation.params
+		mm_want_ptrs := mmCleanupStaleSessions.CleanupStaleSessionsMock.defaultExpectation.paramPtrs
+
+		mm_got := WatchProgressMockCleanupStaleSessionsParams{ctx, now}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCleanupStaleSessions.t.Errorf("WatchProgressMock.CleanupStaleSessions got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCleanupStaleSessions.CleanupStaleSessionsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.now != nil && !minimock.Equal(*mm_want_ptrs.now, mm_got.now) {
+				mmCleanupStaleSessions.t.Errorf("WatchProgressMock.CleanupStaleSessions got unexpected parameter now, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCleanupStaleSessions.CleanupStaleSessionsMock.defaultExpectation.expectationOrigins.originNow, *mm_want_ptrs.now, mm_got.now, minimock.Diff(*mm_want_ptrs.now, mm_got.now))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCleanupStaleSessions.t.Errorf("WatchProgressMock.CleanupStaleSessions got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCleanupStaleSessions.CleanupStaleSessionsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCleanupStaleSessions.CleanupStaleSessionsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCleanupStaleSessions.t.Fatal("No results are set for the WatchProgressMock.CleanupStaleSessions")
+		}
+		return (*mm_results).i1, (*mm_results).err
+	}
+	if mmCleanupStaleSessions.funcCleanupStaleSessions != nil {
+		return mmCleanupStaleSessions.funcCleanupStaleSessions(ctx, now)
+	}
+	mmCleanupStaleSessions.t.Fatalf("Unexpected call to WatchProgressMock.CleanupStaleSessions. %v %v", ctx, now)
+	return
+}
+
+// CleanupStaleSessionsAfterCounter returns a count of finished WatchProgressMock.CleanupStaleSessions invocations
+func (mmCleanupStaleSessions *WatchProgressMock) CleanupStaleSessionsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCleanupStaleSessions.afterCleanupStaleSessionsCounter)
+}
+
+// CleanupStaleSessionsBeforeCounter returns a count of WatchProgressMock.CleanupStaleSessions invocations
+func (mmCleanupStaleSessions *WatchProgressMock) CleanupStaleSessionsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCleanupStaleSessions.beforeCleanupStaleSessionsCounter)
+}
+
+// Calls returns a list of arguments used in each call to WatchProgressMock.CleanupStaleSessions.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCleanupStaleSessions *mWatchProgressMockCleanupStaleSessions) Calls() []*WatchProgressMockCleanupStaleSessionsParams {
+	mmCleanupStaleSessions.mutex.RLock()
+
+	argCopy := make([]*WatchProgressMockCleanupStaleSessionsParams, len(mmCleanupStaleSessions.callArgs))
+	copy(argCopy, mmCleanupStaleSessions.callArgs)
+
+	mmCleanupStaleSessions.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCleanupStaleSessionsDone returns true if the count of the CleanupStaleSessions invocations corresponds
+// the number of defined expectations
+func (m *WatchProgressMock) MinimockCleanupStaleSessionsDone() bool {
+	if m.CleanupStaleSessionsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CleanupStaleSessionsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CleanupStaleSessionsMock.invocationsDone()
+}
+
+// MinimockCleanupStaleSessionsInspect logs each unmet expectation
+func (m *WatchProgressMock) MinimockCleanupStaleSessionsInspect() {
+	for _, e := range m.CleanupStaleSessionsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to WatchProgressMock.CleanupStaleSessions at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterCleanupStaleSessionsCounter := mm_atomic.LoadUint64(&m.afterCleanupStaleSessionsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CleanupStaleSessionsMock.defaultExpectation != nil && afterCleanupStaleSessionsCounter < 1 {
+		if m.CleanupStaleSessionsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to WatchProgressMock.CleanupStaleSessions at\n%s", m.CleanupStaleSessionsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to WatchProgressMock.CleanupStaleSessions at\n%s with params: %#v", m.CleanupStaleSessionsMock.defaultExpectation.expectationOrigins.origin, *m.CleanupStaleSessionsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCleanupStaleSessions != nil && afterCleanupStaleSessionsCounter < 1 {
+		m.t.Errorf("Expected call to WatchProgressMock.CleanupStaleSessions at\n%s", m.funcCleanupStaleSessionsOrigin)
+	}
+
+	if !m.CleanupStaleSessionsMock.invocationsDone() && afterCleanupStaleSessionsCounter > 0 {
+		m.t.Errorf("Expected %d calls to WatchProgressMock.CleanupStaleSessions at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CleanupStaleSessionsMock.expectedInvocations), m.CleanupStaleSessionsMock.expectedInvocationsOrigin, afterCleanupStaleSessionsCounter)
+	}
 }
 
 type mWatchProgressMockGet struct {
@@ -1344,6 +1698,8 @@ func (m *WatchProgressMock) MinimockOnDurationKnownInspect() {
 func (m *WatchProgressMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockCleanupStaleSessionsInspect()
+
 			m.MinimockGetInspect()
 
 			m.MinimockHeartbeatInspect()
@@ -1372,6 +1728,7 @@ func (m *WatchProgressMock) MinimockWait(timeout mm_time.Duration) {
 func (m *WatchProgressMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockCleanupStaleSessionsDone() &&
 		m.MinimockGetDone() &&
 		m.MinimockHeartbeatDone() &&
 		m.MinimockOnDurationKnownDone()

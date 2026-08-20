@@ -535,3 +535,17 @@ func logRejectedInterval(outcome watchIntervalOutcome, in domain.Heartbeat) {
 		zap.Int64("accepted_ms", acceptedMs),
 	)
 }
+
+// CleanupStaleSessions удаляет сессии просмотра, не обновлявшиеся дольше
+// cfg.WatchSessionRetention (решение О-2 эпика Э3): сессии нужны только для идемпотентности
+// и защиты от перемотки в живом просмотре, накопленное покрытие хранится в watch_progress.
+// Вызывается тиком watchdog'а. Возвращает число удалённых строк — для лога.
+func (s *WatchProgressService) CleanupStaleSessions(ctx context.Context, now time.Time) (int64, error) {
+	deleted, err := s.sessions.DeleteOlderThan(ctx, now.Add(-s.cfg.WatchSessionRetention))
+	if err != nil {
+		zap.L().Error(err.Error())
+		return 0, err
+	}
+
+	return deleted, nil
+}

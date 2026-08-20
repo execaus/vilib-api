@@ -41,6 +41,7 @@ func TestLoadConfig_UsesDefaultsWhenFileIsAbsent(t *testing.T) {
 	require.Equal(t, time.Hour, cfg.Video.HLSSegmentTTL)
 	require.InDelta(t, 0.95, cfg.Video.WatchCompletionThreshold, 0)
 	require.Equal(t, 10*time.Second, cfg.Video.WatchHeartbeatInterval)
+	require.Equal(t, 30*24*time.Hour, cfg.Video.WatchSessionRetention)
 }
 
 // TestLoadConfig_EnvironmentOverridesDefaults проверяет, что переменные окружения переопределяют
@@ -148,6 +149,7 @@ func TestConfig_Validate(t *testing.T) {
 				HLSSegmentTTL:            time.Hour,
 				WatchCompletionThreshold: 0.95,
 				WatchHeartbeatInterval:   10 * time.Second,
+				WatchSessionRetention:    30 * 24 * time.Hour,
 			},
 		}
 	}
@@ -231,6 +233,11 @@ func TestConfig_Validate(t *testing.T) {
 			name:    "zero watch heartbeat interval",
 			mutate:  func(cfg *config.Config) { cfg.Video.WatchHeartbeatInterval = 0 },
 			wantErr: "video.watch_heartbeat_interval",
+		},
+		{
+			name:    "zero watch session retention",
+			mutate:  func(cfg *config.Config) { cfg.Video.WatchSessionRetention = 0 },
+			wantErr: "video.watch_session_retention",
 		},
 	}
 

@@ -351,6 +351,9 @@ type WatchProgress interface {
 	// того, как стала известна длительность видео (§3, «Э3-Т6») — вызывается из
 	// VideoService.ApplyProcessingCompleted при переходе видео в ready.
 	OnDurationKnown(ctx context.Context, videoID uuid.UUID, durationMs int64) error
+	// CleanupStaleSessions удаляет сессии просмотра старше срока хранения (решение О-2 эпика
+	// Э3) — вызывается тиком watchdog'а. Возвращает число удалённых строк.
+	CleanupStaleSessions(ctx context.Context, now time.Time) (int64, error)
 }
 
 // Assignment реализует сервис назначений обязательного обучения — создание, чтение карточки

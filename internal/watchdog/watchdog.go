@@ -48,8 +48,9 @@ func (w *Watchdog) Run(ctx context.Context) error {
 }
 
 // tick выполняет один проход watchdog'а внутри транзакции саги: три условных UPDATE по
-// таймаутам uploading/queued/compressing (VideoService.FailTimedOut) и best-effort очистка
-// объектов зависших загрузок после коммита. Несколько инстансов API безопасны без
+// таймаутам uploading/queued/compressing (VideoService.FailTimedOut), удаление устаревших
+// сессий просмотра (решение О-2 эпика Э3) и best-effort очистка объектов зависших загрузок
+// после коммита. Несколько инстансов API безопасны без
 // дополнительной синхронизации между собой: каждый UPDATE атомарен и условен, поэтому строку,
 // уже переведённую другим инстансом на этом же тике, повторный UPDATE просто не затронет
 // (WHERE status = <исходный статус> перестаёт совпадать после первого перевода).
@@ -57,8 +58,22 @@ func (w *Watchdog) tick(ctx context.Context) {
 	now := time.Now()
 
 	err := w.runner.Run(ctx, func(txCtx context.Context, s *service.Service) error {
-		_, failErr := s.Video.FailTimedOut(txCtx, now)
-		return failErr
+		if _, failErr := s.Video.FailTimedOut(txCtx, now); failErr != nil {
+			return failErr
+		}
+
+		// Чистка сессий просмотра старше срока хранения (решение О-2 эпика Э3): отдельного
+		// фонового процесса ради одного DELETE не заводим — тик watchdog'а уже идёт с нужной
+		// периодичностью и в транзакции саги.
+		deleted, cleanupErr := s.WatchProgress.CleanupStaleSessions(txCtx, now)
+		if cleanupErr != nil {
+			return cleanupErr
+		}
+		if deleted > 0 {
+			w.logger.Info("watch sessions cleaned up", zap.Int64("deleted", deleted))
+		}
+
+		return nil
 	})
 	if err != nil {
 		w.logger.Error("watchdog tick failed", zap.Error(err))

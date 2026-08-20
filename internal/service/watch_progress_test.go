@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -370,4 +371,31 @@ func TestService_WatchProgress_OnDurationKnown_CompletesAccumulatedProgress(t *t
 	err := svc.OnDurationKnown(t.Context(), f.VideoID, durationMs)
 
 	require.NoError(t, err)
+}
+
+// TestService_WatchProgressCleanupStaleSessions_UsesRetentionCutoff проверяет чистку сессий
+// просмотра тиком watchdog'а (решение О-2 эпика Э3): удаляются сессии старше срока хранения.
+func TestService_WatchProgressCleanupStaleSessions_UsesRetentionCutoff(t *testing.T) {
+	t.Parallel()
+
+	f := newWatchProgressFixture()
+	mc := minimock.NewController(t)
+	m := newWatchProgressMocks(mc)
+
+	cfg := f.Cfg
+	cfg.WatchSessionRetention = 30 * 24 * time.Hour
+
+	var gotCutoff time.Time
+	m.Sessions.DeleteOlderThanMock.Set(func(_ context.Context, cutoff time.Time) (int64, error) {
+		gotCutoff = cutoff
+		return 7, nil
+	})
+
+	svc := newWatchProgressService(m, cfg, f.Now)
+
+	deleted, err := svc.CleanupStaleSessions(t.Context(), f.Now)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(7), deleted)
+	require.Equal(t, f.Now.Add(-cfg.WatchSessionRetention), gotCutoff)
 }
