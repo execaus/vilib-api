@@ -143,7 +143,13 @@ type GroupRole interface {
 
 type Video interface {
 	Select(ctx context.Context, id uuid.UUID) (*domain.Video, error)
-	Insert(ctx context.Context, name string, groupID, userID uuid.UUID, status domain.VideoStatus) (domain.Video, error)
+	// Insert создаёт запись видео. isUrgent — признак срочности (эпик Э5, В-2): помеченное
+	// видео берётся в обработку приоритетной полосой мимо общей очереди.
+	Insert(
+		ctx context.Context,
+		name string, groupID, userID uuid.UUID,
+		status domain.VideoStatus, isUrgent bool,
+	) (domain.Video, error)
 	// UpdateStatusIf выполняет условный переход статуса видео: строка обновляется, только
 	// если её текущий статус входит в from (и, если задан patch.ExpectedAttempt, совпадает
 	// текущий processing_attempt). Возвращает true, если строка была обновлена — гонки

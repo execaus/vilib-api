@@ -26,6 +26,7 @@ func TestLoadConfig_UsesDefaultsWhenFileIsAbsent(t *testing.T) {
 	require.Equal(t, "vilib", cfg.S3.Bucket)
 	require.True(t, cfg.S3.UsePathStyle)
 	require.Equal(t, "video.original-uploaded", cfg.Kafka.TopicOriginalUploaded)
+	require.Equal(t, "video.original-uploaded-urgent", cfg.Kafka.TopicOriginalUploadedUrgent)
 	require.Equal(t, "video.processing-events", cfg.Kafka.TopicProcessingEvents)
 	require.Equal(t, "vilib-api", cfg.Kafka.ConsumerGroup)
 	require.Equal(t, 500*time.Millisecond, cfg.Kafka.OutboxPollInterval)
@@ -133,10 +134,11 @@ func TestConfig_Validate(t *testing.T) {
 				Endpoint: "e", PublicEndpoint: "pe", AccessKeyID: "ak", SecretAccessKey: "sk", Bucket: "b",
 			},
 			Kafka: config.KafkaConfig{
-				Brokers:               []string{"b1"},
-				TopicOriginalUploaded: "t1",
-				TopicProcessingEvents: "t2",
-				ConsumerGroup:         "g",
+				Brokers:                     []string{"b1"},
+				TopicOriginalUploaded:       "t1",
+				TopicOriginalUploadedUrgent: "t1u",
+				TopicProcessingEvents:       "t2",
+				ConsumerGroup:               "g",
 			},
 			Video: config.VideoConfig{
 				Profiles:                 []string{"360p"},
@@ -203,6 +205,11 @@ func TestConfig_Validate(t *testing.T) {
 			name:    "missing kafka topic",
 			mutate:  func(cfg *config.Config) { cfg.Kafka.TopicOriginalUploaded = "" },
 			wantErr: "kafka.topic_original_uploaded",
+		},
+		{
+			name:    "missing kafka urgent topic",
+			mutate:  func(cfg *config.Config) { cfg.Kafka.TopicOriginalUploadedUrgent = "" },
+			wantErr: "kafka.topic_original_uploaded_urgent",
 		},
 		{
 			name:    "empty video profiles",

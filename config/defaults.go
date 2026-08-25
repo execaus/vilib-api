@@ -36,11 +36,12 @@ const (
 
 // Дефолты Kafka.
 const (
-	defaultKafkaTopicOriginalUploaded = "video.original-uploaded"
-	defaultKafkaTopicProcessingEvents = "video.processing-events"
-	defaultKafkaConsumerGroup         = "vilib-api"
-	defaultKafkaOutboxPollInterval    = 500 * time.Millisecond
-	defaultKafkaOutboxBatchSize       = 100
+	defaultKafkaTopicOriginalUploaded       = "video.original-uploaded"
+	defaultKafkaTopicOriginalUploadedUrgent = "video.original-uploaded-urgent"
+	defaultKafkaTopicProcessingEvents       = "video.processing-events"
+	defaultKafkaConsumerGroup               = "vilib-api"
+	defaultKafkaOutboxPollInterval          = 500 * time.Millisecond
+	defaultKafkaOutboxBatchSize             = 100
 )
 
 // Дефолты обработки видео.
@@ -102,6 +103,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("kafka.brokers", []string{})
 	v.SetDefault("kafka.topic_original_uploaded", defaultKafkaTopicOriginalUploaded)
+	v.SetDefault("kafka.topic_original_uploaded_urgent", defaultKafkaTopicOriginalUploadedUrgent)
 	v.SetDefault("kafka.topic_processing_events", defaultKafkaTopicProcessingEvents)
 	v.SetDefault("kafka.consumer_group", defaultKafkaConsumerGroup)
 	v.SetDefault("kafka.outbox_poll_interval", defaultKafkaOutboxPollInterval)

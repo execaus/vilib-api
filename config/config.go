@@ -87,8 +87,11 @@ type S3Config struct {
 type KafkaConfig struct {
 	Brokers               []string `mapstructure:"brokers"`
 	TopicOriginalUploaded string   `mapstructure:"topic_original_uploaded"`
-	TopicProcessingEvents string   `mapstructure:"topic_processing_events"`
-	ConsumerGroup         string   `mapstructure:"consumer_group"`
+	// TopicOriginalUploadedUrgent — топик приоритетной полосы: срочные видео публикуются сюда,
+	// а не в общий архивный топик (эпик Э5, В-2, §2 дизайна эпика).
+	TopicOriginalUploadedUrgent string `mapstructure:"topic_original_uploaded_urgent"`
+	TopicProcessingEvents       string `mapstructure:"topic_processing_events"`
+	ConsumerGroup               string `mapstructure:"consumer_group"`
 	// OutboxPollInterval — период опроса таблицы outbox_events релеем.
 	OutboxPollInterval time.Duration `mapstructure:"outbox_poll_interval"`
 	// OutboxBatchSize — максимальное число событий, публикуемых за один проход релея.
@@ -166,21 +169,22 @@ func (c Config) Validate() error {
 	var missing []string
 
 	requiredStrings := map[string]string{
-		"database.host":                 c.Database.Host,
-		"database.port":                 c.Database.Port,
-		"database.user":                 c.Database.User,
-		"database.name":                 c.Database.Name,
-		"database.schema":               c.Database.Schema,
-		"auth.key":                      c.Auth.Key,
-		"frontend.origin":               c.Frontend.Origin,
-		"s3.endpoint":                   c.S3.Endpoint,
-		"s3.public_endpoint":            c.S3.PublicEndpoint,
-		"s3.access_key_id":              c.S3.AccessKeyID,
-		"s3.secret_access_key":          c.S3.SecretAccessKey,
-		"s3.bucket":                     c.S3.Bucket,
-		"kafka.topic_original_uploaded": c.Kafka.TopicOriginalUploaded,
-		"kafka.topic_processing_events": c.Kafka.TopicProcessingEvents,
-		"kafka.consumer_group":          c.Kafka.ConsumerGroup,
+		"database.host":                        c.Database.Host,
+		"database.port":                        c.Database.Port,
+		"database.user":                        c.Database.User,
+		"database.name":                        c.Database.Name,
+		"database.schema":                      c.Database.Schema,
+		"auth.key":                             c.Auth.Key,
+		"frontend.origin":                      c.Frontend.Origin,
+		"s3.endpoint":                          c.S3.Endpoint,
+		"s3.public_endpoint":                   c.S3.PublicEndpoint,
+		"s3.access_key_id":                     c.S3.AccessKeyID,
+		"s3.secret_access_key":                 c.S3.SecretAccessKey,
+		"s3.bucket":                            c.S3.Bucket,
+		"kafka.topic_original_uploaded":        c.Kafka.TopicOriginalUploaded,
+		"kafka.topic_original_uploaded_urgent": c.Kafka.TopicOriginalUploadedUrgent,
+		"kafka.topic_processing_events":        c.Kafka.TopicProcessingEvents,
+		"kafka.consumer_group":                 c.Kafka.ConsumerGroup,
 	}
 	for key, value := range requiredStrings {
 		if value == "" {

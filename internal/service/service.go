@@ -213,11 +213,14 @@ type GroupRole interface {
 type Video interface {
 	// CreateUpload проверяет права ManageVideo, валидирует content-type/размер, создаёт
 	// запись видео в статусе uploading и выдаёт преподписанный URL на PUT-загрузку оригинала.
+	// isUrgent помечает видео срочным (эпик Э5, В-2) — публикуется в приоритетную полосу
+	// обработки при подтверждении загрузки.
 	CreateUpload(
 		ctx context.Context,
 		accountID, groupID, userID uuid.UUID,
 		name, contentType string,
 		size int64,
+		isUrgent bool,
 	) (domain.VideoUpload, error)
 	// CompleteUpload подтверждает загрузку оригинала: проверяет объект в хранилище,
 	// регистрирует ассет-оригинал, переводит видео в очередь на обработку и публикует
@@ -477,9 +480,10 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 	s.GroupMember = NewGroupMemberService(r.GroupMember, s)
 	s.GroupRole = NewGroupRoleService(r.GroupRole, s)
 	s.Video = NewVideoService(s3, r.Video, s, VideoServiceConfig{
-		Bucket:                cfg.S3.Bucket,
-		Video:                 cfg.Video,
-		TopicOriginalUploaded: cfg.Kafka.TopicOriginalUploaded,
+		Bucket:                      cfg.S3.Bucket,
+		Video:                       cfg.Video,
+		TopicOriginalUploaded:       cfg.Kafka.TopicOriginalUploaded,
+		TopicOriginalUploadedUrgent: cfg.Kafka.TopicOriginalUploadedUrgent,
 	})
 	s.VideoAsset = NewVideoAssetService(r.VideoAsset, s)
 	s.Access = NewAccessService(s)

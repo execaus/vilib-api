@@ -43,8 +43,12 @@ type VideoServiceConfig struct {
 	Bucket string
 	// Video — параметры обработки видео (лимиты, профили, таймауты).
 	Video config.VideoConfig
-	// TopicOriginalUploaded — топик Kafka для публикации события OriginalUploaded.
+	// TopicOriginalUploaded — топик Kafka архивной полосы для публикации события
+	// OriginalUploaded несрочных видео.
 	TopicOriginalUploaded string
+	// TopicOriginalUploadedUrgent — топик Kafka приоритетной полосы для публикации события
+	// OriginalUploaded видео, помеченных срочными (эпик Э5, В-2).
+	TopicOriginalUploadedUrgent string
 }
 
 type VideoService struct {
@@ -349,12 +353,15 @@ func segmentPrefix(playlistKey string) string {
 
 // CreateUpload проверяет права ManageVideo, валидирует content-type и размер файла,
 // создаёт запись видео в статусе uploading и выдаёт преподписанный URL на PUT-загрузку
-// оригинала в хранилище (Э1-Т7, §5 дизайна эпика).
+// оригинала в хранилище (Э1-Т7, §5 дизайна эпика). isUrgent помечает видео срочным (эпик Э5,
+// В-2) — такое видео будет опубликовано в приоритетную полосу обработки при подтверждении
+// загрузки.
 func (s *VideoService) CreateUpload(
 	ctx context.Context,
 	accountID, groupID, userID uuid.UUID,
 	name, contentType string,
 	size int64,
+	isUrgent bool,
 ) (domain.VideoUpload, error) {
 	// OR-логика: аккаунтное право ИЛИ групповое право
 	if err := s.srv.Access.IsCheckAccountAction(
@@ -383,7 +390,7 @@ func (s *VideoService) CreateUpload(
 	}
 
 	// Создание записи о видео в статусе загрузки
-	video, err := s.repo.Insert(ctx, name, groupID, userID, domain.VideoStatusUploading)
+	video, err := s.repo.Insert(ctx, name, groupID, userID, domain.VideoStatusUploading, isUrgent)
 	if err != nil {
 		if errors.Is(dberrors.UserGroupVideoErrors.ErrUniqueUserGroupVideosUserGroupIdNameKey, err) {
 			zap.L().Warn(err.Error())
@@ -457,7 +464,7 @@ func (s *VideoService) CompleteUpload(
 		// Продолжение обработки ниже.
 	}
 
-	result, err := s.completeUploadingVideo(ctx, videoID)
+	result, err := s.completeUploadingVideo(ctx, videoID, video.IsUrgent)
 	if err != nil {
 		return domain.VideoListItem{}, err
 	}
@@ -466,9 +473,14 @@ func (s *VideoService) CompleteUpload(
 }
 
 // completeUploadingVideo выполняет подтверждение загрузки для видео в статусе uploading:
-// проверяет объект в хранилище, регистрирует ассет, переводит видео в очередь и публикует
-// событие OriginalUploaded.
-func (s *VideoService) completeUploadingVideo(ctx context.Context, videoID uuid.UUID) (domain.Video, error) {
+// проверяет объект в хранилище, регистрирует ассет, переводит видео в очередь (проставляя
+// queued_at — момент complete из метрики времени публикации, Э5-Т5) и публикует событие
+// OriginalUploaded в полосу, соответствующую isUrgent (эпик Э5, В-2).
+func (s *VideoService) completeUploadingVideo(
+	ctx context.Context,
+	videoID uuid.UUID,
+	isUrgent bool,
+) (domain.Video, error) {
 	key := domain.VideoOriginalObjectKey(videoID)
 
 	info, err := s.s3.HeadObject(ctx, s.cfg.Bucket, key)
@@ -512,12 +524,13 @@ func (s *VideoService) completeUploadingVideo(ctx context.Context, videoID uuid.
 	}
 
 	attempt := videoInitialProcessingAttempt
+	queuedAt := time.Now()
 	updated, err := s.repo.UpdateStatusIf(
 		ctx,
 		videoID,
 		[]domain.VideoStatus{domain.VideoStatusUploading},
 		domain.VideoStatusQueued,
-		domain.VideoPatch{ProcessingAttempt: &attempt},
+		domain.VideoPatch{ProcessingAttempt: &attempt, QueuedAt: &queuedAt},
 	)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -534,7 +547,7 @@ func (s *VideoService) completeUploadingVideo(ctx context.Context, videoID uuid.
 		return *current, nil
 	}
 
-	if publishErr := s.publishOriginalUploaded(ctx, videoID, attempt, key, info); publishErr != nil {
+	if publishErr := s.publishOriginalUploaded(ctx, videoID, attempt, isUrgent, key, info); publishErr != nil {
 		return domain.Video{}, publishErr
 	}
 
@@ -559,11 +572,16 @@ func isOriginalAssetConflict(err error) bool {
 }
 
 // publishOriginalUploaded собирает и публикует через outbox событие OriginalUploaded
-// (§6.1–6.2 эпика) для видео, только что переведённого в очередь на обработку.
+// (§6.1–6.2 эпика) для видео, только что переведённого в очередь на обработку. Топик
+// выбирается по isUrgent (эпик Э5, В-2, §2 дизайна эпика): срочное видео публикуется в
+// приоритетную полосу с постоянно свободным потребителем, а не в общий архивный топик —
+// маршрутизация определяется топиком, поле IsUrgent в самом событии нужно только для
+// наблюдаемости на стороне воркера.
 func (s *VideoService) publishOriginalUploaded(
 	ctx context.Context,
 	videoID uuid.UUID,
 	attempt int,
+	isUrgent bool,
 	key string,
 	info s3.ObjectInfo,
 ) error {
@@ -573,6 +591,7 @@ func (s *VideoService) publishOriginalUploaded(
 		ContentType: info.ContentType,
 		SizeBytes:   info.Size,
 		Profiles:    s.cfg.Video.Profiles,
+		IsUrgent:    isUrgent,
 	})
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -585,9 +604,14 @@ func (s *VideoService) publishOriginalUploaded(
 		return err
 	}
 
+	topic := s.cfg.TopicOriginalUploaded
+	if isUrgent {
+		topic = s.cfg.TopicOriginalUploadedUrgent
+	}
+
 	if publishErr := s.srv.Outbox.Publish(
 		ctx,
-		s.cfg.TopicOriginalUploaded,
+		topic,
 		videoID.String(),
 		payload,
 	); publishErr != nil {
@@ -928,6 +952,14 @@ func (s *VideoService) requeueAfterTemporaryFailure(ctx context.Context, videoID
 		return nil
 	}
 
+	// Признак срочности не меняется после создания видео — читается текущим состоянием, чтобы
+	// повторная публикация ушла в ту же полосу, что и исходная (§2 дизайна эпика Э5).
+	video, err := s.repo.Select(ctx, videoID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
 	assets, err := s.srv.VideoAsset.Get(ctx, videoID)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -949,7 +981,7 @@ func (s *VideoService) requeueAfterTemporaryFailure(ctx context.Context, videoID
 		return s.failProcessing(ctx, videoID, next, domain.VideoFailureClassPermanent, "original asset missing")
 	}
 
-	return s.publishOriginalUploaded(ctx, videoID, next, original.ObjectKey, s3.ObjectInfo{
+	return s.publishOriginalUploaded(ctx, videoID, next, video.IsUrgent, original.ObjectKey, s3.ObjectInfo{
 		Size:        original.SizeBytes,
 		ContentType: original.ContentType,
 	})

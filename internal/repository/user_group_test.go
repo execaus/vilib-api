@@ -110,7 +110,7 @@ func TestRepository_UserGroupDeleteCascade_RemovesGroupVideosAssetsFilesAndMembe
 		)
 		require.NoError(t, err)
 
-		video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady)
+		video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady, false)
 		require.NoError(t, err)
 
 		asset, err := r.VideoAsset.Insert(

@@ -58,6 +58,7 @@ func (h *Handler) UploadVideo(c *gin.Context) {
 			ctx,
 			accountID, groupID, claims.UserID,
 			request.Name, request.ContentType, request.SizeBytes,
+			request.IsUrgent,
 		)
 		if err != nil {
 			zap.L().Error(err.Error())

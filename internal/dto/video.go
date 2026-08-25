@@ -12,6 +12,9 @@ type UploadVideoRequest struct {
 	Name        string `json:"name"         binding:"required,min=1,max=255"`
 	ContentType string `json:"content_type" binding:"required,startswith=video/"`
 	SizeBytes   int64  `json:"size_bytes"   binding:"required,gt=0"`
+	// IsUrgent — признак срочного видео: помеченный ролик берётся в обработку приоритетной
+	// полосой мимо общей очереди (эпик Э5, В-2). Необязательное поле, по умолчанию false.
+	IsUrgent bool `json:"is_urgent"`
 }
 
 // UploadVideoResponse — ответ на создание загрузки видео: идентификатор видео и

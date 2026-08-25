@@ -28,9 +28,9 @@ type VideoMock struct {
 	beforeDeleteCounter uint64
 	DeleteMock          mVideoMockDelete
 
-	funcInsert          func(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus) (v1 domain.Video, err error)
+	funcInsert          func(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus, isUrgent bool) (v1 domain.Video, err error)
 	funcInsertOrigin    string
-	inspectFuncInsert   func(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus)
+	inspectFuncInsert   func(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus, isUrgent bool)
 	afterInsertCounter  uint64
 	beforeInsertCounter uint64
 	InsertMock          mVideoMockInsert
@@ -483,20 +483,22 @@ type VideoMockInsertExpectation struct {
 
 // VideoMockInsertParams contains parameters of the Video.Insert
 type VideoMockInsertParams struct {
-	ctx     context.Context
-	name    string
-	groupID uuid.UUID
-	userID  uuid.UUID
-	status  domain.VideoStatus
+	ctx      context.Context
+	name     string
+	groupID  uuid.UUID
+	userID   uuid.UUID
+	status   domain.VideoStatus
+	isUrgent bool
 }
 
 // VideoMockInsertParamPtrs contains pointers to parameters of the Video.Insert
 type VideoMockInsertParamPtrs struct {
-	ctx     *context.Context
-	name    *string
-	groupID *uuid.UUID
-	userID  *uuid.UUID
-	status  *domain.VideoStatus
+	ctx      *context.Context
+	name     *string
+	groupID  *uuid.UUID
+	userID   *uuid.UUID
+	status   *domain.VideoStatus
+	isUrgent *bool
 }
 
 // VideoMockInsertResults contains results of the Video.Insert
@@ -507,12 +509,13 @@ type VideoMockInsertResults struct {
 
 // VideoMockInsertOrigins contains origins of expectations of the Video.Insert
 type VideoMockInsertExpectationOrigins struct {
-	origin        string
-	originCtx     string
-	originName    string
-	originGroupID string
-	originUserID  string
-	originStatus  string
+	origin         string
+	originCtx      string
+	originName     string
+	originGroupID  string
+	originUserID   string
+	originStatus   string
+	originIsUrgent string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -526,7 +529,7 @@ func (mmInsert *mVideoMockInsert) Optional() *mVideoMockInsert {
 }
 
 // Expect sets up expected params for Video.Insert
-func (mmInsert *mVideoMockInsert) Expect(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus) *mVideoMockInsert {
+func (mmInsert *mVideoMockInsert) Expect(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus, isUrgent bool) *mVideoMockInsert {
 	if mmInsert.mock.funcInsert != nil {
 		mmInsert.mock.t.Fatalf("VideoMock.Insert mock is already set by Set")
 	}
@@ -539,7 +542,7 @@ func (mmInsert *mVideoMockInsert) Expect(ctx context.Context, name string, group
 		mmInsert.mock.t.Fatalf("VideoMock.Insert mock is already set by ExpectParams functions")
 	}
 
-	mmInsert.defaultExpectation.params = &VideoMockInsertParams{ctx, name, groupID, userID, status}
+	mmInsert.defaultExpectation.params = &VideoMockInsertParams{ctx, name, groupID, userID, status, isUrgent}
 	mmInsert.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmInsert.expectations {
 		if minimock.Equal(e.params, mmInsert.defaultExpectation.params) {
@@ -665,8 +668,31 @@ func (mmInsert *mVideoMockInsert) ExpectStatusParam5(status domain.VideoStatus) 
 	return mmInsert
 }
 
+// ExpectIsUrgentParam6 sets up expected param isUrgent for Video.Insert
+func (mmInsert *mVideoMockInsert) ExpectIsUrgentParam6(isUrgent bool) *mVideoMockInsert {
+	if mmInsert.mock.funcInsert != nil {
+		mmInsert.mock.t.Fatalf("VideoMock.Insert mock is already set by Set")
+	}
+
+	if mmInsert.defaultExpectation == nil {
+		mmInsert.defaultExpectation = &VideoMockInsertExpectation{}
+	}
+
+	if mmInsert.defaultExpectation.params != nil {
+		mmInsert.mock.t.Fatalf("VideoMock.Insert mock is already set by Expect")
+	}
+
+	if mmInsert.defaultExpectation.paramPtrs == nil {
+		mmInsert.defaultExpectation.paramPtrs = &VideoMockInsertParamPtrs{}
+	}
+	mmInsert.defaultExpectation.paramPtrs.isUrgent = &isUrgent
+	mmInsert.defaultExpectation.expectationOrigins.originIsUrgent = minimock.CallerInfo(1)
+
+	return mmInsert
+}
+
 // Inspect accepts an inspector function that has same arguments as the Video.Insert
-func (mmInsert *mVideoMockInsert) Inspect(f func(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus)) *mVideoMockInsert {
+func (mmInsert *mVideoMockInsert) Inspect(f func(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus, isUrgent bool)) *mVideoMockInsert {
 	if mmInsert.mock.inspectFuncInsert != nil {
 		mmInsert.mock.t.Fatalf("Inspect function is already set for VideoMock.Insert")
 	}
@@ -691,7 +717,7 @@ func (mmInsert *mVideoMockInsert) Return(v1 domain.Video, err error) *VideoMock 
 }
 
 // Set uses given function f to mock the Video.Insert method
-func (mmInsert *mVideoMockInsert) Set(f func(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus) (v1 domain.Video, err error)) *VideoMock {
+func (mmInsert *mVideoMockInsert) Set(f func(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus, isUrgent bool) (v1 domain.Video, err error)) *VideoMock {
 	if mmInsert.defaultExpectation != nil {
 		mmInsert.mock.t.Fatalf("Default expectation is already set for the Video.Insert method")
 	}
@@ -707,14 +733,14 @@ func (mmInsert *mVideoMockInsert) Set(f func(ctx context.Context, name string, g
 
 // When sets expectation for the Video.Insert which will trigger the result defined by the following
 // Then helper
-func (mmInsert *mVideoMockInsert) When(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus) *VideoMockInsertExpectation {
+func (mmInsert *mVideoMockInsert) When(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus, isUrgent bool) *VideoMockInsertExpectation {
 	if mmInsert.mock.funcInsert != nil {
 		mmInsert.mock.t.Fatalf("VideoMock.Insert mock is already set by Set")
 	}
 
 	expectation := &VideoMockInsertExpectation{
 		mock:               mmInsert.mock,
-		params:             &VideoMockInsertParams{ctx, name, groupID, userID, status},
+		params:             &VideoMockInsertParams{ctx, name, groupID, userID, status, isUrgent},
 		expectationOrigins: VideoMockInsertExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmInsert.expectations = append(mmInsert.expectations, expectation)
@@ -749,17 +775,17 @@ func (mmInsert *mVideoMockInsert) invocationsDone() bool {
 }
 
 // Insert implements mm_repository.Video
-func (mmInsert *VideoMock) Insert(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus) (v1 domain.Video, err error) {
+func (mmInsert *VideoMock) Insert(ctx context.Context, name string, groupID uuid.UUID, userID uuid.UUID, status domain.VideoStatus, isUrgent bool) (v1 domain.Video, err error) {
 	mm_atomic.AddUint64(&mmInsert.beforeInsertCounter, 1)
 	defer mm_atomic.AddUint64(&mmInsert.afterInsertCounter, 1)
 
 	mmInsert.t.Helper()
 
 	if mmInsert.inspectFuncInsert != nil {
-		mmInsert.inspectFuncInsert(ctx, name, groupID, userID, status)
+		mmInsert.inspectFuncInsert(ctx, name, groupID, userID, status, isUrgent)
 	}
 
-	mm_params := VideoMockInsertParams{ctx, name, groupID, userID, status}
+	mm_params := VideoMockInsertParams{ctx, name, groupID, userID, status, isUrgent}
 
 	// Record call args
 	mmInsert.InsertMock.mutex.Lock()
@@ -778,7 +804,7 @@ func (mmInsert *VideoMock) Insert(ctx context.Context, name string, groupID uuid
 		mm_want := mmInsert.InsertMock.defaultExpectation.params
 		mm_want_ptrs := mmInsert.InsertMock.defaultExpectation.paramPtrs
 
-		mm_got := VideoMockInsertParams{ctx, name, groupID, userID, status}
+		mm_got := VideoMockInsertParams{ctx, name, groupID, userID, status, isUrgent}
 
 		if mm_want_ptrs != nil {
 
@@ -807,6 +833,11 @@ func (mmInsert *VideoMock) Insert(ctx context.Context, name string, groupID uuid
 					mmInsert.InsertMock.defaultExpectation.expectationOrigins.originStatus, *mm_want_ptrs.status, mm_got.status, minimock.Diff(*mm_want_ptrs.status, mm_got.status))
 			}
 
+			if mm_want_ptrs.isUrgent != nil && !minimock.Equal(*mm_want_ptrs.isUrgent, mm_got.isUrgent) {
+				mmInsert.t.Errorf("VideoMock.Insert got unexpected parameter isUrgent, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmInsert.InsertMock.defaultExpectation.expectationOrigins.originIsUrgent, *mm_want_ptrs.isUrgent, mm_got.isUrgent, minimock.Diff(*mm_want_ptrs.isUrgent, mm_got.isUrgent))
+			}
+
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
 			mmInsert.t.Errorf("VideoMock.Insert got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 				mmInsert.InsertMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
@@ -819,9 +850,9 @@ func (mmInsert *VideoMock) Insert(ctx context.Context, name string, groupID uuid
 		return (*mm_results).v1, (*mm_results).err
 	}
 	if mmInsert.funcInsert != nil {
-		return mmInsert.funcInsert(ctx, name, groupID, userID, status)
+		return mmInsert.funcInsert(ctx, name, groupID, userID, status, isUrgent)
 	}
-	mmInsert.t.Fatalf("Unexpected call to VideoMock.Insert. %v %v %v %v %v", ctx, name, groupID, userID, status)
+	mmInsert.t.Fatalf("Unexpected call to VideoMock.Insert. %v %v %v %v %v %v", ctx, name, groupID, userID, status, isUrgent)
 	return
 }
 

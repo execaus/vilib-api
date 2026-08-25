@@ -50,9 +50,9 @@ type VideoMock struct {
 	beforeCompleteUploadCounter uint64
 	CompleteUploadMock          mVideoMockCompleteUpload
 
-	funcCreateUpload          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64) (v1 domain.VideoUpload, err error)
+	funcCreateUpload          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64, isUrgent bool) (v1 domain.VideoUpload, err error)
 	funcCreateUploadOrigin    string
-	inspectFuncCreateUpload   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64)
+	inspectFuncCreateUpload   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64, isUrgent bool)
 	afterCreateUploadCounter  uint64
 	beforeCreateUploadCounter uint64
 	CreateUploadMock          mVideoMockCreateUpload
@@ -1754,6 +1754,7 @@ type VideoMockCreateUploadParams struct {
 	name        string
 	contentType string
 	size        int64
+	isUrgent    bool
 }
 
 // VideoMockCreateUploadParamPtrs contains pointers to parameters of the Video.CreateUpload
@@ -1765,6 +1766,7 @@ type VideoMockCreateUploadParamPtrs struct {
 	name        *string
 	contentType *string
 	size        *int64
+	isUrgent    *bool
 }
 
 // VideoMockCreateUploadResults contains results of the Video.CreateUpload
@@ -1783,6 +1785,7 @@ type VideoMockCreateUploadExpectationOrigins struct {
 	originName        string
 	originContentType string
 	originSize        string
+	originIsUrgent    string
 }
 
 // Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
@@ -1796,7 +1799,7 @@ func (mmCreateUpload *mVideoMockCreateUpload) Optional() *mVideoMockCreateUpload
 }
 
 // Expect sets up expected params for Video.CreateUpload
-func (mmCreateUpload *mVideoMockCreateUpload) Expect(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64) *mVideoMockCreateUpload {
+func (mmCreateUpload *mVideoMockCreateUpload) Expect(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64, isUrgent bool) *mVideoMockCreateUpload {
 	if mmCreateUpload.mock.funcCreateUpload != nil {
 		mmCreateUpload.mock.t.Fatalf("VideoMock.CreateUpload mock is already set by Set")
 	}
@@ -1809,7 +1812,7 @@ func (mmCreateUpload *mVideoMockCreateUpload) Expect(ctx context.Context, accoun
 		mmCreateUpload.mock.t.Fatalf("VideoMock.CreateUpload mock is already set by ExpectParams functions")
 	}
 
-	mmCreateUpload.defaultExpectation.params = &VideoMockCreateUploadParams{ctx, accountID, groupID, userID, name, contentType, size}
+	mmCreateUpload.defaultExpectation.params = &VideoMockCreateUploadParams{ctx, accountID, groupID, userID, name, contentType, size, isUrgent}
 	mmCreateUpload.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmCreateUpload.expectations {
 		if minimock.Equal(e.params, mmCreateUpload.defaultExpectation.params) {
@@ -1981,8 +1984,31 @@ func (mmCreateUpload *mVideoMockCreateUpload) ExpectSizeParam7(size int64) *mVid
 	return mmCreateUpload
 }
 
+// ExpectIsUrgentParam8 sets up expected param isUrgent for Video.CreateUpload
+func (mmCreateUpload *mVideoMockCreateUpload) ExpectIsUrgentParam8(isUrgent bool) *mVideoMockCreateUpload {
+	if mmCreateUpload.mock.funcCreateUpload != nil {
+		mmCreateUpload.mock.t.Fatalf("VideoMock.CreateUpload mock is already set by Set")
+	}
+
+	if mmCreateUpload.defaultExpectation == nil {
+		mmCreateUpload.defaultExpectation = &VideoMockCreateUploadExpectation{}
+	}
+
+	if mmCreateUpload.defaultExpectation.params != nil {
+		mmCreateUpload.mock.t.Fatalf("VideoMock.CreateUpload mock is already set by Expect")
+	}
+
+	if mmCreateUpload.defaultExpectation.paramPtrs == nil {
+		mmCreateUpload.defaultExpectation.paramPtrs = &VideoMockCreateUploadParamPtrs{}
+	}
+	mmCreateUpload.defaultExpectation.paramPtrs.isUrgent = &isUrgent
+	mmCreateUpload.defaultExpectation.expectationOrigins.originIsUrgent = minimock.CallerInfo(1)
+
+	return mmCreateUpload
+}
+
 // Inspect accepts an inspector function that has same arguments as the Video.CreateUpload
-func (mmCreateUpload *mVideoMockCreateUpload) Inspect(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64)) *mVideoMockCreateUpload {
+func (mmCreateUpload *mVideoMockCreateUpload) Inspect(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64, isUrgent bool)) *mVideoMockCreateUpload {
 	if mmCreateUpload.mock.inspectFuncCreateUpload != nil {
 		mmCreateUpload.mock.t.Fatalf("Inspect function is already set for VideoMock.CreateUpload")
 	}
@@ -2007,7 +2033,7 @@ func (mmCreateUpload *mVideoMockCreateUpload) Return(v1 domain.VideoUpload, err 
 }
 
 // Set uses given function f to mock the Video.CreateUpload method
-func (mmCreateUpload *mVideoMockCreateUpload) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64) (v1 domain.VideoUpload, err error)) *VideoMock {
+func (mmCreateUpload *mVideoMockCreateUpload) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64, isUrgent bool) (v1 domain.VideoUpload, err error)) *VideoMock {
 	if mmCreateUpload.defaultExpectation != nil {
 		mmCreateUpload.mock.t.Fatalf("Default expectation is already set for the Video.CreateUpload method")
 	}
@@ -2023,14 +2049,14 @@ func (mmCreateUpload *mVideoMockCreateUpload) Set(f func(ctx context.Context, ac
 
 // When sets expectation for the Video.CreateUpload which will trigger the result defined by the following
 // Then helper
-func (mmCreateUpload *mVideoMockCreateUpload) When(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64) *VideoMockCreateUploadExpectation {
+func (mmCreateUpload *mVideoMockCreateUpload) When(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64, isUrgent bool) *VideoMockCreateUploadExpectation {
 	if mmCreateUpload.mock.funcCreateUpload != nil {
 		mmCreateUpload.mock.t.Fatalf("VideoMock.CreateUpload mock is already set by Set")
 	}
 
 	expectation := &VideoMockCreateUploadExpectation{
 		mock:               mmCreateUpload.mock,
-		params:             &VideoMockCreateUploadParams{ctx, accountID, groupID, userID, name, contentType, size},
+		params:             &VideoMockCreateUploadParams{ctx, accountID, groupID, userID, name, contentType, size, isUrgent},
 		expectationOrigins: VideoMockCreateUploadExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmCreateUpload.expectations = append(mmCreateUpload.expectations, expectation)
@@ -2065,17 +2091,17 @@ func (mmCreateUpload *mVideoMockCreateUpload) invocationsDone() bool {
 }
 
 // CreateUpload implements mm_service.Video
-func (mmCreateUpload *VideoMock) CreateUpload(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64) (v1 domain.VideoUpload, err error) {
+func (mmCreateUpload *VideoMock) CreateUpload(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, userID uuid.UUID, name string, contentType string, size int64, isUrgent bool) (v1 domain.VideoUpload, err error) {
 	mm_atomic.AddUint64(&mmCreateUpload.beforeCreateUploadCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreateUpload.afterCreateUploadCounter, 1)
 
 	mmCreateUpload.t.Helper()
 
 	if mmCreateUpload.inspectFuncCreateUpload != nil {
-		mmCreateUpload.inspectFuncCreateUpload(ctx, accountID, groupID, userID, name, contentType, size)
+		mmCreateUpload.inspectFuncCreateUpload(ctx, accountID, groupID, userID, name, contentType, size, isUrgent)
 	}
 
-	mm_params := VideoMockCreateUploadParams{ctx, accountID, groupID, userID, name, contentType, size}
+	mm_params := VideoMockCreateUploadParams{ctx, accountID, groupID, userID, name, contentType, size, isUrgent}
 
 	// Record call args
 	mmCreateUpload.CreateUploadMock.mutex.Lock()
@@ -2094,7 +2120,7 @@ func (mmCreateUpload *VideoMock) CreateUpload(ctx context.Context, accountID uui
 		mm_want := mmCreateUpload.CreateUploadMock.defaultExpectation.params
 		mm_want_ptrs := mmCreateUpload.CreateUploadMock.defaultExpectation.paramPtrs
 
-		mm_got := VideoMockCreateUploadParams{ctx, accountID, groupID, userID, name, contentType, size}
+		mm_got := VideoMockCreateUploadParams{ctx, accountID, groupID, userID, name, contentType, size, isUrgent}
 
 		if mm_want_ptrs != nil {
 
@@ -2133,6 +2159,11 @@ func (mmCreateUpload *VideoMock) CreateUpload(ctx context.Context, accountID uui
 					mmCreateUpload.CreateUploadMock.defaultExpectation.expectationOrigins.originSize, *mm_want_ptrs.size, mm_got.size, minimock.Diff(*mm_want_ptrs.size, mm_got.size))
 			}
 
+			if mm_want_ptrs.isUrgent != nil && !minimock.Equal(*mm_want_ptrs.isUrgent, mm_got.isUrgent) {
+				mmCreateUpload.t.Errorf("VideoMock.CreateUpload got unexpected parameter isUrgent, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreateUpload.CreateUploadMock.defaultExpectation.expectationOrigins.originIsUrgent, *mm_want_ptrs.isUrgent, mm_got.isUrgent, minimock.Diff(*mm_want_ptrs.isUrgent, mm_got.isUrgent))
+			}
+
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
 			mmCreateUpload.t.Errorf("VideoMock.CreateUpload got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 				mmCreateUpload.CreateUploadMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
@@ -2145,9 +2176,9 @@ func (mmCreateUpload *VideoMock) CreateUpload(ctx context.Context, accountID uui
 		return (*mm_results).v1, (*mm_results).err
 	}
 	if mmCreateUpload.funcCreateUpload != nil {
-		return mmCreateUpload.funcCreateUpload(ctx, accountID, groupID, userID, name, contentType, size)
+		return mmCreateUpload.funcCreateUpload(ctx, accountID, groupID, userID, name, contentType, size, isUrgent)
 	}
-	mmCreateUpload.t.Fatalf("Unexpected call to VideoMock.CreateUpload. %v %v %v %v %v %v %v", ctx, accountID, groupID, userID, name, contentType, size)
+	mmCreateUpload.t.Fatalf("Unexpected call to VideoMock.CreateUpload. %v %v %v %v %v %v %v %v", ctx, accountID, groupID, userID, name, contentType, size, isUrgent)
 	return
 }
 

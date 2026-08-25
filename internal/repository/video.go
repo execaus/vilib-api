@@ -66,6 +66,7 @@ func (r *VideoRepository) Insert(
 	name string,
 	groupID, userID uuid.UUID,
 	status domain.VideoStatus,
+	isUrgent bool,
 ) (domain.Video, error) {
 	exec := r.provider.GetExecutor(ctx)
 
@@ -74,6 +75,7 @@ func (r *VideoRepository) Insert(
 		UserGroupID: omit.From(groupID),
 		Author:      omit.From(userID),
 		Status:      omit.From(int32FromVideoStatus(status)),
+		IsUrgent:    omit.From(isUrgent),
 	}).One(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -124,6 +126,9 @@ func (r *VideoRepository) UpdateStatusIf(
 	}
 	if patch.Height != nil {
 		setter.Height = omitnull.From(int32FromInt(*patch.Height))
+	}
+	if patch.QueuedAt != nil {
+		setter.QueuedAt = omitnull.From(*patch.QueuedAt)
 	}
 
 	fromArgs := make([]bob.Expression, len(from))

@@ -66,7 +66,7 @@ func newTestAccountAndVideo(t *testing.T, r *repository.Repository, f faker.Fake
 	)
 	require.NoError(t, err)
 
-	video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady)
+	video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady, false)
 	require.NoError(t, err)
 
 	return assignmentFixture{AccountID: account.ID, AccountRoleID: accountRole.ID, Video: video}
@@ -373,6 +373,7 @@ func TestRepository_AssignmentSelectByFilter_ScopeAllSeesWholeAccount(t *testing
 			otherGroup.ID,
 			fixture.Video.Author,
 			domain.VideoStatusReady,
+			false,
 		)
 		require.NoError(t, err)
 
@@ -412,6 +413,7 @@ func TestRepository_AssignmentSelectByFilter_ScopeLimitsToGroupsOrOwnAssignments
 			otherGroup.ID,
 			fixture.Video.Author,
 			domain.VideoStatusReady,
+			false,
 		)
 		require.NoError(t, err)
 		foreignCreator := newTestUser(t, r, f, fixture.AccountRoleID)

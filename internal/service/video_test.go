@@ -66,6 +66,7 @@ func TestService_Video_CreateUpload(t *testing.T) {
 		name              string
 		contentType       string
 		size              int64
+		isUrgent          bool
 		setupMocks        func(m videoCreateUploadMocks)
 		wantVideoID       uuid.UUID
 		wantUploadURL     domain.PreflightURL
@@ -81,7 +82,7 @@ func TestService_Video_CreateUpload(t *testing.T) {
 					Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
 					Return(nil)
 				m.Video.InsertMock.
-					Expect(minimock.AnyContext, testName, testGroupID, testUserID, domain.VideoStatusUploading).
+					Expect(minimock.AnyContext, testName, testGroupID, testUserID, domain.VideoStatusUploading, false).
 					Return(testVideo, nil)
 				m.S3.PresignPutObjectMock.
 					Expect(
@@ -113,7 +114,33 @@ func TestService_Video_CreateUpload(t *testing.T) {
 					Expect(minimock.AnyContext, groupRoleID).
 					Return([]domain.GroupRole{{PermissionMask: domain.PermissionMask(1 << domain.GroupPermissionManageVideo)}}, nil)
 				m.Video.InsertMock.
-					Expect(minimock.AnyContext, testName, testGroupID, testUserID, domain.VideoStatusUploading).
+					Expect(minimock.AnyContext, testName, testGroupID, testUserID, domain.VideoStatusUploading, false).
+					Return(testVideo, nil)
+				m.S3.PresignPutObjectMock.
+					Expect(
+						minimock.AnyContext,
+						testBucket,
+						testKey,
+						testContentType,
+						testSize,
+						domain.VideoUploadURLTTL,
+					).
+					Return(testPreflightURL, nil)
+			},
+			wantVideoID:   testVideoID,
+			wantUploadURL: testPreflightURL,
+		},
+		{
+			name:        "success - urgent video passes flag to repository",
+			contentType: testContentType,
+			size:        testSize,
+			isUrgent:    true,
+			setupMocks: func(m videoCreateUploadMocks) {
+				m.Access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
+					Return(nil)
+				m.Video.InsertMock.
+					Expect(minimock.AnyContext, testName, testGroupID, testUserID, domain.VideoStatusUploading, true).
 					Return(testVideo, nil)
 				m.S3.PresignPutObjectMock.
 					Expect(
@@ -185,7 +212,7 @@ func TestService_Video_CreateUpload(t *testing.T) {
 					Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
 					Return(nil)
 				m.Video.InsertMock.
-					Expect(minimock.AnyContext, testName, testGroupID, testUserID, domain.VideoStatusUploading).
+					Expect(minimock.AnyContext, testName, testGroupID, testUserID, domain.VideoStatusUploading, false).
 					Return(domain.Video{}, dberrors.UserGroupVideoErrors.ErrUniqueUserGroupVideosUserGroupIdNameKey)
 			},
 			wantErr: service.NewConflictErrorCode("conflict.video_name", "video name already exists"),
@@ -223,6 +250,7 @@ func TestService_Video_CreateUpload(t *testing.T) {
 				minimock.AnyContext,
 				testAccountID, testGroupID, testUserID,
 				testName, tt.contentType, tt.size,
+				tt.isUrgent,
 			)
 
 			if tt.wantValidationErr {
@@ -259,13 +287,14 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 	t.Parallel()
 
 	var (
-		testAccountID = uuid.New()
-		testGroupID   = uuid.New()
-		testUserID    = uuid.New()
-		testVideoID   = uuid.New()
-		testBucket    = "vilib"
-		testKey       = "videos/" + testVideoID.String() + "/original"
-		testTopic     = "video.original-uploaded"
+		testAccountID   = uuid.New()
+		testGroupID     = uuid.New()
+		testUserID      = uuid.New()
+		testVideoID     = uuid.New()
+		testBucket      = "vilib"
+		testKey         = "videos/" + testVideoID.String() + "/original"
+		testTopic       = "video.original-uploaded"
+		testUrgentTopic = "video.original-uploaded-urgent"
 	)
 
 	testAuthorID := uuid.New()
@@ -275,12 +304,24 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 	uploadingVideo := domain.Video{
 		ID: testVideoID, GroupID: testGroupID, Author: testAuthorID, Status: domain.VideoStatusUploading,
 	}
+	uploadingUrgentVideo := domain.Video{
+		ID: testVideoID, GroupID: testGroupID, Author: testAuthorID, Status: domain.VideoStatusUploading,
+		IsUrgent: true,
+	}
 	queuedVideo := domain.Video{
 		ID:                testVideoID,
 		GroupID:           testGroupID,
 		Author:            testAuthorID,
 		Status:            domain.VideoStatusQueued,
 		ProcessingAttempt: 1,
+	}
+	queuedUrgentVideo := domain.Video{
+		ID:                testVideoID,
+		GroupID:           testGroupID,
+		Author:            testAuthorID,
+		Status:            domain.VideoStatusQueued,
+		ProcessingAttempt: 1,
+		IsUrgent:          true,
 	}
 	readyVideo := domain.Video{
 		ID: testVideoID, GroupID: testGroupID, Author: testAuthorID, Status: domain.VideoStatusReady,
@@ -334,13 +375,21 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 					Return(domain.VideoAsset{}, nil)
 
 				attempt := 1
-				m.Video.UpdateStatusIfMock.
-					Expect(
-						minimock.AnyContext, testVideoID,
-						[]domain.VideoStatus{domain.VideoStatusUploading}, domain.VideoStatusQueued,
-						domain.VideoPatch{ProcessingAttempt: &attempt},
-					).
-					Return(true, nil)
+				m.Video.UpdateStatusIfMock.Set(
+					func(
+						_ context.Context, videoID uuid.UUID, from []domain.VideoStatus, to domain.VideoStatus,
+						patch domain.VideoPatch,
+					) (bool, error) {
+						require.Equal(t, testVideoID, videoID)
+						require.Equal(t, []domain.VideoStatus{domain.VideoStatusUploading}, from)
+						require.Equal(t, domain.VideoStatusQueued, to)
+						require.Equal(t, &attempt, patch.ProcessingAttempt)
+						require.NotNil(t, patch.QueuedAt)
+						require.WithinDuration(t, time.Now(), *patch.QueuedAt, time.Second)
+
+						return true, nil
+					},
+				)
 
 				m.Outbox.PublishMock.Set(func(_ context.Context, topic, key string, payload []byte) error {
 					require.Equal(t, testTopic, topic)
@@ -364,6 +413,64 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 				resolveAuthor(m)
 			},
 			want: domain.VideoListItem{Video: queuedVideo, Author: testAuthor},
+		},
+		{
+			// Эпик Э5, В-2: срочное видео публикуется в приоритетную полосу — отдельный топик
+			// с постоянно свободным потребителем, а не в общий архивный топик.
+			name: "success - urgent video publishes to urgent topic",
+			setupMocks: func(t *testing.T, m videoCompleteUploadMocks) {
+				m.Access.IsCheckAccountActionMock.
+					Expect(minimock.AnyContext, testAccountID, testUserID, domain.AccountPermissionManageVideo).
+					Return(nil)
+
+				selectCalls := 0
+				m.Video.SelectMock.Set(func(_ context.Context, _ uuid.UUID) (*domain.Video, error) {
+					selectCalls++
+					if selectCalls == 1 {
+						return &uploadingUrgentVideo, nil
+					}
+					return &queuedUrgentVideo, nil
+				})
+
+				m.S3.HeadObjectMock.
+					Expect(minimock.AnyContext, testBucket, testKey).
+					Return(s3.ObjectInfo{Size: 2048, ContentType: "video/mp4"}, nil)
+				m.VideoAsset.CreateMock.
+					Expect(
+						minimock.AnyContext, testVideoID, domain.VideoAssetKindOriginal, domain.VideoProfile(""),
+						testBucket, testKey, "video/mp4", int64(2048),
+					).
+					Return(domain.VideoAsset{}, nil)
+
+				attempt := 1
+				m.Video.UpdateStatusIfMock.Set(
+					func(
+						_ context.Context, _ uuid.UUID, _ []domain.VideoStatus, _ domain.VideoStatus,
+						patch domain.VideoPatch,
+					) (bool, error) {
+						require.Equal(t, &attempt, patch.ProcessingAttempt)
+						require.NotNil(t, patch.QueuedAt)
+
+						return true, nil
+					},
+				)
+
+				m.Outbox.PublishMock.Set(func(_ context.Context, topic, key string, payload []byte) error {
+					require.Equal(t, testUrgentTopic, topic)
+					require.Equal(t, testVideoID.String(), key)
+
+					envelope, err := events.Unmarshal(payload)
+					require.NoError(t, err)
+
+					uploaded, err := envelope.OriginalUploaded()
+					require.NoError(t, err)
+					require.True(t, uploaded.IsUrgent)
+
+					return nil
+				})
+				resolveAuthor(m)
+			},
+			want: domain.VideoListItem{Video: queuedUrgentVideo, Author: testAuthor},
 		},
 		{
 			name: "object not found",
@@ -543,9 +650,10 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 			}
 
 			videoSvc := service.NewVideoService(m.S3, m.Video, &svc, service.VideoServiceConfig{
-				Bucket:                testBucket,
-				TopicOriginalUploaded: testTopic,
-				Video:                 videoConfig(4 << 30),
+				Bucket:                      testBucket,
+				TopicOriginalUploaded:       testTopic,
+				TopicOriginalUploadedUrgent: testUrgentTopic,
+				Video:                       videoConfig(4 << 30),
 			})
 
 			got, err := videoSvc.CompleteUpload(
@@ -1122,6 +1230,10 @@ func TestService_Video_ApplyProcessingFailed(t *testing.T) {
 			return true, nil
 		})
 
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID}, nil)
+
 		m.VideoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return([]domain.VideoAsset{
 			{Kind: domain.VideoAssetKindOriginal, ObjectKey: originalKey, ContentType: "video/mp4", SizeBytes: 2048},
 		}, nil)
@@ -1139,6 +1251,7 @@ func TestService_Video_ApplyProcessingFailed(t *testing.T) {
 			require.Equal(t, originalKey, uploaded.Key)
 			require.Equal(t, "video/mp4", uploaded.ContentType)
 			require.Equal(t, int64(2048), uploaded.SizeBytes)
+			require.False(t, uploaded.IsUrgent)
 
 			return nil
 		})
@@ -1146,6 +1259,56 @@ func TestService_Video_ApplyProcessingFailed(t *testing.T) {
 		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{
 			TopicOriginalUploaded: testTopic,
 			Video:                 videoProcessingConfig(),
+		})
+
+		err := videoSvc.ApplyProcessingFailed(
+			minimock.AnyContext,
+			events.Envelope{VideoID: testVideoID, Attempt: attempt},
+			events.ProcessingFailed{ErrorClass: events.ErrorClassTemporary, Reason: "network timeout"},
+		)
+
+		require.NoError(t, err)
+	})
+
+	t.Run("temporary error on urgent video republishes original to urgent topic (Э5, В-2)", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoApplyProcessingMocks(mc)
+
+		attempt := 1
+		next := 2
+		testUrgentTopic := "video.original-uploaded-urgent"
+		originalKey := "videos/" + testVideoID.String() + "/original"
+
+		m.Video.UpdateStatusIfMock.Return(true, nil)
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID, IsUrgent: true}, nil)
+
+		m.VideoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return([]domain.VideoAsset{
+			{Kind: domain.VideoAssetKindOriginal, ObjectKey: originalKey, ContentType: "video/mp4", SizeBytes: 2048},
+		}, nil)
+
+		m.Outbox.PublishMock.Set(func(_ context.Context, topic, key string, payload []byte) error {
+			require.Equal(t, testUrgentTopic, topic)
+			require.Equal(t, testVideoID.String(), key)
+
+			envelope, err := events.Unmarshal(payload)
+			require.NoError(t, err)
+			require.Equal(t, next, envelope.Attempt)
+
+			uploaded, err := envelope.OriginalUploaded()
+			require.NoError(t, err)
+			require.True(t, uploaded.IsUrgent)
+
+			return nil
+		})
+
+		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{
+			TopicOriginalUploaded:       testTopic,
+			TopicOriginalUploadedUrgent: testUrgentTopic,
+			Video:                       videoProcessingConfig(),
 		})
 
 		err := videoSvc.ApplyProcessingFailed(
@@ -1175,6 +1338,9 @@ func TestService_Video_ApplyProcessingFailed(t *testing.T) {
 			require.Equal(t, next, *patch.ProcessingAttempt)
 			return true, nil
 		})
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID}, nil)
 		m.VideoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return([]domain.VideoAsset{
 			{Kind: domain.VideoAssetKindOriginal, ObjectKey: originalKey, ContentType: "video/mp4", SizeBytes: 2048},
 		}, nil)
@@ -1273,6 +1439,9 @@ func TestService_Video_ApplyProcessingFailed(t *testing.T) {
 			require.Equal(t, "original asset missing", *patch.FailureReason)
 			return true, nil
 		})
+		m.Video.SelectMock.
+			Expect(minimock.AnyContext, testVideoID).
+			Return(&domain.Video{ID: testVideoID}, nil)
 		m.VideoAsset.GetMock.Expect(minimock.AnyContext, testVideoID).Return(nil, nil)
 		// Outbox.Publish не настроен: без оригинала повторное событие не публикуется.
 

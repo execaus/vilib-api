@@ -42,44 +42,67 @@ func newTestVideo(
 		accountRole.ID,
 	)
 
-	video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, status)
+	video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, status, false)
 	require.NoError(t, err)
 
 	return video
 }
 
-func TestRepository_VideoInsert_Success(t *testing.T) {
+// TestRepository_VideoInsert_PersistsIsUrgentFlag проверяет, что признак срочности (эпик Э5,
+// В-2) сохраняется в БД и считывается обратно ровно тем значением, что было передано.
+func TestRepository_VideoInsert_PersistsIsUrgentFlag(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
-		accountRole, _ := r.AccountRole.Insert(
-			t.Context(),
-			account.ID,
-			f.Beer().Name(),
-			nil,
-			4,
-			true,
-			false,
-		)
-		user, _ := r.User.Insert(
-			t.Context(),
-			f.Person().FirstName(),
-			f.Person().LastName(),
-			f.Hash().MD5(),
-			f.Person().Contact().Email,
-			accountRole.ID,
-		)
+	tests := []struct {
+		name     string
+		isUrgent bool
+	}{
+		{name: "archive video is not urgent", isUrgent: false},
+		{name: "urgent video keeps flag", isUrgent: true},
+	}
 
-		video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusUploading)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-		require.NoError(t, err)
-		require.NotEmpty(t, video.ID)
-		require.Equal(t, domain.VideoStatusUploading, video.Status)
-		require.Equal(t, group.ID, video.GroupID)
-		require.Equal(t, user.ID, video.Author)
-	})
+			testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+				account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+				group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+				accountRole, _ := r.AccountRole.Insert(
+					t.Context(),
+					account.ID,
+					f.Beer().Name(),
+					nil,
+					4,
+					true,
+					false,
+				)
+				user, _ := r.User.Insert(
+					t.Context(),
+					f.Person().FirstName(),
+					f.Person().LastName(),
+					f.Hash().MD5(),
+					f.Person().Contact().Email,
+					accountRole.ID,
+				)
+
+				video, err := r.Video.Insert(
+					t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusUploading, tt.isUrgent,
+				)
+
+				require.NoError(t, err)
+				require.NotEmpty(t, video.ID)
+				require.Equal(t, domain.VideoStatusUploading, video.Status)
+				require.Equal(t, group.ID, video.GroupID)
+				require.Equal(t, user.ID, video.Author)
+				require.Equal(t, tt.isUrgent, video.IsUrgent)
+
+				got, err := r.Video.Select(t.Context(), video.ID)
+				require.NoError(t, err)
+				require.Equal(t, tt.isUrgent, got.IsUrgent)
+			})
+		})
+	}
 }
 
 func TestRepository_VideoSelect_Success(t *testing.T) {
@@ -105,7 +128,9 @@ func TestRepository_VideoSelect_Success(t *testing.T) {
 			f.Person().Contact().Email,
 			accountRole.ID,
 		)
-		createdVideo, _ := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady)
+		createdVideo, _ := r.Video.Insert(
+			t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady, false,
+		)
 
 		video, err := r.Video.Select(t.Context(), createdVideo.ID)
 
@@ -152,6 +177,39 @@ func TestRepository_VideoUpdateStatusIf_MatchingFrom_UpdatesRowAndReturnsTrue(t 
 			t,
 			got.StatusChangedAt.After(video.StatusChangedAt) || got.StatusChangedAt.Equal(video.StatusChangedAt),
 		)
+	})
+}
+
+// TestRepository_VideoUpdateStatusIf_QueuedAtPatch_SetsQueuedAt проверяет, что тот же условный
+// UPDATE, что переводит uploading → queued, проставляет queued_at — момент complete из
+// метрики времени публикации (эпик Э5, Э5-Т5).
+func TestRepository_VideoUpdateStatusIf_QueuedAtPatch_SetsQueuedAt(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		video := newTestVideo(t, r, f, domain.VideoStatusUploading)
+		require.Nil(t, video.QueuedAt)
+
+		attempt := 1
+		// Колонка queued_at — timestamp без часового пояса: как и в остальных тестах репозитория
+		// (например, PasswordResetTokenInsert), сравнение ведётся в UTC, чтобы не зависеть от
+		// локального часового пояса машины, на которой выполняется тест.
+		queuedAt := time.Now().UTC()
+		updated, err := r.Video.UpdateStatusIf(
+			t.Context(),
+			video.ID,
+			[]domain.VideoStatus{domain.VideoStatusUploading},
+			domain.VideoStatusQueued,
+			domain.VideoPatch{ProcessingAttempt: &attempt, QueuedAt: &queuedAt},
+		)
+
+		require.NoError(t, err)
+		require.True(t, updated)
+
+		got, err := r.Video.Select(t.Context(), video.ID)
+		require.NoError(t, err)
+		require.NotNil(t, got.QueuedAt)
+		require.WithinDuration(t, queuedAt, *got.QueuedAt, time.Second)
 	})
 }
 

@@ -4875,6 +4875,10 @@
                 "content_type": {
                     "type": "string"
                 },
+                "is_urgent": {
+                    "description": "IsUrgent — признак срочного видео: помеченный ролик берётся в обработку приоритетной\nполосой мимо общей очереди (эпик Э5, В-2). Необязательное поле, по умолчанию false.",
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 255,

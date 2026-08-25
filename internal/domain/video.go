@@ -149,6 +149,9 @@ type VideoPatch struct {
 	Height          *int
 	// ClearFailure сбрасывает FailureClass и FailureReason в NULL.
 	ClearFailure bool
+	// QueuedAt — новое значение времени постановки в очередь (переход uploading → queued),
+	// момент complete из метрики времени публикации (эпик Э5, Э5-Т5).
+	QueuedAt *time.Time
 }
 
 type Video struct {

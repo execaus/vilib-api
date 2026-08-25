@@ -71,6 +71,7 @@ func TestHandler_UploadVideo(t *testing.T) {
 				testRequest.Name,
 				testRequest.ContentType,
 				testRequest.SizeBytes,
+				testRequest.IsUrgent,
 			).
 			Then(domain.VideoUpload{VideoID: testVideoID, UploadURL: testUploadURL, ExpiresAt: testExpiresAt}, nil)
 
@@ -93,6 +94,51 @@ func TestHandler_UploadVideo(t *testing.T) {
 		require.Equal(t, testUploadURL, response.UploadURL)
 	})
 
+	t.Run("success with is_urgent flag passed through to service", func(t *testing.T) {
+		mc := minimock.NewController(t)
+		defer mc.Finish()
+
+		urgentRequest := dto.UploadVideoRequest{
+			Name:        "test video",
+			ContentType: "video/mp4",
+			SizeBytes:   1024,
+			IsUrgent:    true,
+		}
+
+		svcMock := testutil.NewHandlerTestServiceMock(mc)
+		repo := setupCommitTx(mc)
+
+		svcMock.Auth.GetClaimsFromTokenMock.When("Bearer "+testToken).Then(&domain.AuthClaims{
+			UserID:           testInitiatorID,
+			CurrentAccountID: testAccountID,
+		}, nil)
+		svcMock.Video.CreateUploadMock.
+			When(
+				minimock.AnyContext,
+				testAccountID,
+				testGroupID,
+				testInitiatorID,
+				urgentRequest.Name,
+				urgentRequest.ContentType,
+				urgentRequest.SizeBytes,
+				true,
+			).
+			Then(domain.VideoUpload{VideoID: testVideoID, UploadURL: testUploadURL, ExpiresAt: testExpiresAt}, nil)
+
+		h := handler.NewHandler(saga.NewSagaRunner(svcMock.ToService(), repo), handler.Deps{Auth: svcMock.Auth})
+		router := h.GetRouter()
+
+		body, _ := json.Marshal(urgentRequest)
+		req := httptest.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+testToken)
+
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusCreated, w.Code)
+	})
+
 	t.Run("forbidden", func(t *testing.T) {
 		mc := minimock.NewController(t)
 		defer mc.Finish()
@@ -113,6 +159,7 @@ func TestHandler_UploadVideo(t *testing.T) {
 				testRequest.Name,
 				testRequest.ContentType,
 				testRequest.SizeBytes,
+				testRequest.IsUrgent,
 			).
 			Then(domain.VideoUpload{}, service.ErrForbidden)
 
@@ -150,6 +197,7 @@ func TestHandler_UploadVideo(t *testing.T) {
 				testRequest.Name,
 				testRequest.ContentType,
 				testRequest.SizeBytes,
+				testRequest.IsUrgent,
 			).
 			Then(domain.VideoUpload{}, service.NewConflictError("video name already exists"))
 
