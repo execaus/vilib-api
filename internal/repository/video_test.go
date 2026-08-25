@@ -258,6 +258,36 @@ func TestRepository_VideoUpdateStatusIf_CompressingStartedAtPatch_SetsCompressin
 	})
 }
 
+// TestRepository_VideoUpdateStatusIf_ReadyAtPatch_SetsReadyAt проверяет, что тот же условный
+// UPDATE, что переводит compressing → ready по событию ProcessingCompleted, проставляет
+// ready_at — финальную отметку метрики времени публикации (эпик Э5, Э5-Т5).
+func TestRepository_VideoUpdateStatusIf_ReadyAtPatch_SetsReadyAt(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		video := newTestVideo(t, r, f, domain.VideoStatusCompressing)
+		require.Nil(t, video.ReadyAt)
+
+		attempt := video.ProcessingAttempt
+		readyAt := time.Now().UTC()
+		updated, err := r.Video.UpdateStatusIf(
+			t.Context(),
+			video.ID,
+			[]domain.VideoStatus{domain.VideoStatusQueued, domain.VideoStatusCompressing},
+			domain.VideoStatusReady,
+			domain.VideoPatch{ExpectedAttempt: &attempt, ReadyAt: &readyAt},
+		)
+
+		require.NoError(t, err)
+		require.True(t, updated)
+
+		got, err := r.Video.Select(t.Context(), video.ID)
+		require.NoError(t, err)
+		require.NotNil(t, got.ReadyAt)
+		require.WithinDuration(t, readyAt, *got.ReadyAt, time.Second)
+	})
+}
+
 func TestRepository_VideoUpdateStatusIf_MismatchedFrom_ReturnsFalseAndKeepsRow(t *testing.T) {
 	t.Parallel()
 

@@ -19,6 +19,9 @@ import (
 	"github.com/gojuno/minimock/v3"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	events "github.com/execaus/vilib-events"
 )
@@ -674,6 +677,12 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 	}
 }
 
+// timePtr возвращает указатель на переданное значение времени — удобно для полей domain.Video,
+// заданных через *[time.Time].
+func timePtr(t time.Time) *time.Time {
+	return &t
+}
+
 // videoApplyProcessingMocks собирает моки, используемые Apply* методами обработки событий
 // воркера (§7.2 эпика).
 type videoApplyProcessingMocks struct {
@@ -846,8 +855,16 @@ func TestService_Video_ApplyProcessingCompleted(t *testing.T) {
 			require.Equal(t, width, *patch.Width)
 			require.NotNil(t, patch.Height)
 			require.Equal(t, height, *patch.Height)
+			require.NotNil(t, patch.ReadyAt)
 			return true, nil
 		})
+
+		// Перечитывается для лога факта публикации (эпик Э5, Э5-Т5, logVideoPublished).
+		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(&domain.Video{
+			ID:                   testVideoID,
+			QueuedAt:             timePtr(time.Now().Add(-10 * time.Minute)),
+			CompressingStartedAt: timePtr(time.Now().Add(-5 * time.Minute)),
+		}, nil)
 
 		var calls []string
 
@@ -1003,6 +1020,24 @@ func TestService_Video_ApplyProcessingCompleted(t *testing.T) {
 		m := newVideoApplyProcessingMocks(mc)
 		m.Video.UpdateStatusIfMock.Return(true, nil)
 		m.VideoAsset.DeleteByVideoAndKindsMock.Return(repoErr)
+
+		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Bucket: testBucket, Video: videoConfig(4 << 30)})
+
+		err := videoSvc.ApplyProcessingCompleted(
+			minimock.AnyContext, events.Envelope{VideoID: testVideoID, Attempt: 1}, events.ProcessingCompleted{},
+		)
+
+		require.ErrorIs(t, err, repoErr)
+	})
+
+	t.Run("select error while logging publication metric propagates (Э5-Т5)", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		m := newVideoApplyProcessingMocks(mc)
+		m.Video.UpdateStatusIfMock.Return(true, nil)
+		m.VideoAsset.DeleteByVideoAndKindsMock.Return(nil)
+		m.Video.SelectMock.Return(nil, repoErr)
 
 		videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Bucket: testBucket, Video: videoConfig(4 << 30)})
 
@@ -1174,6 +1209,72 @@ func TestService_Video_ApplyProcessingCompleted(t *testing.T) {
 
 		require.ErrorIs(t, err, repoErr)
 	})
+}
+
+// TestService_Video_ApplyProcessingCompleted_LogsPublicationMetric проверяет содержимое
+// структурированного лога факта публикации (эпик Э5, Э5-Т5): в логе присутствуют все поля,
+// перечисленные в критерии приёмки задачи В-75 (video_id, duration_ms, queue_wait_ms, encode_ms,
+// total_ms, is_urgent, attempt), а разности отметок времени посчитаны корректно. Тест
+// сознательно не вызывает t.Parallel() ни для себя, ни где-либо ещё: он подменяет глобальный
+// логгер zap.L() на время своего выполнения, а глобальный логгер общий для всего тестового
+// бинарника — подмена не должна пересекаться с параллельными тестами пакета, которые тоже пишут
+// через zap.L(). Тесты пакета без t.Parallel() выполняются в сериальной фазе `go test`, раньше,
+// чем стартует пакетный батч параллельных тестов, поэтому гонки не возникает.
+func TestService_Video_ApplyProcessingCompleted_LogsPublicationMetric(t *testing.T) {
+	testVideoID := uuid.New()
+	testBucket := "vilib"
+	attempt := 3
+	durationMs := int64(60000)
+	queuedAt := time.Now().Add(-20 * time.Minute)
+	compressingStartedAt := queuedAt.Add(6 * time.Minute)
+
+	mc := minimock.NewController(t)
+	m := newVideoApplyProcessingMocks(mc)
+
+	m.Video.UpdateStatusIfMock.Return(true, nil)
+	m.VideoAsset.DeleteByVideoAndKindsMock.Return(nil)
+	m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(&domain.Video{
+		ID:                   testVideoID,
+		IsUrgent:             true,
+		QueuedAt:             timePtr(queuedAt),
+		CompressingStartedAt: timePtr(compressingStartedAt),
+	}, nil)
+	m.WatchProgress.OnDurationKnownMock.Expect(minimock.AnyContext, testVideoID, durationMs).Return(nil)
+
+	observedCore, logs := observer.New(zapcore.InfoLevel)
+	restore := zap.ReplaceGlobals(zap.New(observedCore))
+	t.Cleanup(restore)
+
+	videoSvc := newVideoApplyService(m, service.VideoServiceConfig{Bucket: testBucket, Video: videoConfig(4 << 30)})
+
+	before := time.Now()
+	envelope := events.Envelope{VideoID: testVideoID, Attempt: attempt}
+	payload := events.ProcessingCompleted{Metadata: events.VideoMetadata{DurationMs: durationMs}}
+
+	err := videoSvc.ApplyProcessingCompleted(minimock.AnyContext, envelope, payload)
+	after := time.Now()
+
+	require.NoError(t, err)
+
+	entries := logs.FilterMessage("video published").All()
+	require.Len(t, entries, 1)
+
+	fields := entries[0].ContextMap()
+	require.Equal(t, testVideoID.String(), fields["video_id"])
+	require.EqualValues(t, durationMs, fields["duration_ms"])
+	require.EqualValues(t, compressingStartedAt.Sub(queuedAt).Milliseconds(), fields["queue_wait_ms"])
+	require.Equal(t, true, fields["is_urgent"])
+	require.EqualValues(t, attempt, fields["attempt"])
+
+	encodeMs, ok := fields["encode_ms"].(int64)
+	require.True(t, ok)
+	require.GreaterOrEqual(t, encodeMs, int64(0))
+	require.LessOrEqual(t, encodeMs, after.Sub(compressingStartedAt).Milliseconds())
+
+	totalMs, ok := fields["total_ms"].(int64)
+	require.True(t, ok)
+	require.GreaterOrEqual(t, totalMs, before.Sub(queuedAt).Milliseconds())
+	require.LessOrEqual(t, totalMs, after.Sub(queuedAt).Milliseconds())
 }
 
 func TestService_Video_ApplyProcessingFailed(t *testing.T) {

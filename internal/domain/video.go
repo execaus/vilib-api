@@ -155,6 +155,9 @@ type VideoPatch struct {
 	// CompressingStartedAt — новое значение времени взятия в обработку конвейером (переход
 	// queued → compressing по событию ProcessingStarted, эпик Э5, исправление Д-1).
 	CompressingStartedAt *time.Time
+	// ReadyAt — новое значение времени готовности видео (переход compressing → ready по событию
+	// ProcessingCompleted, эпик Э5, Э5-Т5) — финальная точка метрики времени публикации.
+	ReadyAt *time.Time
 }
 
 type Video struct {

@@ -134,6 +134,9 @@ func (r *VideoRepository) UpdateStatusIf(
 	if patch.CompressingStartedAt != nil {
 		setter.CompressingStartedAt = omitnull.From(*patch.CompressingStartedAt)
 	}
+	if patch.ReadyAt != nil {
+		setter.ReadyAt = omitnull.From(*patch.ReadyAt)
+	}
 
 	fromArgs := make([]bob.Expression, len(from))
 	for i, status := range from {

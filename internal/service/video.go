@@ -712,7 +712,10 @@ func (s *VideoService) ApplyProcessingStarted(
 // номер попытки совпал), в этой же транзакции идемпотентно перерегистрируются ассеты
 // результатов — старые hls_master/hls_variant удаляются и вставляются заново (Э1-Т14). Если
 // переход не применился, новые ассеты не регистрируются — обрабатывается как дубликат/устаревшее
-// событие (Д-1 ревью эпика, см. handleIgnoredProcessingCompleted).
+// событие (Д-1 ревью эпика, см. handleIgnoredProcessingCompleted). При успешном переходе также
+// проставляется ready_at — финальная отметка метрики времени публикации (эпик Э5, Э5-Т5) — и
+// пишется структурированный лог с разбивкой ожидания в очереди и времени кодирования
+// (logVideoPublished).
 func (s *VideoService) ApplyProcessingCompleted(
 	ctx context.Context,
 	evt events.Envelope,
@@ -731,8 +734,9 @@ func (s *VideoService) ApplyProcessingCompleted(
 	}
 
 	attempt := evt.Attempt
+	readyAt := time.Now()
 
-	patch := domain.VideoPatch{ExpectedAttempt: &attempt, ClearFailure: true}
+	patch := domain.VideoPatch{ExpectedAttempt: &attempt, ClearFailure: true, ReadyAt: &readyAt}
 	if p.Metadata.DurationMs > 0 {
 		patch.DurationMs = &p.Metadata.DurationMs
 	}
@@ -749,28 +753,85 @@ func (s *VideoService) ApplyProcessingCompleted(
 		return err
 	}
 
-	if updated {
-		if resultsErr := s.registerProcessingResults(ctx, evt.VideoID, p.Results); resultsErr != nil {
-			return resultsErr
-		}
-
-		// Досчёт зачёта для тех, кто уже посмотрел видео на нужную долю до появления
-		// длительности (Э3-Т6, §3 дизайна эпика Э3) — только если она пришла в этом событии.
-		if p.Metadata.DurationMs > 0 {
-			if durationErr := s.srv.WatchProgress.OnDurationKnown(
-				ctx,
-				evt.VideoID,
-				p.Metadata.DurationMs,
-			); durationErr != nil {
-				zap.L().Error(durationErr.Error())
-				return durationErr
-			}
-		}
-
-		return nil
+	if !updated {
+		return s.handleIgnoredProcessingCompleted(ctx, evt)
 	}
 
-	return s.handleIgnoredProcessingCompleted(ctx, evt)
+	return s.finalizeReadyVideo(ctx, evt, p, readyAt)
+}
+
+// finalizeReadyVideo выполняет шаги, следующие за успешным условным переходом видео в ready:
+// регистрирует результаты обработки, досчитывает зачёт по длительности и пишет метрику времени
+// публикации (эпик Э5, Э5-Т5). Вынесено из ApplyProcessingCompleted отдельным методом, чтобы не
+// наращивать вложенность условий в основном обработчике события.
+func (s *VideoService) finalizeReadyVideo(
+	ctx context.Context,
+	evt events.Envelope,
+	p events.ProcessingCompleted,
+	readyAt time.Time,
+) error {
+	if resultsErr := s.registerProcessingResults(ctx, evt.VideoID, p.Results); resultsErr != nil {
+		return resultsErr
+	}
+
+	// Досчёт зачёта для тех, кто уже посмотрел видео на нужную долю до появления длительности
+	// (Э3-Т6, §3 дизайна эпика Э3) — только если она пришла в этом событии.
+	if p.Metadata.DurationMs > 0 {
+		if durationErr := s.srv.WatchProgress.OnDurationKnown(
+			ctx,
+			evt.VideoID,
+			p.Metadata.DurationMs,
+		); durationErr != nil {
+			zap.L().Error(durationErr.Error())
+			return durationErr
+		}
+	}
+
+	return s.logVideoPublished(ctx, evt, p, readyAt)
+}
+
+// logVideoPublished пишет структурированный лог факта публикации видео (эпик Э5, Э5-Т5) —
+// страховка для наблюдения на живом стенде без похода в БД (`docker compose logs`); источником
+// истины для методики замера остаются колонки queued_at/compressing_started_at/ready_at (§4
+// дизайна эпика), лог их дублирует уже посчитанными разностями. Видео перечитывается в той же
+// транзакции, что и переход в ready, — queued_at и compressing_started_at к этому моменту уже
+// заполнены более ранними шагами конвейера (В-73/В-74), is_urgent — постоянный признак видео.
+// Ошибка перечитывания видео пробрасывается вызывающему: обработчик события идемпотентен
+// (handleIgnoredProcessingCompleted), поэтому повтор доставки безопасен.
+func (s *VideoService) logVideoPublished(
+	ctx context.Context,
+	evt events.Envelope,
+	p events.ProcessingCompleted,
+	readyAt time.Time,
+) error {
+	video, err := s.repo.Select(ctx, evt.VideoID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	zap.L().Info("video published",
+		zap.String("video_id", evt.VideoID.String()),
+		zap.Int64("duration_ms", p.Metadata.DurationMs),
+		zap.Int64("queue_wait_ms", msBetween(video.QueuedAt, video.CompressingStartedAt)),
+		zap.Int64("encode_ms", msBetween(video.CompressingStartedAt, &readyAt)),
+		zap.Int64("total_ms", msBetween(video.QueuedAt, &readyAt)),
+		zap.Bool("is_urgent", video.IsUrgent),
+		zap.Int("attempt", evt.Attempt),
+	)
+
+	return nil
+}
+
+// msBetween вычисляет разницу между двумя моментами в миллисекундах для метрики времени
+// публикации (эпик Э5, Э5-Т5). Если любая из отметок не заполнена (гонка/дефект более раннего
+// шага конвейера), возвращает 0 вместо паники — лог деградирует наглядностью, а не падает.
+func msBetween(start, end *time.Time) int64 {
+	if start == nil || end == nil {
+		return 0
+	}
+
+	return end.Sub(*start).Milliseconds()
 }
 
 // handleIgnoredProcessingCompleted обрабатывает ProcessingCompleted, не применившийся условным
