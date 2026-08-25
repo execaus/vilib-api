@@ -178,6 +178,12 @@ type Video interface {
 		before time.Time,
 		failure domain.VideoFailure,
 	) ([]uuid.UUID, error)
+	// SelectQueuePositions одним SQL-запросом с оконными функциями вычисляет место каждого
+	// ожидающего обработки видео в его полосе (архивной или срочной, эпик Э5, §3 дизайна,
+	// В-3) — без round-trip'а на каждое видео. Позиция считается глобально по системе, а не в
+	// рамках группы: физическая очередь обработки общая для всех групп. Видео вне статуса
+	// queued в результате отсутствуют.
+	SelectQueuePositions(ctx context.Context) (map[uuid.UUID]domain.QueuePosition, error)
 }
 
 type VideoAsset interface {

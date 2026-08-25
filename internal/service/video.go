@@ -1034,10 +1034,27 @@ func (s *VideoService) GetAll(
 		return nil, err
 	}
 
+	// Позиция в очереди на обработку (эпик Э5, §3 дизайна, В-3): один запрос на весь список
+	// независимо от того, сколько видео в группе и сколько из них сейчас в очереди — без
+	// round-trip'а на каждое видео. Позиция считается глобально по системе, поэтому результат
+	// (по всем группам) мёржится в DTO только для элементов со статусом queued.
+	queuePositions, err := s.repo.SelectQueuePositions(ctx)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
 	items := make([]domain.VideoListItem, len(videos))
 	for i, video := range videos {
 		items[i] = newVideoListItem(video, assetsByVideo[video.ID], canManage)
 		items[i].Author = authorFor(video.Author, authors)
+
+		if video.Status == domain.VideoStatusQueued {
+			if position, ok := queuePositions[video.ID]; ok {
+				position := position
+				items[i].QueuePosition = &position
+			}
+		}
 	}
 
 	return items, nil

@@ -86,6 +86,16 @@ type Video struct {
 	// Failure — причина сбоя обработки видео, заполняется только для инициатора с правом
 	// ManageVideo (Э1-Т17); для остальных — всегда null, даже если видео в статусе failed.
 	Failure *VideoFailure `json:"failure,omitempty"`
+	// IsUrgent — признак срочного видео: помеченный ролик берётся в обработку приоритетной
+	// полосой мимо общей очереди (эпик Э5, В-2). Видно всем, кто видит статус видео — не
+	// приватная информация, объясняет, почему ролик обогнал архив.
+	IsUrgent bool `json:"is_urgent"`
+	// QueuePosition — место видео в очереди на обработку в пределах своей полосы (архивной
+	// или срочной), 1-based. Заполняется только при status_name == "queued" (эпик Э5, В-3).
+	QueuePosition *int `json:"queue_position,omitempty"`
+	// QueueTotal — общий размер полосы (архивной или срочной), к которой относится видео.
+	// Заполняется только при status_name == "queued" (эпик Э5, В-3).
+	QueueTotal *int `json:"queue_total,omitempty"`
 }
 
 // FromDomain заполняет DTO базовыми полями видео без сведений об ассетах (Profiles — пустой
@@ -101,6 +111,7 @@ func (v *Video) FromDomain(video domain.Video) {
 	v.StatusName = video.Status.String()
 	v.CreatedAt = video.CreatedAt
 	v.Profiles = []string{}
+	v.IsUrgent = video.IsUrgent
 }
 
 // FromDomainListItem заполняет DTO элементом списка видео (Э1-Т20): профили, признак обработки
@@ -122,6 +133,13 @@ func (v *Video) FromDomainListItem(item domain.VideoListItem) {
 
 	if item.Failure != nil {
 		v.Failure = &VideoFailure{Class: string(item.Failure.Class), Reason: item.Failure.Reason}
+	}
+
+	if item.QueuePosition != nil {
+		position := item.QueuePosition.Position
+		total := item.QueuePosition.Total
+		v.QueuePosition = &position
+		v.QueueTotal = &total
 	}
 }
 

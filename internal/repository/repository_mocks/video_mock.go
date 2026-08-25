@@ -56,6 +56,13 @@ type VideoMock struct {
 	beforeSelectByIDsCounter uint64
 	SelectByIDsMock          mVideoMockSelectByIDs
 
+	funcSelectQueuePositions          func(ctx context.Context) (m1 map[uuid.UUID]domain.QueuePosition, err error)
+	funcSelectQueuePositionsOrigin    string
+	inspectFuncSelectQueuePositions   func(ctx context.Context)
+	afterSelectQueuePositionsCounter  uint64
+	beforeSelectQueuePositionsCounter uint64
+	SelectQueuePositionsMock          mVideoMockSelectQueuePositions
+
 	funcUpdateName          func(ctx context.Context, videoID uuid.UUID, name string) (v1 domain.Video, err error)
 	funcUpdateNameOrigin    string
 	inspectFuncUpdateName   func(ctx context.Context, videoID uuid.UUID, name string)
@@ -100,6 +107,9 @@ func NewVideoMock(t minimock.Tester) *VideoMock {
 
 	m.SelectByIDsMock = mVideoMockSelectByIDs{mock: m}
 	m.SelectByIDsMock.callArgs = []*VideoMockSelectByIDsParams{}
+
+	m.SelectQueuePositionsMock = mVideoMockSelectQueuePositions{mock: m}
+	m.SelectQueuePositionsMock.callArgs = []*VideoMockSelectQueuePositionsParams{}
 
 	m.UpdateNameMock = mVideoMockUpdateName{mock: m}
 	m.UpdateNameMock.callArgs = []*VideoMockUpdateNameParams{}
@@ -1953,6 +1963,318 @@ func (m *VideoMock) MinimockSelectByIDsInspect() {
 	}
 }
 
+type mVideoMockSelectQueuePositions struct {
+	optional           bool
+	mock               *VideoMock
+	defaultExpectation *VideoMockSelectQueuePositionsExpectation
+	expectations       []*VideoMockSelectQueuePositionsExpectation
+
+	callArgs []*VideoMockSelectQueuePositionsParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// VideoMockSelectQueuePositionsExpectation specifies expectation struct of the Video.SelectQueuePositions
+type VideoMockSelectQueuePositionsExpectation struct {
+	mock               *VideoMock
+	params             *VideoMockSelectQueuePositionsParams
+	paramPtrs          *VideoMockSelectQueuePositionsParamPtrs
+	expectationOrigins VideoMockSelectQueuePositionsExpectationOrigins
+	results            *VideoMockSelectQueuePositionsResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// VideoMockSelectQueuePositionsParams contains parameters of the Video.SelectQueuePositions
+type VideoMockSelectQueuePositionsParams struct {
+	ctx context.Context
+}
+
+// VideoMockSelectQueuePositionsParamPtrs contains pointers to parameters of the Video.SelectQueuePositions
+type VideoMockSelectQueuePositionsParamPtrs struct {
+	ctx *context.Context
+}
+
+// VideoMockSelectQueuePositionsResults contains results of the Video.SelectQueuePositions
+type VideoMockSelectQueuePositionsResults struct {
+	m1  map[uuid.UUID]domain.QueuePosition
+	err error
+}
+
+// VideoMockSelectQueuePositionsOrigins contains origins of expectations of the Video.SelectQueuePositions
+type VideoMockSelectQueuePositionsExpectationOrigins struct {
+	origin    string
+	originCtx string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmSelectQueuePositions *mVideoMockSelectQueuePositions) Optional() *mVideoMockSelectQueuePositions {
+	mmSelectQueuePositions.optional = true
+	return mmSelectQueuePositions
+}
+
+// Expect sets up expected params for Video.SelectQueuePositions
+func (mmSelectQueuePositions *mVideoMockSelectQueuePositions) Expect(ctx context.Context) *mVideoMockSelectQueuePositions {
+	if mmSelectQueuePositions.mock.funcSelectQueuePositions != nil {
+		mmSelectQueuePositions.mock.t.Fatalf("VideoMock.SelectQueuePositions mock is already set by Set")
+	}
+
+	if mmSelectQueuePositions.defaultExpectation == nil {
+		mmSelectQueuePositions.defaultExpectation = &VideoMockSelectQueuePositionsExpectation{}
+	}
+
+	if mmSelectQueuePositions.defaultExpectation.paramPtrs != nil {
+		mmSelectQueuePositions.mock.t.Fatalf("VideoMock.SelectQueuePositions mock is already set by ExpectParams functions")
+	}
+
+	mmSelectQueuePositions.defaultExpectation.params = &VideoMockSelectQueuePositionsParams{ctx}
+	mmSelectQueuePositions.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmSelectQueuePositions.expectations {
+		if minimock.Equal(e.params, mmSelectQueuePositions.defaultExpectation.params) {
+			mmSelectQueuePositions.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmSelectQueuePositions.defaultExpectation.params)
+		}
+	}
+
+	return mmSelectQueuePositions
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Video.SelectQueuePositions
+func (mmSelectQueuePositions *mVideoMockSelectQueuePositions) ExpectCtxParam1(ctx context.Context) *mVideoMockSelectQueuePositions {
+	if mmSelectQueuePositions.mock.funcSelectQueuePositions != nil {
+		mmSelectQueuePositions.mock.t.Fatalf("VideoMock.SelectQueuePositions mock is already set by Set")
+	}
+
+	if mmSelectQueuePositions.defaultExpectation == nil {
+		mmSelectQueuePositions.defaultExpectation = &VideoMockSelectQueuePositionsExpectation{}
+	}
+
+	if mmSelectQueuePositions.defaultExpectation.params != nil {
+		mmSelectQueuePositions.mock.t.Fatalf("VideoMock.SelectQueuePositions mock is already set by Expect")
+	}
+
+	if mmSelectQueuePositions.defaultExpectation.paramPtrs == nil {
+		mmSelectQueuePositions.defaultExpectation.paramPtrs = &VideoMockSelectQueuePositionsParamPtrs{}
+	}
+	mmSelectQueuePositions.defaultExpectation.paramPtrs.ctx = &ctx
+	mmSelectQueuePositions.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmSelectQueuePositions
+}
+
+// Inspect accepts an inspector function that has same arguments as the Video.SelectQueuePositions
+func (mmSelectQueuePositions *mVideoMockSelectQueuePositions) Inspect(f func(ctx context.Context)) *mVideoMockSelectQueuePositions {
+	if mmSelectQueuePositions.mock.inspectFuncSelectQueuePositions != nil {
+		mmSelectQueuePositions.mock.t.Fatalf("Inspect function is already set for VideoMock.SelectQueuePositions")
+	}
+
+	mmSelectQueuePositions.mock.inspectFuncSelectQueuePositions = f
+
+	return mmSelectQueuePositions
+}
+
+// Return sets up results that will be returned by Video.SelectQueuePositions
+func (mmSelectQueuePositions *mVideoMockSelectQueuePositions) Return(m1 map[uuid.UUID]domain.QueuePosition, err error) *VideoMock {
+	if mmSelectQueuePositions.mock.funcSelectQueuePositions != nil {
+		mmSelectQueuePositions.mock.t.Fatalf("VideoMock.SelectQueuePositions mock is already set by Set")
+	}
+
+	if mmSelectQueuePositions.defaultExpectation == nil {
+		mmSelectQueuePositions.defaultExpectation = &VideoMockSelectQueuePositionsExpectation{mock: mmSelectQueuePositions.mock}
+	}
+	mmSelectQueuePositions.defaultExpectation.results = &VideoMockSelectQueuePositionsResults{m1, err}
+	mmSelectQueuePositions.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmSelectQueuePositions.mock
+}
+
+// Set uses given function f to mock the Video.SelectQueuePositions method
+func (mmSelectQueuePositions *mVideoMockSelectQueuePositions) Set(f func(ctx context.Context) (m1 map[uuid.UUID]domain.QueuePosition, err error)) *VideoMock {
+	if mmSelectQueuePositions.defaultExpectation != nil {
+		mmSelectQueuePositions.mock.t.Fatalf("Default expectation is already set for the Video.SelectQueuePositions method")
+	}
+
+	if len(mmSelectQueuePositions.expectations) > 0 {
+		mmSelectQueuePositions.mock.t.Fatalf("Some expectations are already set for the Video.SelectQueuePositions method")
+	}
+
+	mmSelectQueuePositions.mock.funcSelectQueuePositions = f
+	mmSelectQueuePositions.mock.funcSelectQueuePositionsOrigin = minimock.CallerInfo(1)
+	return mmSelectQueuePositions.mock
+}
+
+// When sets expectation for the Video.SelectQueuePositions which will trigger the result defined by the following
+// Then helper
+func (mmSelectQueuePositions *mVideoMockSelectQueuePositions) When(ctx context.Context) *VideoMockSelectQueuePositionsExpectation {
+	if mmSelectQueuePositions.mock.funcSelectQueuePositions != nil {
+		mmSelectQueuePositions.mock.t.Fatalf("VideoMock.SelectQueuePositions mock is already set by Set")
+	}
+
+	expectation := &VideoMockSelectQueuePositionsExpectation{
+		mock:               mmSelectQueuePositions.mock,
+		params:             &VideoMockSelectQueuePositionsParams{ctx},
+		expectationOrigins: VideoMockSelectQueuePositionsExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmSelectQueuePositions.expectations = append(mmSelectQueuePositions.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Video.SelectQueuePositions return parameters for the expectation previously defined by the When method
+func (e *VideoMockSelectQueuePositionsExpectation) Then(m1 map[uuid.UUID]domain.QueuePosition, err error) *VideoMock {
+	e.results = &VideoMockSelectQueuePositionsResults{m1, err}
+	return e.mock
+}
+
+// Times sets number of times Video.SelectQueuePositions should be invoked
+func (mmSelectQueuePositions *mVideoMockSelectQueuePositions) Times(n uint64) *mVideoMockSelectQueuePositions {
+	if n == 0 {
+		mmSelectQueuePositions.mock.t.Fatalf("Times of VideoMock.SelectQueuePositions mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmSelectQueuePositions.expectedInvocations, n)
+	mmSelectQueuePositions.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmSelectQueuePositions
+}
+
+func (mmSelectQueuePositions *mVideoMockSelectQueuePositions) invocationsDone() bool {
+	if len(mmSelectQueuePositions.expectations) == 0 && mmSelectQueuePositions.defaultExpectation == nil && mmSelectQueuePositions.mock.funcSelectQueuePositions == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmSelectQueuePositions.mock.afterSelectQueuePositionsCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmSelectQueuePositions.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// SelectQueuePositions implements mm_repository.Video
+func (mmSelectQueuePositions *VideoMock) SelectQueuePositions(ctx context.Context) (m1 map[uuid.UUID]domain.QueuePosition, err error) {
+	mm_atomic.AddUint64(&mmSelectQueuePositions.beforeSelectQueuePositionsCounter, 1)
+	defer mm_atomic.AddUint64(&mmSelectQueuePositions.afterSelectQueuePositionsCounter, 1)
+
+	mmSelectQueuePositions.t.Helper()
+
+	if mmSelectQueuePositions.inspectFuncSelectQueuePositions != nil {
+		mmSelectQueuePositions.inspectFuncSelectQueuePositions(ctx)
+	}
+
+	mm_params := VideoMockSelectQueuePositionsParams{ctx}
+
+	// Record call args
+	mmSelectQueuePositions.SelectQueuePositionsMock.mutex.Lock()
+	mmSelectQueuePositions.SelectQueuePositionsMock.callArgs = append(mmSelectQueuePositions.SelectQueuePositionsMock.callArgs, &mm_params)
+	mmSelectQueuePositions.SelectQueuePositionsMock.mutex.Unlock()
+
+	for _, e := range mmSelectQueuePositions.SelectQueuePositionsMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.m1, e.results.err
+		}
+	}
+
+	if mmSelectQueuePositions.SelectQueuePositionsMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmSelectQueuePositions.SelectQueuePositionsMock.defaultExpectation.Counter, 1)
+		mm_want := mmSelectQueuePositions.SelectQueuePositionsMock.defaultExpectation.params
+		mm_want_ptrs := mmSelectQueuePositions.SelectQueuePositionsMock.defaultExpectation.paramPtrs
+
+		mm_got := VideoMockSelectQueuePositionsParams{ctx}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmSelectQueuePositions.t.Errorf("VideoMock.SelectQueuePositions got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmSelectQueuePositions.SelectQueuePositionsMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmSelectQueuePositions.t.Errorf("VideoMock.SelectQueuePositions got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmSelectQueuePositions.SelectQueuePositionsMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmSelectQueuePositions.SelectQueuePositionsMock.defaultExpectation.results
+		if mm_results == nil {
+			mmSelectQueuePositions.t.Fatal("No results are set for the VideoMock.SelectQueuePositions")
+		}
+		return (*mm_results).m1, (*mm_results).err
+	}
+	if mmSelectQueuePositions.funcSelectQueuePositions != nil {
+		return mmSelectQueuePositions.funcSelectQueuePositions(ctx)
+	}
+	mmSelectQueuePositions.t.Fatalf("Unexpected call to VideoMock.SelectQueuePositions. %v", ctx)
+	return
+}
+
+// SelectQueuePositionsAfterCounter returns a count of finished VideoMock.SelectQueuePositions invocations
+func (mmSelectQueuePositions *VideoMock) SelectQueuePositionsAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectQueuePositions.afterSelectQueuePositionsCounter)
+}
+
+// SelectQueuePositionsBeforeCounter returns a count of VideoMock.SelectQueuePositions invocations
+func (mmSelectQueuePositions *VideoMock) SelectQueuePositionsBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmSelectQueuePositions.beforeSelectQueuePositionsCounter)
+}
+
+// Calls returns a list of arguments used in each call to VideoMock.SelectQueuePositions.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmSelectQueuePositions *mVideoMockSelectQueuePositions) Calls() []*VideoMockSelectQueuePositionsParams {
+	mmSelectQueuePositions.mutex.RLock()
+
+	argCopy := make([]*VideoMockSelectQueuePositionsParams, len(mmSelectQueuePositions.callArgs))
+	copy(argCopy, mmSelectQueuePositions.callArgs)
+
+	mmSelectQueuePositions.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockSelectQueuePositionsDone returns true if the count of the SelectQueuePositions invocations corresponds
+// the number of defined expectations
+func (m *VideoMock) MinimockSelectQueuePositionsDone() bool {
+	if m.SelectQueuePositionsMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.SelectQueuePositionsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.SelectQueuePositionsMock.invocationsDone()
+}
+
+// MinimockSelectQueuePositionsInspect logs each unmet expectation
+func (m *VideoMock) MinimockSelectQueuePositionsInspect() {
+	for _, e := range m.SelectQueuePositionsMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to VideoMock.SelectQueuePositions at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterSelectQueuePositionsCounter := mm_atomic.LoadUint64(&m.afterSelectQueuePositionsCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.SelectQueuePositionsMock.defaultExpectation != nil && afterSelectQueuePositionsCounter < 1 {
+		if m.SelectQueuePositionsMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to VideoMock.SelectQueuePositions at\n%s", m.SelectQueuePositionsMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to VideoMock.SelectQueuePositions at\n%s with params: %#v", m.SelectQueuePositionsMock.defaultExpectation.expectationOrigins.origin, *m.SelectQueuePositionsMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcSelectQueuePositions != nil && afterSelectQueuePositionsCounter < 1 {
+		m.t.Errorf("Expected call to VideoMock.SelectQueuePositions at\n%s", m.funcSelectQueuePositionsOrigin)
+	}
+
+	if !m.SelectQueuePositionsMock.invocationsDone() && afterSelectQueuePositionsCounter > 0 {
+		m.t.Errorf("Expected %d calls to VideoMock.SelectQueuePositions at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.SelectQueuePositionsMock.expectedInvocations), m.SelectQueuePositionsMock.expectedInvocationsOrigin, afterSelectQueuePositionsCounter)
+	}
+}
+
 type mVideoMockUpdateName struct {
 	optional           bool
 	mock               *VideoMock
@@ -3182,6 +3504,8 @@ func (m *VideoMock) MinimockFinish() {
 
 			m.MinimockSelectByIDsInspect()
 
+			m.MinimockSelectQueuePositionsInspect()
+
 			m.MinimockUpdateNameInspect()
 
 			m.MinimockUpdateStatusIfInspect()
@@ -3215,6 +3539,7 @@ func (m *VideoMock) minimockDone() bool {
 		m.MinimockSelectDone() &&
 		m.MinimockSelectByGroupIDDone() &&
 		m.MinimockSelectByIDsDone() &&
+		m.MinimockSelectQueuePositionsDone() &&
 		m.MinimockUpdateNameDone() &&
 		m.MinimockUpdateStatusIfDone() &&
 		m.MinimockUpdateTimedOutDone()

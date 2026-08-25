@@ -17,6 +17,7 @@ import (
 	"github.com/stephenafamo/bob/dialect/psql/dm"
 	"github.com/stephenafamo/bob/dialect/psql/sm"
 	"github.com/stephenafamo/bob/dialect/psql/um"
+	"github.com/stephenafamo/scan"
 	"go.uber.org/zap"
 )
 
@@ -284,6 +285,55 @@ func (r *VideoRepository) UpdateName(ctx context.Context, videoID uuid.UUID, nam
 	video.FromDB(videoDB)
 
 	return video, nil
+}
+
+// queuePositionsSQL вычисляет место каждого ожидающего обработки видео одним запросом с
+// оконными функциями (§3 дизайна эпика Э5, В-3): ROW_NUMBER — 1-based позиция в пределах своей
+// полосы (архивной или срочной, PARTITION BY is_urgent), COUNT — размер этой же полосы. Порядок
+// — status_changed_at, момент постановки uploading → queued (тот же UPDATE, что публикует
+// событие OriginalUploaded) — в пределах полосы это и есть FIFO по входу. Сканирует только
+// строки status = queued по индексу (status, is_urgent, status_changed_at) — запрос один на
+// весь список независимо от того, сколько видео стоит в очереди (Н1/Н3 эпика).
+const queuePositionsSQL = `
+SELECT id,
+	is_urgent,
+	(ROW_NUMBER() OVER (PARTITION BY is_urgent ORDER BY status_changed_at))::int AS position,
+	(COUNT(*) OVER (PARTITION BY is_urgent))::int AS total
+FROM app.user_group_videos
+WHERE status = ?
+`
+
+// queuePositionRow — строка сканирования результата queuePositionsSQL.
+type queuePositionRow struct {
+	ID       uuid.UUID `db:"id"`
+	IsUrgent bool      `db:"is_urgent"`
+	Position int       `db:"position"`
+	Total    int       `db:"total"`
+}
+
+// SelectQueuePositions возвращает место каждого ожидающего обработки видео в его полосе
+// (архивной или срочной) одним SQL-запросом на весь список — без round-trip'а на каждое видео
+// (§3 дизайна эпика Э5, В-3). Позиция считается глобально по системе, а не в рамках группы:
+// физическая очередь обработки общая для всех групп, поэтому вызывающая сторона (GetAllVideos)
+// сама отбирает из результата только id видео своей группы. Видео вне статуса queued в
+// результате отсутствуют.
+func (r *VideoRepository) SelectQueuePositions(ctx context.Context) (map[uuid.UUID]domain.QueuePosition, error) {
+	exec := r.provider.GetExecutor(ctx)
+
+	query := psql.RawQuery(queuePositionsSQL, int32FromVideoStatus(domain.VideoStatusQueued))
+
+	rows, err := bob.All(ctx, exec, query, scan.StructMapper[queuePositionRow]())
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	positions := make(map[uuid.UUID]domain.QueuePosition, len(rows))
+	for _, row := range rows {
+		positions[row.ID] = domain.QueuePosition{Position: row.Position, Total: row.Total}
+	}
+
+	return positions, nil
 }
 
 // Delete удаляет видео вместе со всеми его ассетами и файлами (Э1-Т21): сначала удаляются

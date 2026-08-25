@@ -4995,6 +4995,10 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "is_urgent": {
+                    "description": "IsUrgent — признак срочного видео: помеченный ролик берётся в обработку приоритетной\nполосой мимо общей очереди (эпик Э5, В-2). Видно всем, кто видит статус видео — не\nприватная информация, объясняет, почему ролик обогнал архив.",
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -5004,6 +5008,14 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "queue_position": {
+                    "description": "QueuePosition — место видео в очереди на обработку в пределах своей полосы (архивной\nили срочной), 1-based. Заполняется только при status_name == \"queued\" (эпик Э5, В-3).",
+                    "type": "integer"
+                },
+                "queue_total": {
+                    "description": "QueueTotal — общий размер полосы (архивной или срочной), к которой относится видео.\nЗаполняется только при status_name == \"queued\" (эпик Э5, В-3).",
+                    "type": "integer"
                 },
                 "status": {
                     "type": "integer"

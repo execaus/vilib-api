@@ -664,3 +664,91 @@ func TestRepository_VideoDelete_RemovesAssetsAndFiles(t *testing.T) {
 		require.Zero(t, fileCount, "file must not remain as orphan after video deletion")
 	})
 }
+
+// TestRepository_VideoSelectQueuePositions_ComputesPositionAndTotalPerLane проверяет корректность
+// позиции и размера полосы одним SQL-запросом с оконными функциями (§3 дизайна эпика Э5, В-3):
+// архивная и срочная полосы нумеруются независимо (PARTITION BY is_urgent) в порядке
+// status_changed_at, позиция считается глобально по системе — видео двух разных групп конкурируют
+// за одну и ту же очередь, видео вне статуса queued в результат не попадают.
+func TestRepository_VideoSelectQueuePositions_ComputesPositionAndTotalPerLane(t *testing.T) {
+	t.Parallel()
+
+	testutil.WithDB(t, []string{"../../migrations"}, func(bobDB *bob.DB) {
+		provider := repository.NewExecutorProvider(bobDB)
+		r := repository.NewRepository(provider)
+		f := testutil.Faker
+
+		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		accountRole, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
+		user, _ := r.User.Insert(
+			t.Context(),
+			f.Person().FirstName(),
+			f.Person().LastName(),
+			f.Hash().MD5(),
+			f.Person().Contact().Email,
+			accountRole.ID,
+		)
+
+		// Две разные группы одного аккаунта — физическая очередь общесистемная, а не в рамках
+		// группы (§3 дизайна эпика), поэтому видео разных групп должны конкурировать за одну и
+		// ту же нумерацию внутри своей полосы.
+		groupA, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		groupB, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+
+		insertQueued := func(groupID uuid.UUID, isUrgent bool, at time.Time) domain.Video {
+			video, err := r.Video.Insert(
+				t.Context(), f.Beer().Name(), groupID, user.ID, domain.VideoStatusQueued, isUrgent,
+			)
+			require.NoError(t, err)
+			backdateVideoTimestamp(t, bobDB, video.ID, at)
+			return video
+		}
+
+		base := time.Now().Add(-time.Hour)
+
+		// Архивная полоса: 3 видео из разных групп по возрастанию времени постановки в очередь.
+		archive1 := insertQueued(groupA.ID, false, base)
+		archive2 := insertQueued(groupB.ID, false, base.Add(time.Minute))
+		archive3 := insertQueued(groupA.ID, false, base.Add(2*time.Minute))
+
+		// Срочная полоса: 2 видео — независимая нумерация, не пересекается с архивной.
+		urgent1 := insertQueued(groupB.ID, true, base.Add(30*time.Second))
+		urgent2 := insertQueued(groupA.ID, true, base.Add(90*time.Second))
+
+		// Видео вне очереди — не должно попасть в результат вовсе.
+		ready, err := r.Video.Insert(t.Context(), f.Beer().Name(), groupA.ID, user.ID, domain.VideoStatusReady, false)
+		require.NoError(t, err)
+
+		positions, err := r.Video.SelectQueuePositions(t.Context())
+		require.NoError(t, err)
+
+		require.Equal(t, domain.QueuePosition{Position: 1, Total: 3}, positions[archive1.ID])
+		require.Equal(t, domain.QueuePosition{Position: 2, Total: 3}, positions[archive2.ID])
+		require.Equal(t, domain.QueuePosition{Position: 3, Total: 3}, positions[archive3.ID])
+
+		require.Equal(t, domain.QueuePosition{Position: 1, Total: 2}, positions[urgent1.ID])
+		require.Equal(t, domain.QueuePosition{Position: 2, Total: 2}, positions[urgent2.ID])
+
+		_, ok := positions[ready.ID]
+		require.False(t, ok, "video outside queued status must not be present in the result")
+	})
+}
+
+// TestRepository_VideoSelectQueuePositions_NoQueuedVideos_ReturnsEmptyMap проверяет, что при
+// пустой очереди метод не падает и не путает отсутствие строк с ошибкой.
+func TestRepository_VideoSelectQueuePositions_NoQueuedVideos_ReturnsEmptyMap(t *testing.T) {
+	t.Parallel()
+
+	testutil.WithDB(t, []string{"../../migrations"}, func(bobDB *bob.DB) {
+		provider := repository.NewExecutorProvider(bobDB)
+		r := repository.NewRepository(provider)
+		f := testutil.Faker
+
+		_ = newTestVideo(t, r, f, domain.VideoStatusReady)
+
+		positions, err := r.Video.SelectQueuePositions(t.Context())
+
+		require.NoError(t, err)
+		require.Empty(t, positions)
+	})
+}

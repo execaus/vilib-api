@@ -1791,6 +1791,15 @@ func TestService_Video_GetAll(t *testing.T) {
 			Return(true)
 	}
 
+	// expectNoQueuedVideos мокает SelectQueuePositions пустым результатом — ни одно из
+	// фикстурных видео этого теста не в статусе queued (эпик Э5, В-3): слияние позиции
+	// проверяется отдельным тестом TestService_Video_GetAll_MergesQueuePosition.
+	expectNoQueuedVideos := func(m videoGetAllMocks) {
+		m.Video.SelectQueuePositionsMock.
+			Expect(minimock.AnyContext).
+			Return(map[uuid.UUID]domain.QueuePosition{}, nil)
+	}
+
 	// OR-логика допуска к просмотру покрыта TestService_Access_CanWatchVideo — здесь
 	// достаточно проверить, что GetAll полагается на её результат.
 	t.Run("forbidden without video watch right", func(t *testing.T) {
@@ -1828,6 +1837,7 @@ func TestService_Video_GetAll(t *testing.T) {
 		m.User.GetByIDsMock.
 			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
 			Return([]domain.User{testAuthor}, nil)
+		expectNoQueuedVideos(m)
 
 		videoSvc := newVideoGetAllService(m)
 
@@ -1856,6 +1866,7 @@ func TestService_Video_GetAll(t *testing.T) {
 		m.User.GetByIDsMock.
 			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
 			Return([]domain.User{testAuthor}, nil)
+		expectNoQueuedVideos(m)
 
 		videoSvc := newVideoGetAllService(m)
 
@@ -1884,6 +1895,7 @@ func TestService_Video_GetAll(t *testing.T) {
 		m.User.GetByIDsMock.
 			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
 			Return([]domain.User{testAuthor}, nil)
+		expectNoQueuedVideos(m)
 
 		videoSvc := newVideoGetAllService(m)
 
@@ -1918,6 +1930,7 @@ func TestService_Video_GetAll(t *testing.T) {
 		m.User.GetByIDsMock.
 			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
 			Return([]domain.User{testAuthor}, nil)
+		expectNoQueuedVideos(m)
 
 		videoSvc := newVideoGetAllService(m)
 
@@ -1951,6 +1964,7 @@ func TestService_Video_GetAll(t *testing.T) {
 		m.User.GetByIDsMock.
 			Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
 			Return(nil, nil)
+		expectNoQueuedVideos(m)
 
 		videoSvc := newVideoGetAllService(m)
 
@@ -1985,6 +1999,84 @@ func TestService_Video_GetAll(t *testing.T) {
 
 		require.ErrorIs(t, err, wantErr)
 	})
+}
+
+// TestService_Video_GetAll_MergesQueuePosition проверяет слияние позиции в очереди в список
+// видео (эпик Э5, §3 дизайна, В-3): позиция подмешивается только для видео в статусе queued,
+// причём отдельно для архивной и срочной полос — соседний ready-элемент и видео из чужой
+// полосы позицию не получают. Позиция запрашивается ровно одним вызовом SelectQueuePositions
+// на весь список, а не по одному на видео.
+func TestService_Video_GetAll_MergesQueuePosition(t *testing.T) {
+	t.Parallel()
+
+	testAccountID := uuid.New()
+	testGroupID := uuid.New()
+	testInitiatorID := uuid.New()
+	testAuthorID := uuid.New()
+
+	archiveQueued := domain.Video{
+		ID: uuid.New(), GroupID: testGroupID, Name: "archive-queued", Author: testAuthorID,
+		Status: domain.VideoStatusQueued, IsUrgent: false,
+	}
+	urgentQueued := domain.Video{
+		ID: uuid.New(), GroupID: testGroupID, Name: "urgent-queued", Author: testAuthorID,
+		Status: domain.VideoStatusQueued, IsUrgent: true,
+	}
+	readyVideo := domain.Video{
+		ID: uuid.New(), GroupID: testGroupID, Name: "ready", Author: testAuthorID,
+		Status: domain.VideoStatusReady,
+	}
+
+	mc := minimock.NewController(t)
+	m := newVideoGetAllMocks(mc)
+
+	m.Access.CanWatchVideoMock.
+		Expect(minimock.AnyContext, testAccountID, testInitiatorID, testGroupID).
+		Return(true)
+	m.Access.CanManageVideoMock.
+		Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
+		Return(nil)
+
+	m.Video.SelectByGroupIDMock.
+		Expect(minimock.AnyContext, testGroupID).
+		Return([]domain.Video{archiveQueued, urgentQueued, readyVideo}, nil)
+	m.VideoAsset.SelectByVideoIDsMock.
+		Expect(minimock.AnyContext, []uuid.UUID{archiveQueued.ID, urgentQueued.ID, readyVideo.ID}).
+		Return(nil, nil)
+	m.User.GetByIDsMock.
+		Expect(minimock.AnyContext, []uuid.UUID{testAuthorID}).
+		Return(nil, nil)
+
+	// Карта результата SelectQueuePositions намеренно содержит и чужое видео (другой группы,
+	// не запрошенной в этом тесте) — GetAll обязан выбрать из неё только id своего списка, что
+	// и демонстрирует отсутствие лишней фильтрации по группе внутри самого SQL-запроса
+	// (позиция считается глобально по системе, §3 дизайна эпика).
+	m.Video.SelectQueuePositionsMock.
+		Expect(minimock.AnyContext).
+		Return(map[uuid.UUID]domain.QueuePosition{
+			archiveQueued.ID: {Position: 3, Total: 5},
+			urgentQueued.ID:  {Position: 1, Total: 2},
+			uuid.New():       {Position: 4, Total: 5},
+		}, nil)
+
+	videoSvc := newVideoGetAllService(m)
+
+	got, err := videoSvc.GetAll(t.Context(), testAccountID, testGroupID, testInitiatorID)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+
+	byID := make(map[uuid.UUID]domain.VideoListItem, len(got))
+	for _, item := range got {
+		byID[item.ID] = item
+	}
+
+	require.NotNil(t, byID[archiveQueued.ID].QueuePosition)
+	require.Equal(t, domain.QueuePosition{Position: 3, Total: 5}, *byID[archiveQueued.ID].QueuePosition)
+
+	require.NotNil(t, byID[urgentQueued.ID].QueuePosition)
+	require.Equal(t, domain.QueuePosition{Position: 1, Total: 2}, *byID[urgentQueued.ID].QueuePosition)
+
+	require.Nil(t, byID[readyVideo.ID].QueuePosition)
 }
 
 // videoHLSMocks собирает моки, используемые GetHLSMaster/GetHLSPlaylist.
