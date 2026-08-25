@@ -152,6 +152,9 @@ type VideoPatch struct {
 	// QueuedAt — новое значение времени постановки в очередь (переход uploading → queued),
 	// момент complete из метрики времени публикации (эпик Э5, Э5-Т5).
 	QueuedAt *time.Time
+	// CompressingStartedAt — новое значение времени взятия в обработку конвейером (переход
+	// queued → compressing по событию ProcessingStarted, эпик Э5, исправление Д-1).
+	CompressingStartedAt *time.Time
 }
 
 type Video struct {

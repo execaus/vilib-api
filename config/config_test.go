@@ -35,7 +35,8 @@ func TestLoadConfig_UsesDefaultsWhenFileIsAbsent(t *testing.T) {
 	require.Equal(t, []string{"360p", "720p", "1080p"}, cfg.Video.Profiles)
 	require.Equal(t, 3, cfg.Video.MaxProcessingAttempts)
 	require.Equal(t, 2*time.Hour, cfg.Video.UploadTimeout)
-	require.Equal(t, time.Hour, cfg.Video.QueuedTimeout)
+	require.Equal(t, 15*time.Minute, cfg.Video.QueuedStallTimeout)
+	require.Equal(t, 12*time.Hour, cfg.Video.QueuedMaxTimeout)
 	require.Equal(t, 3*time.Hour, cfg.Video.ProcessingTimeout)
 	require.Equal(t, time.Minute, cfg.Video.WatchdogInterval)
 	require.Equal(t, time.Hour, cfg.Video.HLSURLTTL)
@@ -144,7 +145,8 @@ func TestConfig_Validate(t *testing.T) {
 				Profiles:                 []string{"360p"},
 				MaxProcessingAttempts:    1,
 				UploadTimeout:            time.Hour,
-				QueuedTimeout:            time.Hour,
+				QueuedStallTimeout:       time.Hour,
+				QueuedMaxTimeout:         time.Hour,
 				ProcessingTimeout:        time.Hour,
 				WatchdogInterval:         time.Hour,
 				HLSURLTTL:                time.Hour,
@@ -225,6 +227,16 @@ func TestConfig_Validate(t *testing.T) {
 			name:    "zero upload timeout",
 			mutate:  func(cfg *config.Config) { cfg.Video.UploadTimeout = 0 },
 			wantErr: "video.upload_timeout",
+		},
+		{
+			name:    "zero queued stall timeout",
+			mutate:  func(cfg *config.Config) { cfg.Video.QueuedStallTimeout = 0 },
+			wantErr: "video.queued_stall_timeout",
+		},
+		{
+			name:    "zero queued max timeout",
+			mutate:  func(cfg *config.Config) { cfg.Video.QueuedMaxTimeout = 0 },
+			wantErr: "video.queued_max_timeout",
 		},
 		{
 			name:    "zero watch completion threshold",

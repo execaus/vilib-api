@@ -131,6 +131,9 @@ func (r *VideoRepository) UpdateStatusIf(
 	if patch.QueuedAt != nil {
 		setter.QueuedAt = omitnull.From(*patch.QueuedAt)
 	}
+	if patch.CompressingStartedAt != nil {
+		setter.CompressingStartedAt = omitnull.From(*patch.CompressingStartedAt)
+	}
 
 	fromArgs := make([]bob.Expression, len(from))
 	for i, status := range from {
@@ -163,15 +166,19 @@ func (r *VideoRepository) UpdateStatusIf(
 // UpdateTimedOut переводит в failed(watchdog timeout) все видео заданного статуса, у которых
 // контрольная временная метка старше before — один атомарный условный UPDATE (§8 дизайна
 // эпика). Контрольная метка выбирается по статусу: created_at для uploading (время начала
-// загрузки), status_changed_at для остальных статусов (время входа в текущий статус). Один
-// SQL-запрос атомарен, поэтому несколько инстансов API безопасны без дополнительной
-// блокировки: строка обновляется ровно одним инстансом, остальные получат её уже в статусе
-// failed и не попадут под условие WHERE status = $1.
+// загрузки), status_changed_at для остальных статусов (время входа в текущий статус).
+// isUrgent — необязательный фильтр по полосе обработки (архивной/срочной, эпик Э5, исправление
+// Д-1): nil не фильтрует, иначе затрагивает только видео указанной полосы — так watchdog может
+// точечно ронять зависшие видео только той полосы, что реально стоит, не задевая другую. Один
+// SQL-запрос атомарен, поэтому несколько инстансов API безопасны без дополнительной блокировки:
+// строка обновляется ровно одним инстансом, остальные получат её уже в статусе failed и не
+// попадут под условие WHERE status = $1.
 func (r *VideoRepository) UpdateTimedOut(
 	ctx context.Context,
 	status domain.VideoStatus,
 	before time.Time,
 	failure domain.VideoFailure,
+	isUrgent *bool,
 ) ([]uuid.UUID, error) {
 	exec := r.provider.GetExecutor(ctx)
 
@@ -187,11 +194,16 @@ func (r *VideoRepository) UpdateTimedOut(
 		FailureReason:   omitnull.From(failure.Reason),
 	}
 
-	rows, err := schema.UserGroupVideos.Update(
+	mods := []bob.Mod[*dialect.UpdateQuery]{
 		setter.UpdateMod(),
 		um.Where(schema.UserGroupVideos.Columns.Status.EQ(psql.Arg(int32FromVideoStatus(status)))),
 		um.Where(timestampColumn.LT(psql.Arg(before))),
-	).All(ctx, exec)
+	}
+	if isUrgent != nil {
+		mods = append(mods, um.Where(schema.UserGroupVideos.Columns.IsUrgent.EQ(psql.Arg(*isUrgent))))
+	}
+
+	rows, err := schema.UserGroupVideos.Update(mods...).All(ctx, exec)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return nil, err

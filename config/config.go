@@ -105,8 +105,15 @@ type VideoConfig struct {
 	MaxProcessingAttempts int      `mapstructure:"max_processing_attempts"`
 	// UploadTimeout — время на подтверждение загрузки оригинала после выдачи presigned URL.
 	UploadTimeout time.Duration `mapstructure:"upload_timeout"`
-	// QueuedTimeout — время ожидания взятия видео воркером в очереди.
-	QueuedTimeout time.Duration `mapstructure:"queued_timeout"`
+	// QueuedStallTimeout — короткий индикатор простоя полосы обработки: если за этот срок в
+	// полосе (архивной или срочной) не было ни одного успешного ProcessingStarted, полоса
+	// признаётся стоящей, и её зависшие в очереди видео переводятся в failed (эпик Э5,
+	// исправление Д-1). Длина самой очереди на это не влияет — только отсутствие прогресса.
+	QueuedStallTimeout time.Duration `mapstructure:"queued_stall_timeout"`
+	// QueuedMaxTimeout — абсолютный потолок ожидания в очереди безотносительно индикатора
+	// прогресса полосы (эпик Э5, исправление Д-1, Н4): защита от гипотетических дыр вроде
+	// рассинхронизации между обновлением прогресса и реальной доставкой события.
+	QueuedMaxTimeout time.Duration `mapstructure:"queued_max_timeout"`
 	// ProcessingTimeout — время на обработку видео воркером.
 	ProcessingTimeout time.Duration `mapstructure:"processing_timeout"`
 	// WatchdogInterval — период проверки зависших видео.
@@ -210,7 +217,8 @@ func (c Config) Validate() error {
 	positiveDurations := map[string]time.Duration{
 		"auth.password_reset_ttl":        c.Auth.PasswordResetTTL,
 		"video.upload_timeout":           c.Video.UploadTimeout,
-		"video.queued_timeout":           c.Video.QueuedTimeout,
+		"video.queued_stall_timeout":     c.Video.QueuedStallTimeout,
+		"video.queued_max_timeout":       c.Video.QueuedMaxTimeout,
 		"video.processing_timeout":       c.Video.ProcessingTimeout,
 		"video.watchdog_interval":        c.Video.WatchdogInterval,
 		"video.hls_url_ttl":              c.Video.HLSURLTTL,

@@ -484,7 +484,7 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 		Video:                       cfg.Video,
 		TopicOriginalUploaded:       cfg.Kafka.TopicOriginalUploaded,
 		TopicOriginalUploadedUrgent: cfg.Kafka.TopicOriginalUploadedUrgent,
-	})
+	}, WithPipelineProgress(r.PipelineProgress))
 	s.VideoAsset = NewVideoAssetService(r.VideoAsset, s)
 	s.Access = NewAccessService(s)
 	s.Outbox = NewOutboxService(r.Outbox, s)

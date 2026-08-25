@@ -677,20 +677,22 @@ func TestService_Video_CompleteUpload(t *testing.T) {
 // videoApplyProcessingMocks собирает моки, используемые Apply* методами обработки событий
 // воркера (§7.2 эпика).
 type videoApplyProcessingMocks struct {
-	Video         *repository_mocks.VideoMock
-	VideoAsset    *service_mocks.VideoAssetMock
-	Outbox        *service_mocks.OutboxMock
-	S3            *service_mocks.S3Mock
-	WatchProgress *service_mocks.WatchProgressMock
+	Video            *repository_mocks.VideoMock
+	VideoAsset       *service_mocks.VideoAssetMock
+	Outbox           *service_mocks.OutboxMock
+	S3               *service_mocks.S3Mock
+	WatchProgress    *service_mocks.WatchProgressMock
+	PipelineProgress *repository_mocks.PipelineProgressMock
 }
 
 func newVideoApplyProcessingMocks(mc *minimock.Controller) videoApplyProcessingMocks {
 	return videoApplyProcessingMocks{
-		Video:         repository_mocks.NewVideoMock(mc),
-		VideoAsset:    service_mocks.NewVideoAssetMock(mc),
-		Outbox:        service_mocks.NewOutboxMock(mc),
-		S3:            service_mocks.NewS3Mock(mc),
-		WatchProgress: service_mocks.NewWatchProgressMock(mc),
+		Video:            repository_mocks.NewVideoMock(mc),
+		VideoAsset:       service_mocks.NewVideoAssetMock(mc),
+		Outbox:           service_mocks.NewOutboxMock(mc),
+		S3:               service_mocks.NewS3Mock(mc),
+		WatchProgress:    service_mocks.NewWatchProgressMock(mc),
+		PipelineProgress: repository_mocks.NewPipelineProgressMock(mc),
 	}
 }
 
@@ -699,7 +701,7 @@ func newVideoApplyProcessingMocks(mc *minimock.Controller) videoApplyProcessingM
 // Apply*-методами.
 func newVideoApplyService(m videoApplyProcessingMocks, cfg service.VideoServiceConfig) *service.VideoService {
 	svc := &service.Service{VideoAsset: m.VideoAsset, Outbox: m.Outbox, WatchProgress: m.WatchProgress}
-	return service.NewVideoService(m.S3, m.Video, svc, cfg)
+	return service.NewVideoService(m.S3, m.Video, svc, cfg, service.WithPipelineProgress(m.PipelineProgress))
 }
 
 // testMaxProcessingAttempts — лимит попыток обработки, общий для тестов ApplyProcessingFailed.
@@ -724,7 +726,7 @@ func TestService_Video_ApplyProcessingStarted(t *testing.T) {
 		wantErr    error
 	}{
 		{
-			name:    "queued and attempt matches transitions to compressing",
+			name:    "queued and attempt matches transitions to compressing and bumps urgent lane progress",
 			attempt: 2,
 			setupMocks: func(m videoApplyProcessingMocks, attempt int) {
 				m.Video.UpdateStatusIfMock.Set(func(
@@ -739,12 +741,21 @@ func TestService_Video_ApplyProcessingStarted(t *testing.T) {
 					require.Equal(t, domain.VideoStatusCompressing, to)
 					require.NotNil(t, patch.ExpectedAttempt)
 					require.Equal(t, attempt, *patch.ExpectedAttempt)
+					require.NotNil(t, patch.CompressingStartedAt)
 					return true, nil
+				})
+				m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).
+					Return(&domain.Video{ID: testVideoID, IsUrgent: true}, nil)
+				m.PipelineProgress.UpdateLastDequeuedAtMock.Set(func(
+					_ context.Context, isUrgent bool, _ time.Time,
+				) error {
+					require.True(t, isUrgent)
+					return nil
 				})
 			},
 		},
 		{
-			name:    "stale attempt is ignored without error",
+			name:    "stale attempt is ignored without touching pipeline progress",
 			attempt: 1,
 			setupMocks: func(m videoApplyProcessingMocks, _ int) {
 				m.Video.UpdateStatusIfMock.Return(false, nil)
@@ -755,6 +766,25 @@ func TestService_Video_ApplyProcessingStarted(t *testing.T) {
 			attempt: 1,
 			setupMocks: func(m videoApplyProcessingMocks, _ int) {
 				m.Video.UpdateStatusIfMock.Return(false, repoErr)
+			},
+			wantErr: repoErr,
+		},
+		{
+			name:    "select error after successful transition propagates",
+			attempt: 1,
+			setupMocks: func(m videoApplyProcessingMocks, _ int) {
+				m.Video.UpdateStatusIfMock.Return(true, nil)
+				m.Video.SelectMock.Return(nil, repoErr)
+			},
+			wantErr: repoErr,
+		},
+		{
+			name:    "pipeline progress update error propagates",
+			attempt: 1,
+			setupMocks: func(m videoApplyProcessingMocks, _ int) {
+				m.Video.UpdateStatusIfMock.Return(true, nil)
+				m.Video.SelectMock.Return(&domain.Video{ID: testVideoID, IsUrgent: false}, nil)
+				m.PipelineProgress.UpdateLastDequeuedAtMock.Return(repoErr)
 			},
 			wantErr: repoErr,
 		},
@@ -2653,9 +2683,10 @@ func TestService_Video_Delete(t *testing.T) {
 	})
 }
 
-// TestService_Video_FailTimedOut проверяет watchdog-логику (§8 дизайна эпика, Э1-Т16): три
-// вызова UpdateTimedOut с правильными статусами и порогами и best-effort очистку объекта
-// оригинала для видео, зависших в uploading, после коммита.
+// TestService_Video_FailTimedOut проверяет watchdog-логику (§8 дизайна эпика Э1, §1 дизайна
+// эпика Э5, исправление Д-1): вызовы UpdateTimedOut с правильными статусами и порогами,
+// best-effort очистку объекта оригинала для видео, зависших в uploading, после коммита, и
+// различение по полосам обработки для статуса queued.
 func TestService_Video_FailTimedOut(t *testing.T) {
 	t.Parallel()
 
@@ -2664,37 +2695,62 @@ func TestService_Video_FailTimedOut(t *testing.T) {
 	cfg := service.VideoServiceConfig{
 		Bucket: testBucket,
 		Video: config.VideoConfig{
-			UploadTimeout:     2 * time.Hour,
-			QueuedTimeout:     time.Hour,
-			ProcessingTimeout: 3 * time.Hour,
+			UploadTimeout:      2 * time.Hour,
+			QueuedStallTimeout: 15 * time.Minute,
+			QueuedMaxTimeout:   12 * time.Hour,
+			ProcessingTimeout:  3 * time.Hour,
 		},
 	}
 
-	t.Run("calls UpdateTimedOut with correct thresholds and cleans up uploading originals", func(t *testing.T) {
+	// progressingPipeline имитирует полосу, чей индикатор обновлялся только что — заведомо
+	// свежее QueuedStallTimeout при любом разумном пороге теста.
+	progressingPipeline := func(isUrgent bool) domain.PipelineProgress {
+		return domain.PipelineProgress{IsUrgent: isUrgent, LastDequeuedAt: now.Add(-time.Minute)}
+	}
+
+	// stalledPipeline имитирует полосу, чей индикатор не обновлялся дольше QueuedStallTimeout —
+	// конвейер этой полосы признаётся стоящим.
+	stalledPipeline := func(isUrgent bool) domain.PipelineProgress {
+		return domain.PipelineProgress{IsUrgent: isUrgent, LastDequeuedAt: now.Add(-2 * cfg.Video.QueuedStallTimeout)}
+	}
+
+	t.Run("honest long queue on both lanes does not fail queued videos", func(t *testing.T) {
 		t.Parallel()
 
 		mc := minimock.NewController(t)
 		videoRepo := repository_mocks.NewVideoMock(mc)
+		pipelineProgress := repository_mocks.NewPipelineProgressMock(mc)
 
 		uploadingID := uuid.New()
-		queuedID := uuid.New()
 		compressingID := uuid.New()
+
+		// Обе полосы продвигаются — сколь угодно длинная очередь queued не должна порождать
+		// дополнительных условных UPDATE сверх безусловного потолка QueuedMaxTimeout.
+		pipelineProgress.SelectMock.Set(func(_ context.Context, isUrgent bool) (domain.PipelineProgress, error) {
+			return progressingPipeline(isUrgent), nil
+		})
 
 		videoRepo.UpdateTimedOutMock.Set(func(
 			_ context.Context, status domain.VideoStatus, before time.Time, failure domain.VideoFailure,
+			isUrgent *bool,
 		) ([]uuid.UUID, error) {
 			require.Equal(t, domain.VideoFailureClassTimeout, failure.Class)
 
 			switch status {
 			case domain.VideoStatusUploading:
+				require.Nil(t, isUrgent)
 				require.Equal(t, now.Add(-cfg.Video.UploadTimeout), before)
 				require.Equal(t, "загрузка не завершена за 2h0m0s", failure.Reason)
 				return []uuid.UUID{uploadingID}, nil
 			case domain.VideoStatusQueued:
-				require.Equal(t, now.Add(-cfg.Video.QueuedTimeout), before)
-				require.Equal(t, "не взято в обработку за 1h0m0s", failure.Reason)
-				return []uuid.UUID{queuedID}, nil
+				// Обе полосы живы — единственный вызов должен быть безусловным потолком, без
+				// фильтра по полосе.
+				require.Nil(t, isUrgent)
+				require.Equal(t, now.Add(-cfg.Video.QueuedMaxTimeout), before)
+				require.Equal(t, "не взято в обработку за 12h0m0s", failure.Reason)
+				return nil, nil
 			case domain.VideoStatusCompressing:
+				require.Nil(t, isUrgent)
 				require.Equal(t, now.Add(-cfg.Video.ProcessingTimeout), before)
 				require.Equal(t, "обработка не завершена за 3h0m0s", failure.Reason)
 				return []uuid.UUID{compressingID}, nil
@@ -2712,7 +2768,9 @@ func TestService_Video_FailTimedOut(t *testing.T) {
 			Expect(minimock.AnyContext, testBucket, domain.VideoOriginalObjectKey(uploadingID)).
 			Return(nil)
 
-		videoSvc := service.NewVideoService(s3Mock, videoRepo, &service.Service{}, cfg)
+		videoSvc := service.NewVideoService(
+			s3Mock, videoRepo, &service.Service{}, cfg, service.WithPipelineProgress(pipelineProgress),
+		)
 
 		tx := saga_mocks.NewBobTransactionMock(mc)
 		tx.CommitMock.Return(nil)
@@ -2733,8 +2791,61 @@ func TestService_Video_FailTimedOut(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Equal(t, []uuid.UUID{uploadingID}, report.Uploading)
-		require.Equal(t, []uuid.UUID{queuedID}, report.Queued)
+		require.Empty(t, report.Queued)
 		require.Equal(t, []uuid.UUID{compressingID}, report.Compressing)
+	})
+
+	t.Run("stalled archival lane fails its queued videos, progressing urgent lane untouched", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		videoRepo := repository_mocks.NewVideoMock(mc)
+		pipelineProgress := repository_mocks.NewPipelineProgressMock(mc)
+
+		stalledArchivalID := uuid.New()
+
+		pipelineProgress.SelectMock.Set(func(_ context.Context, isUrgent bool) (domain.PipelineProgress, error) {
+			if isUrgent {
+				return progressingPipeline(true), nil
+			}
+			return stalledPipeline(false), nil
+		})
+
+		videoRepo.UpdateTimedOutMock.Set(func(
+			_ context.Context, status domain.VideoStatus, before time.Time, failure domain.VideoFailure,
+			isUrgent *bool,
+		) ([]uuid.UUID, error) {
+			switch status {
+			case domain.VideoStatusUploading, domain.VideoStatusCompressing:
+				return nil, nil
+			case domain.VideoStatusQueued:
+				if isUrgent == nil {
+					require.Equal(t, now.Add(-cfg.Video.QueuedMaxTimeout), before)
+					return nil, nil
+				}
+
+				require.False(t, *isUrgent, "только стоящая архивная полоса должна получить точечный проход")
+				require.Equal(t, now.Add(-cfg.Video.QueuedStallTimeout), before)
+				require.Contains(t, failure.Reason, "архивной")
+				return []uuid.UUID{stalledArchivalID}, nil
+			case domain.VideoStatusReady, domain.VideoStatusFailed:
+				t.Fatalf("unexpected status %v", status)
+				return nil, nil
+			}
+
+			t.Fatalf("unexpected status %v", status)
+			return nil, nil
+		})
+
+		videoSvc := service.NewVideoService(
+			service_mocks.NewS3Mock(mc), videoRepo, &service.Service{}, cfg,
+			service.WithPipelineProgress(pipelineProgress),
+		)
+
+		report, err := videoSvc.FailTimedOut(t.Context(), now)
+
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{stalledArchivalID}, report.Queued)
 	})
 
 	t.Run("uploading timeout error propagates, no further statuses checked", func(t *testing.T) {
@@ -2749,10 +2860,32 @@ func TestService_Video_FailTimedOut(t *testing.T) {
 				domain.VideoStatusUploading,
 				now.Add(-cfg.Video.UploadTimeout),
 				domain.VideoFailure{Class: domain.VideoFailureClassTimeout, Reason: "загрузка не завершена за 2h0m0s"},
+				(*bool)(nil),
 			).
 			Return(nil, repoErr)
 
 		videoSvc := service.NewVideoService(service_mocks.NewS3Mock(mc), videoRepo, &service.Service{}, cfg)
+
+		_, err := videoSvc.FailTimedOut(t.Context(), now)
+
+		require.ErrorIs(t, err, repoErr)
+	})
+
+	t.Run("pipeline progress lookup error propagates", func(t *testing.T) {
+		t.Parallel()
+
+		mc := minimock.NewController(t)
+		videoRepo := repository_mocks.NewVideoMock(mc)
+		videoRepo.UpdateTimedOutMock.Return(nil, nil)
+
+		pipelineProgress := repository_mocks.NewPipelineProgressMock(mc)
+		repoErr := errors.New("db unavailable")
+		pipelineProgress.SelectMock.Return(domain.PipelineProgress{}, repoErr)
+
+		videoSvc := service.NewVideoService(
+			service_mocks.NewS3Mock(mc), videoRepo, &service.Service{}, cfg,
+			service.WithPipelineProgress(pipelineProgress),
+		)
 
 		_, err := videoSvc.FailTimedOut(t.Context(), now)
 
@@ -2766,7 +2899,15 @@ func TestService_Video_FailTimedOut(t *testing.T) {
 		videoRepo := repository_mocks.NewVideoMock(mc)
 		videoRepo.UpdateTimedOutMock.Return(nil, nil)
 
-		videoSvc := service.NewVideoService(service_mocks.NewS3Mock(mc), videoRepo, &service.Service{}, cfg)
+		pipelineProgress := repository_mocks.NewPipelineProgressMock(mc)
+		pipelineProgress.SelectMock.Set(func(_ context.Context, isUrgent bool) (domain.PipelineProgress, error) {
+			return progressingPipeline(isUrgent), nil
+		})
+
+		videoSvc := service.NewVideoService(
+			service_mocks.NewS3Mock(mc), videoRepo, &service.Service{}, cfg,
+			service.WithPipelineProgress(pipelineProgress),
+		)
 
 		report, err := videoSvc.FailTimedOut(t.Context(), now)
 

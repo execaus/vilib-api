@@ -13,12 +13,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newTestVideo создаёт аккаунт, группу, роль, пользователя и видео для теста репозитория видео.
+// newTestVideo создаёт аккаунт, группу, роль, пользователя и обычное (не срочное) видео для
+// теста репозитория видео.
 func newTestVideo(
 	t *testing.T,
 	r *repository.Repository,
 	f faker.Faker,
 	status domain.VideoStatus,
+) domain.Video {
+	t.Helper()
+
+	return newTestVideoWithUrgency(t, r, f, status, false)
+}
+
+// newTestVideoWithUrgency — то же, что newTestVideo, но с явным указанием полосы обработки
+// (эпик Э5, исправление Д-1: тесты watchdog'а по полосам).
+func newTestVideoWithUrgency(
+	t *testing.T,
+	r *repository.Repository,
+	f faker.Faker,
+	status domain.VideoStatus,
+	isUrgent bool,
 ) domain.Video {
 	t.Helper()
 
@@ -42,7 +57,7 @@ func newTestVideo(
 		accountRole.ID,
 	)
 
-	video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, status, false)
+	video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, status, isUrgent)
 	require.NoError(t, err)
 
 	return video
@@ -210,6 +225,36 @@ func TestRepository_VideoUpdateStatusIf_QueuedAtPatch_SetsQueuedAt(t *testing.T)
 		require.NoError(t, err)
 		require.NotNil(t, got.QueuedAt)
 		require.WithinDuration(t, queuedAt, *got.QueuedAt, time.Second)
+	})
+}
+
+// TestRepository_VideoUpdateStatusIf_CompressingStartedAtPatch_SetsCompressingStartedAt
+// проверяет, что тот же условный UPDATE, что переводит queued → compressing по событию
+// ProcessingStarted, проставляет compressing_started_at (эпик Э5, исправление Д-1).
+func TestRepository_VideoUpdateStatusIf_CompressingStartedAtPatch_SetsCompressingStartedAt(t *testing.T) {
+	t.Parallel()
+
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+		video := newTestVideo(t, r, f, domain.VideoStatusQueued)
+		require.Nil(t, video.CompressingStartedAt)
+
+		attempt := video.ProcessingAttempt
+		startedAt := time.Now().UTC()
+		updated, err := r.Video.UpdateStatusIf(
+			t.Context(),
+			video.ID,
+			[]domain.VideoStatus{domain.VideoStatusQueued},
+			domain.VideoStatusCompressing,
+			domain.VideoPatch{ExpectedAttempt: &attempt, CompressingStartedAt: &startedAt},
+		)
+
+		require.NoError(t, err)
+		require.True(t, updated)
+
+		got, err := r.Video.Select(t.Context(), video.ID)
+		require.NoError(t, err)
+		require.NotNil(t, got.CompressingStartedAt)
+		require.WithinDuration(t, startedAt, *got.CompressingStartedAt, time.Second)
 	})
 }
 
@@ -572,7 +617,7 @@ func TestRepository_VideoUpdateTimedOut_TranslatesOnlyOverdueRowsOfRequestedStat
 			Class:  domain.VideoFailureClassTimeout,
 			Reason: "загрузка не завершена за 2h0m0s",
 		}
-		ids, err := r.Video.UpdateTimedOut(t.Context(), domain.VideoStatusUploading, threshold, failure)
+		ids, err := r.Video.UpdateTimedOut(t.Context(), domain.VideoStatusUploading, threshold, failure, nil)
 
 		require.NoError(t, err)
 		require.Equal(t, []uuid.UUID{overdueUploading.ID}, ids)
@@ -614,13 +659,51 @@ func TestRepository_VideoUpdateTimedOut_RepeatedCall_Idempotent(t *testing.T) {
 
 		failure := domain.VideoFailure{Class: domain.VideoFailureClassTimeout, Reason: "не взято в обработку"}
 
-		first, err := r.Video.UpdateTimedOut(t.Context(), domain.VideoStatusQueued, threshold, failure)
+		first, err := r.Video.UpdateTimedOut(t.Context(), domain.VideoStatusQueued, threshold, failure, nil)
 		require.NoError(t, err)
 		require.Equal(t, []uuid.UUID{video.ID}, first)
 
-		second, err := r.Video.UpdateTimedOut(t.Context(), domain.VideoStatusQueued, threshold, failure)
+		second, err := r.Video.UpdateTimedOut(t.Context(), domain.VideoStatusQueued, threshold, failure, nil)
 		require.NoError(t, err)
 		require.Empty(t, second)
+	})
+}
+
+// TestRepository_VideoUpdateTimedOut_FiltersByIsUrgent проверяет фильтр по полосе обработки
+// (эпик Э5, исправление Д-1): при непустом isUrgent затрагиваются только просроченные видео
+// указанной полосы, видео другой полосы с той же просроченной меткой не трогаются.
+func TestRepository_VideoUpdateTimedOut_FiltersByIsUrgent(t *testing.T) {
+	t.Parallel()
+
+	testutil.WithDB(t, []string{"../../migrations"}, func(bobDB *bob.DB) {
+		provider := repository.NewExecutorProvider(bobDB)
+		r := repository.NewRepository(provider)
+		f := testutil.Faker
+
+		archival := newTestVideo(t, r, f, domain.VideoStatusQueued)
+		urgent := newTestVideoWithUrgency(t, r, f, domain.VideoStatusQueued, true)
+
+		threshold := time.Now().Add(-time.Hour)
+		backdateVideoTimestamp(t, bobDB, archival.ID, threshold.Add(-time.Minute))
+		backdateVideoTimestamp(t, bobDB, urgent.ID, threshold.Add(-time.Minute))
+
+		failure := domain.VideoFailure{
+			Class:  domain.VideoFailureClassTimeout,
+			Reason: "конвейер срочной полосы не продвигается уже 15m0s",
+		}
+		urgentFilter := true
+		ids, err := r.Video.UpdateTimedOut(t.Context(), domain.VideoStatusQueued, threshold, failure, &urgentFilter)
+
+		require.NoError(t, err)
+		require.Equal(t, []uuid.UUID{urgent.ID}, ids)
+
+		stillQueued, err := r.Video.Select(t.Context(), archival.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.VideoStatusQueued, stillQueued.Status)
+
+		failed, err := r.Video.Select(t.Context(), urgent.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.VideoStatusFailed, failed.Status)
 	})
 }
 

@@ -60,6 +60,10 @@ type VideoService struct {
 	// В проде — time.Sleep, в тестах подменяется опцией WithDeleteRetrySleep, чтобы не ждать
 	// реальные интервалы backoff'а.
 	sleep func(time.Duration)
+	// pipelineProgress — индикатор живости конвейера обработки видео по полосам (эпик Э5,
+	// исправление Д-1): используется watchdog'ом (FailTimedOut) и обработчиком ProcessingStarted
+	// (ApplyProcessingStarted), задаётся опцией WithPipelineProgress.
+	pipelineProgress repository.PipelineProgress
 }
 
 // VideoServiceOption настраивает VideoService сверх обязательных зависимостей конструктора.
@@ -70,6 +74,14 @@ type VideoServiceOption func(*VideoService)
 func WithDeleteRetrySleep(sleep func(time.Duration)) VideoServiceOption {
 	return func(s *VideoService) {
 		s.sleep = sleep
+	}
+}
+
+// WithPipelineProgress задаёт репозиторий индикатора живости конвейера по полосам (эпик Э5,
+// исправление Д-1) — обязателен в проде для FailTimedOut и ApplyProcessingStarted.
+func WithPipelineProgress(repo repository.PipelineProgress) VideoServiceOption {
+	return func(s *VideoService) {
+		s.pipelineProgress = repo
 	}
 }
 
@@ -645,20 +657,24 @@ func validProcessingResultKind(kind string) (domain.VideoAssetKind, bool) {
 // воркера (§7.2 эпика). Системный вызов без проверки прав. Переход выполняется условным
 // UPDATE (queued → compressing, только при совпадении номера попытки); если строка не
 // обновилась — переход недопустим (устаревшая попытка, повторный ProcessingStarted, гонка с
-// watchdog'ом) и молча игнорируется с логом.
+// watchdog'ом) и молча игнорируется с логом. Если переход применился — в той же транзакции
+// обновляется индикатор живости полосы обработки видео (эпик Э5, исправление Д-1): watchdog
+// видит полосу живой, пока хотя бы одно видео этой полосы реально берётся в обработку, вне
+// зависимости от длины очереди перед ним.
 func (s *VideoService) ApplyProcessingStarted(
 	ctx context.Context,
 	evt events.Envelope,
 	_ events.ProcessingStarted,
 ) error {
 	attempt := evt.Attempt
+	now := time.Now()
 
 	updated, err := s.repo.UpdateStatusIf(
 		ctx,
 		evt.VideoID,
 		[]domain.VideoStatus{domain.VideoStatusQueued},
 		domain.VideoStatusCompressing,
-		domain.VideoPatch{ExpectedAttempt: &attempt},
+		domain.VideoPatch{ExpectedAttempt: &attempt, CompressingStartedAt: &now},
 	)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -670,6 +686,18 @@ func (s *VideoService) ApplyProcessingStarted(
 			zap.String("video_id", evt.VideoID.String()),
 			zap.Int("attempt", evt.Attempt),
 		)
+		return nil
+	}
+
+	video, err := s.repo.Select(ctx, evt.VideoID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	if err = s.pipelineProgress.UpdateLastDequeuedAt(ctx, video.IsUrgent, now); err != nil {
+		zap.L().Error(err.Error())
+		return err
 	}
 
 	return nil
@@ -1302,12 +1330,58 @@ func (s *VideoService) deleteObjectsWithRetry(ctx context.Context, prefix string
 	)
 }
 
+// videoLaneName возвращает человекочитаемое название полосы обработки для сообщений об ошибке.
+func videoLaneName(isUrgent bool) string {
+	if isUrgent {
+		return "срочной"
+	}
+	return "архивной"
+}
+
+// failQueuedStalled переводит в failed(timeout) зависшие в queued видео полосы isUrgent, если
+// индикатор её прогресса (§1 дизайна эпика Э5, исправление Д-1) не обновлялся дольше
+// QueuedStallTimeout — то есть ни одно видео этой полосы не было реально взято в обработку за
+// этот срок. Если полоса продвигается — второй проход для неё не выполняется вовсе, поэтому
+// сколь угодно длинная, но честно продвигающаяся очередь ни одного видео не роняет.
+func (s *VideoService) failQueuedStalled(ctx context.Context, now time.Time, isUrgent bool) ([]uuid.UUID, error) {
+	progress, err := s.pipelineProgress.Select(ctx, isUrgent)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return nil, err
+	}
+
+	stallDeadline := now.Add(-s.cfg.Video.QueuedStallTimeout)
+	if progress.LastDequeuedAt.After(stallDeadline) {
+		return nil, nil
+	}
+
+	return s.repo.UpdateTimedOut(
+		ctx,
+		domain.VideoStatusQueued,
+		stallDeadline,
+		domain.VideoFailure{
+			Class: domain.VideoFailureClassTimeout,
+			Reason: fmt.Sprintf(
+				"конвейер %s полосы не продвигается уже %s", videoLaneName(isUrgent), s.cfg.Video.QueuedStallTimeout,
+			),
+		},
+		&isUrgent,
+	)
+}
+
 // FailTimedOut переводит в failed(timeout) видео, зависшие в uploading/queued/compressing
-// дольше сконфигурированных таймаутов (§8 дизайна эпика, Э1-Т16). Вызывается watchdog'ом на
-// каждом тике. Каждый переход — один атомарный условный UPDATE (repository.Video.UpdateTimedOut),
-// поэтому метод безопасен при нескольких одновременно работающих инстансах API: строку,
-// которую уже перевёл другой инстанс, повторный UPDATE не затронет (WHERE status = <исходный
-// статус> перестаёт совпадать) — гонки не возникает.
+// дольше сконфигурированных таймаутов (§8 дизайна эпика Э1, §1 дизайна эпика Э5). Вызывается
+// watchdog'ом на каждом тике. Каждый переход — один атомарный условный UPDATE
+// (repository.Video.UpdateTimedOut), поэтому метод безопасен при нескольких одновременно
+// работающих инстансах API: строку, которую уже перевёл другой инстанс, повторный UPDATE не
+// затронет (WHERE status = <исходный статус> перестаёт совпадать) — гонки не возникает.
+//
+// Статус queued различает два порога (эпик Э5, исправление Д-1): безусловный
+// QueuedMaxTimeout — потолок, не зависящий от активности полосы (Н4), и условный
+// QueuedStallTimeout — срабатывает точечно для той полосы (архивной/срочной), чей индикатор
+// прогресса (app.pipeline_progress) не продвигался дольше порога. Так длинная, но честно
+// продвигающаяся очередь не роняется, а действительно остановившийся конвейер (например, все
+// воркеры полосы упали) по-прежнему ловится без сколь угодно долгого ожидания.
 func (s *VideoService) FailTimedOut(ctx context.Context, now time.Time) (domain.TimedOutReport, error) {
 	uploading, err := s.repo.UpdateTimedOut(
 		ctx,
@@ -1317,6 +1391,7 @@ func (s *VideoService) FailTimedOut(ctx context.Context, now time.Time) (domain.
 			Class:  domain.VideoFailureClassTimeout,
 			Reason: fmt.Sprintf("загрузка не завершена за %s", s.cfg.Video.UploadTimeout),
 		},
+		nil,
 	)
 	if err != nil {
 		zap.L().Error(err.Error())
@@ -1343,15 +1418,24 @@ func (s *VideoService) FailTimedOut(ctx context.Context, now time.Time) (domain.
 	queued, err := s.repo.UpdateTimedOut(
 		ctx,
 		domain.VideoStatusQueued,
-		now.Add(-s.cfg.Video.QueuedTimeout),
+		now.Add(-s.cfg.Video.QueuedMaxTimeout),
 		domain.VideoFailure{
 			Class:  domain.VideoFailureClassTimeout,
-			Reason: fmt.Sprintf("не взято в обработку за %s", s.cfg.Video.QueuedTimeout),
+			Reason: fmt.Sprintf("не взято в обработку за %s", s.cfg.Video.QueuedMaxTimeout),
 		},
+		nil,
 	)
 	if err != nil {
 		zap.L().Error(err.Error())
 		return domain.TimedOutReport{}, err
+	}
+
+	for _, isUrgent := range []bool{false, true} {
+		stalled, stallErr := s.failQueuedStalled(ctx, now, isUrgent)
+		if stallErr != nil {
+			return domain.TimedOutReport{}, stallErr
+		}
+		queued = append(queued, stalled...)
 	}
 
 	// compressing: поздний ProcessingCompleted для перешедшего в failed видео игнорируется и
@@ -1365,6 +1449,7 @@ func (s *VideoService) FailTimedOut(ctx context.Context, now time.Time) (domain.
 			Class:  domain.VideoFailureClassTimeout,
 			Reason: fmt.Sprintf("обработка не завершена за %s", s.cfg.Video.ProcessingTimeout),
 		},
+		nil,
 	)
 	if err != nil {
 		zap.L().Error(err.Error())

@@ -26,6 +26,7 @@ import (
 //go:generate minimock -i AssignmentParticipant -o ./repository_mocks/assignment_participant_mock.go
 //go:generate minimock -i AssignmentEvent -o ./repository_mocks/assignment_event_mock.go
 //go:generate minimock -i Chapter -o ./repository_mocks/chapter_mock.go
+//go:generate minimock -i PipelineProgress -o ./repository_mocks/pipeline_progress_mock.go
 
 // UserStatus определяет фильтр по активности пользователей при выборке.
 type UserStatus string
@@ -171,12 +172,14 @@ type Video interface {
 	// UpdateTimedOut переводит в failed(timeout) все видео заданного статуса, чья контрольная
 	// временная метка (created_at для uploading, status_changed_at для остальных) старше
 	// before — один атомарный условный UPDATE, возвращает id обновлённых строк (§8 дизайна
-	// эпика).
+	// эпика). isUrgent — необязательный фильтр по полосе обработки (nil — без фильтра, эпик Э5,
+	// исправление Д-1).
 	UpdateTimedOut(
 		ctx context.Context,
 		status domain.VideoStatus,
 		before time.Time,
 		failure domain.VideoFailure,
+		isUrgent *bool,
 	) ([]uuid.UUID, error)
 	// SelectQueuePositions одним SQL-запросом с оконными функциями вычисляет место каждого
 	// ожидающего обработки видео в его полосе (архивной или срочной, эпик Э5, §3 дизайна,
@@ -501,6 +504,18 @@ type Chapter interface {
 	CountByVideoID(ctx context.Context, videoID uuid.UUID) (int, error)
 }
 
+// PipelineProgress — репозиторий индикатора живости конвейера обработки видео по полосам
+// (архивной и срочной, эпик Э5, исправление Д-1): момент последнего успешного ProcessingStarted
+// в каждой полосе, обновляемый в той же транзакции, что переводит видео queued → compressing.
+type PipelineProgress interface {
+	// Select выбирает индикатор прогресса указанной полосы. Строка заведена миграцией (ровно
+	// две — по одной на полосу), поэтому её отсутствие — ErrNotFound, штатным не считается.
+	Select(ctx context.Context, isUrgent bool) (domain.PipelineProgress, error)
+	// UpdateLastDequeuedAt обновляет момент последнего успешного взятия видео в обработку
+	// указанной полосой — один атомарный UPDATE.
+	UpdateLastDequeuedAt(ctx context.Context, isUrgent bool, now time.Time) error
+}
+
 // Outbox — репозиторий очереди исходящих событий Kafka (transactional outbox, §7.1 эпика).
 type Outbox interface {
 	// Insert кладёт событие в очередь публикации внутри текущей транзакции.
@@ -530,6 +545,7 @@ type Repository struct {
 	AssignmentParticipant
 	AssignmentEvent
 	Chapter
+	PipelineProgress
 }
 
 func NewRepository(provider *ExecutorProvider) *Repository {
@@ -551,5 +567,6 @@ func NewRepository(provider *ExecutorProvider) *Repository {
 		AssignmentParticipant: NewAssignmentParticipantRepository(provider),
 		AssignmentEvent:       NewAssignmentEventRepository(provider),
 		Chapter:               NewChapterRepository(provider),
+		PipelineProgress:      NewPipelineProgressRepository(provider),
 	}
 }

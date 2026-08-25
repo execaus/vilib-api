@@ -49,7 +49,8 @@ const (
 	defaultVideoMaxUploadSizeBytes       int64 = 4294967296
 	defaultVideoMaxProcessingAttempts          = 3
 	defaultVideoUploadTimeout                  = 2 * time.Hour
-	defaultVideoQueuedTimeout                  = time.Hour
+	defaultVideoQueuedStallTimeout             = 15 * time.Minute
+	defaultVideoQueuedMaxTimeout               = 12 * time.Hour
 	defaultVideoProcessingTimeout              = 3 * time.Hour
 	defaultVideoWatchdogInterval               = time.Minute
 	defaultVideoHLSURLTTL                      = time.Hour
@@ -113,7 +114,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("video.profiles", defaultVideoProfiles())
 	v.SetDefault("video.max_processing_attempts", defaultVideoMaxProcessingAttempts)
 	v.SetDefault("video.upload_timeout", defaultVideoUploadTimeout)
-	v.SetDefault("video.queued_timeout", defaultVideoQueuedTimeout)
+	v.SetDefault("video.queued_stall_timeout", defaultVideoQueuedStallTimeout)
+	v.SetDefault("video.queued_max_timeout", defaultVideoQueuedMaxTimeout)
 	v.SetDefault("video.processing_timeout", defaultVideoProcessingTimeout)
 	v.SetDefault("video.watchdog_interval", defaultVideoWatchdogInterval)
 	v.SetDefault("video.hls_url_ttl", defaultVideoHLSURLTTL)
