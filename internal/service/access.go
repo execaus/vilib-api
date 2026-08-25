@@ -145,6 +145,17 @@ func (s *AccessService) CanWatchVideo(ctx context.Context, accountID, userID, gr
 	return s.hasGroupPermission(ctx, groupID, userID, domain.GroupPermissionManageVideo)
 }
 
+// CanManageVideo проверяет право инициатора управлять видео группы groupID — переименование,
+// удаление, разметка глав (§2 дизайна эпика Э4): аккаунтное или групповое ManageVideo (в т.ч.
+// Owner). Вынесенная логика VideoService.canManageVideo — тот же приём, каким эпик Э3 вынес
+// CanWatchVideo.
+func (s *AccessService) CanManageVideo(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) error {
+	return s.IsCheckGroupAction(
+		ctx, accountID, initiatorID, groupID,
+		domain.AccountPermissionManageVideo, domain.GroupPermissionManageVideo,
+	)
+}
+
 // hasGroupPermission проверяет только групповое право пользователя (Owner либо конкретное
 // действие в маске его роли в группе) без учёта права уровня аккаунта — вспомогательный метод
 // CanWatchVideo. Отсутствие членства или ошибка чтения роли — false, а не паника/500.

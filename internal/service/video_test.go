@@ -1560,32 +1560,26 @@ func TestService_Video_Get(t *testing.T) {
 
 // videoGetAllMocks собирает моки, используемые GetAll.
 type videoGetAllMocks struct {
-	Access      *service_mocks.AccessMock
-	GroupMember *service_mocks.GroupMemberMock
-	GroupRole   *service_mocks.GroupRoleMock
-	Video       *repository_mocks.VideoMock
-	VideoAsset  *service_mocks.VideoAssetMock
-	User        *service_mocks.UserMock
+	Access     *service_mocks.AccessMock
+	Video      *repository_mocks.VideoMock
+	VideoAsset *service_mocks.VideoAssetMock
+	User       *service_mocks.UserMock
 }
 
 func newVideoGetAllMocks(mc *minimock.Controller) videoGetAllMocks {
 	return videoGetAllMocks{
-		Access:      service_mocks.NewAccessMock(mc),
-		GroupMember: service_mocks.NewGroupMemberMock(mc),
-		GroupRole:   service_mocks.NewGroupRoleMock(mc),
-		Video:       repository_mocks.NewVideoMock(mc),
-		VideoAsset:  service_mocks.NewVideoAssetMock(mc),
-		User:        service_mocks.NewUserMock(mc),
+		Access:     service_mocks.NewAccessMock(mc),
+		Video:      repository_mocks.NewVideoMock(mc),
+		VideoAsset: service_mocks.NewVideoAssetMock(mc),
+		User:       service_mocks.NewUserMock(mc),
 	}
 }
 
 func newVideoGetAllService(m videoGetAllMocks) *service.VideoService {
 	svc := &service.Service{
-		Access:      m.Access,
-		GroupMember: m.GroupMember,
-		GroupRole:   m.GroupRole,
-		VideoAsset:  m.VideoAsset,
-		User:        m.User,
+		Access:     m.Access,
+		VideoAsset: m.VideoAsset,
+		User:       m.User,
 	}
 	return service.NewVideoService(nil, m.Video, svc, service.VideoServiceConfig{})
 }
@@ -1654,9 +1648,9 @@ func TestService_Video_GetAll(t *testing.T) {
 		m := newVideoGetAllMocks(mc)
 
 		grantWatch(m)
-		m.Access.IsCheckAccountActionMock.
-			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
-			Then(nil)
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
+			Return(nil)
 
 		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA, videoB}, nil)
 		m.VideoAsset.SelectByVideoIDsMock.
@@ -1682,17 +1676,9 @@ func TestService_Video_GetAll(t *testing.T) {
 		m := newVideoGetAllMocks(mc)
 
 		grantWatch(m)
-		m.Access.IsCheckAccountActionMock.
-			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
-			Then(service.ErrForbidden)
-
-		roleID := uuid.New()
-		m.GroupMember.GetByUserIDAndGroupIDMock.
-			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
-			Return(domain.GroupMember{RoleID: roleID}, nil)
-		m.GroupRole.GetByIDMock.
-			When(minimock.AnyContext, roleID).
-			Then([]domain.GroupRole{{PermissionMask: domain.PermissionMask(1 << domain.GroupPermissionManageVideo)}}, nil)
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
+			Return(nil)
 
 		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA, videoB}, nil)
 		m.VideoAsset.SelectByVideoIDsMock.
@@ -1718,12 +1704,9 @@ func TestService_Video_GetAll(t *testing.T) {
 		m := newVideoGetAllMocks(mc)
 
 		grantWatch(m)
-		m.Access.IsCheckAccountActionMock.
-			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
-			Then(service.ErrForbidden)
-		m.GroupMember.GetByUserIDAndGroupIDMock.
-			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
-			Return(domain.GroupMember{}, service.ErrForbidden)
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
+			Return(service.ErrForbidden)
 
 		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA, videoB}, nil)
 		m.VideoAsset.SelectByVideoIDsMock.
@@ -1755,9 +1738,9 @@ func TestService_Video_GetAll(t *testing.T) {
 		m := newVideoGetAllMocks(mc)
 
 		grantWatch(m)
-		m.Access.IsCheckAccountActionMock.
-			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
-			Then(nil)
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
+			Return(nil)
 
 		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA, videoB}, nil)
 		m.VideoAsset.SelectByVideoIDsMock.
@@ -1786,17 +1769,9 @@ func TestService_Video_GetAll(t *testing.T) {
 		m := newVideoGetAllMocks(mc)
 
 		grantWatch(m)
-		m.Access.IsCheckAccountActionMock.
-			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
-			Then(service.ErrForbidden)
-
-		roleID := uuid.New()
-		m.GroupMember.GetByUserIDAndGroupIDMock.
-			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
-			Return(domain.GroupMember{RoleID: roleID}, nil)
-		m.GroupRole.GetByIDMock.
-			Expect(minimock.AnyContext, roleID).
-			Return([]domain.GroupRole{{PermissionMask: domain.PermissionMask(1 << domain.GroupPermissionManageVideo)}}, nil)
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
+			Return(nil)
 
 		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA}, nil)
 		m.VideoAsset.SelectByVideoIDsMock.
@@ -1825,9 +1800,9 @@ func TestService_Video_GetAll(t *testing.T) {
 		m := newVideoGetAllMocks(mc)
 
 		grantWatch(m)
-		m.Access.IsCheckAccountActionMock.
-			When(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
-			Then(nil)
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
+			Return(nil)
 
 		m.Video.SelectByGroupIDMock.Expect(minimock.AnyContext, testGroupID).Return([]domain.Video{videoA}, nil)
 		wantErr := errors.New("assets unavailable")
@@ -2097,31 +2072,28 @@ func TestService_Video_GetHLSPlaylist(t *testing.T) {
 
 // videoRenameMocks собирает моки, используемые Rename.
 type videoRenameMocks struct {
-	Access      *service_mocks.AccessMock
-	GroupMember *service_mocks.GroupMemberMock
-	S3          *service_mocks.S3Mock
-	Video       *repository_mocks.VideoMock
-	VideoAsset  *service_mocks.VideoAssetMock
-	User        *service_mocks.UserMock
+	Access     *service_mocks.AccessMock
+	S3         *service_mocks.S3Mock
+	Video      *repository_mocks.VideoMock
+	VideoAsset *service_mocks.VideoAssetMock
+	User       *service_mocks.UserMock
 }
 
 func newVideoRenameMocks(mc *minimock.Controller) videoRenameMocks {
 	return videoRenameMocks{
-		Access:      service_mocks.NewAccessMock(mc),
-		GroupMember: service_mocks.NewGroupMemberMock(mc),
-		S3:          service_mocks.NewS3Mock(mc),
-		Video:       repository_mocks.NewVideoMock(mc),
-		VideoAsset:  service_mocks.NewVideoAssetMock(mc),
-		User:        service_mocks.NewUserMock(mc),
+		Access:     service_mocks.NewAccessMock(mc),
+		S3:         service_mocks.NewS3Mock(mc),
+		Video:      repository_mocks.NewVideoMock(mc),
+		VideoAsset: service_mocks.NewVideoAssetMock(mc),
+		User:       service_mocks.NewUserMock(mc),
 	}
 }
 
 func newVideoRenameService(m videoRenameMocks) *service.VideoService {
 	svc := &service.Service{
-		Access:      m.Access,
-		GroupMember: m.GroupMember,
-		VideoAsset:  m.VideoAsset,
-		User:        m.User,
+		Access:     m.Access,
+		VideoAsset: m.VideoAsset,
+		User:       m.User,
 	}
 	return service.NewVideoService(m.S3, m.Video, svc, service.VideoServiceConfig{})
 }
@@ -2146,12 +2118,9 @@ func TestService_Video_Rename(t *testing.T) {
 
 		mc := minimock.NewController(t)
 		m := newVideoRenameMocks(mc)
-		m.Access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
 			Return(service.ErrForbidden)
-		m.GroupMember.GetByUserIDAndGroupIDMock.
-			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
-			Return(domain.GroupMember{}, errors.New("not a member"))
 
 		videoSvc := newVideoRenameService(m)
 
@@ -2165,8 +2134,8 @@ func TestService_Video_Rename(t *testing.T) {
 
 		mc := minimock.NewController(t)
 		m := newVideoRenameMocks(mc)
-		m.Access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
 			Return(nil)
 		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(nil, repository.ErrNotFound)
 
@@ -2182,8 +2151,8 @@ func TestService_Video_Rename(t *testing.T) {
 
 		mc := minimock.NewController(t)
 		m := newVideoRenameMocks(mc)
-		m.Access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
 			Return(nil)
 		m.Video.SelectMock.
 			Expect(minimock.AnyContext, testVideoID).
@@ -2202,8 +2171,8 @@ func TestService_Video_Rename(t *testing.T) {
 
 		mc := minimock.NewController(t)
 		m := newVideoRenameMocks(mc)
-		m.Access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
 			Return(nil)
 		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
 		m.Video.UpdateNameMock.Expect(minimock.AnyContext, testVideoID, testName).Return(renamedVideo, nil)
@@ -2226,20 +2195,18 @@ func TestService_Video_Rename(t *testing.T) {
 
 // videoDeleteMocks собирает моки, используемые Delete.
 type videoDeleteMocks struct {
-	Access      *service_mocks.AccessMock
-	GroupMember *service_mocks.GroupMemberMock
-	S3          *service_mocks.S3Mock
-	Video       *repository_mocks.VideoMock
-	Assignment  *service_mocks.AssignmentMock
+	Access     *service_mocks.AccessMock
+	S3         *service_mocks.S3Mock
+	Video      *repository_mocks.VideoMock
+	Assignment *service_mocks.AssignmentMock
 }
 
 func newVideoDeleteMocks(mc *minimock.Controller) videoDeleteMocks {
 	return videoDeleteMocks{
-		Access:      service_mocks.NewAccessMock(mc),
-		GroupMember: service_mocks.NewGroupMemberMock(mc),
-		S3:          service_mocks.NewS3Mock(mc),
-		Video:       repository_mocks.NewVideoMock(mc),
-		Assignment:  service_mocks.NewAssignmentMock(mc),
+		Access:     service_mocks.NewAccessMock(mc),
+		S3:         service_mocks.NewS3Mock(mc),
+		Video:      repository_mocks.NewVideoMock(mc),
+		Assignment: service_mocks.NewAssignmentMock(mc),
 	}
 }
 
@@ -2248,7 +2215,7 @@ func newVideoDeleteService(
 	cfg service.VideoServiceConfig,
 	opts ...service.VideoServiceOption,
 ) *service.VideoService {
-	svc := &service.Service{Access: m.Access, GroupMember: m.GroupMember, Assignment: m.Assignment}
+	svc := &service.Service{Access: m.Access, Assignment: m.Assignment}
 	return service.NewVideoService(m.S3, m.Video, svc, cfg, opts...)
 }
 
@@ -2270,12 +2237,9 @@ func TestService_Video_Delete(t *testing.T) {
 
 		mc := minimock.NewController(t)
 		m := newVideoDeleteMocks(mc)
-		m.Access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
 			Return(service.ErrForbidden)
-		m.GroupMember.GetByUserIDAndGroupIDMock.
-			Expect(minimock.AnyContext, testInitiatorID, testGroupID).
-			Return(domain.GroupMember{}, errors.New("not a member"))
 
 		videoSvc := newVideoDeleteService(m, service.VideoServiceConfig{Bucket: testBucket})
 
@@ -2289,8 +2253,8 @@ func TestService_Video_Delete(t *testing.T) {
 
 		mc := minimock.NewController(t)
 		m := newVideoDeleteMocks(mc)
-		m.Access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
 			Return(nil)
 		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(nil, repository.ErrNotFound)
 
@@ -2306,8 +2270,8 @@ func TestService_Video_Delete(t *testing.T) {
 
 		mc := minimock.NewController(t)
 		m := newVideoDeleteMocks(mc)
-		m.Access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
 			Return(nil)
 		m.Video.SelectMock.
 			Expect(minimock.AnyContext, testVideoID).
@@ -2326,8 +2290,8 @@ func TestService_Video_Delete(t *testing.T) {
 
 		mc := minimock.NewController(t)
 		m := newVideoDeleteMocks(mc)
-		m.Access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
 			Return(nil)
 		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
 		repoErr := errors.New("db unavailable")
@@ -2346,8 +2310,8 @@ func TestService_Video_Delete(t *testing.T) {
 
 		mc := minimock.NewController(t)
 		m := newVideoDeleteMocks(mc)
-		m.Access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
 			Return(nil)
 		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
 		m.Assignment.OnVideoDeletedMock.Expect(minimock.AnyContext, testVideoID).Return(nil)
@@ -2386,8 +2350,8 @@ func TestService_Video_Delete(t *testing.T) {
 
 		mc := minimock.NewController(t)
 		m := newVideoDeleteMocks(mc)
-		m.Access.IsCheckAccountActionMock.
-			Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageVideo).
+		m.Access.CanManageVideoMock.
+			Expect(minimock.AnyContext, testAccountID, testGroupID, testInitiatorID).
 			Return(nil)
 		m.Video.SelectMock.Expect(minimock.AnyContext, testVideoID).Return(ownVideo, nil)
 		m.Assignment.OnVideoDeletedMock.Expect(minimock.AnyContext, testVideoID).Return(nil)

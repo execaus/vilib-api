@@ -1122,18 +1122,10 @@ func (s *VideoService) canWatch(ctx context.Context, accountID, groupID, initiat
 // canManageVideo определяет, доступно ли инициатору право ManageVideo — аккаунтное или
 // групповое (OR-логика) — без возврата ошибки. Используется там, где отсутствие права не
 // запрещает действие целиком, а лишь скрывает часть ответа (Э1-Т17: причина сбоя видна только
-// с ManageVideo).
+// с ManageVideo). Логика вынесена в Access.CanManageVideo (§2 дизайна эпика Э4) — тот же
+// приём, каким эпик Э3 вынес CanWatchVideo.
 func (s *VideoService) canManageVideo(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) bool {
-	if err := s.srv.Access.IsCheckAccountAction(
-		ctx,
-		accountID,
-		initiatorID,
-		domain.AccountPermissionManageVideo,
-	); err == nil {
-		return true
-	}
-
-	return s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo) == nil
+	return s.srv.Access.CanManageVideo(ctx, accountID, groupID, initiatorID) == nil
 }
 
 // Rename переименовывает видео и возвращает карточку того же вида, что и элемент списка
@@ -1144,16 +1136,9 @@ func (s *VideoService) Rename(
 	accountID, groupID, initiatorID, videoID uuid.UUID,
 	name string,
 ) (domain.VideoListItem, error) {
-	// OR-логика: аккаунтное право ИЛИ групповое право
-	if err := s.srv.Access.IsCheckAccountAction(
-		ctx,
-		accountID,
-		initiatorID,
-		domain.AccountPermissionManageVideo,
-	); err != nil {
-		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo); err != nil {
-			return domain.VideoListItem{}, ErrForbidden
-		}
+	// Право ManageVideo — аккаунтное или групповое (Access.CanManageVideo, §2 дизайна эпика Э4).
+	if err := s.srv.Access.CanManageVideo(ctx, accountID, groupID, initiatorID); err != nil {
+		return domain.VideoListItem{}, err
 	}
 
 	// Проверка, что видео принадлежит указанной группе (Б-1 ревью эпика: без неё право
@@ -1196,16 +1181,9 @@ func (s *VideoService) Delete(
 	ctx context.Context,
 	accountID, groupID, initiatorID, videoID uuid.UUID,
 ) error {
-	// OR-логика: аккаунтное право ИЛИ групповое право
-	if err := s.srv.Access.IsCheckAccountAction(
-		ctx,
-		accountID,
-		initiatorID,
-		domain.AccountPermissionManageVideo,
-	); err != nil {
-		if err := s.isCheckGroupAction(ctx, groupID, initiatorID, domain.GroupPermissionManageVideo); err != nil {
-			return ErrForbidden
-		}
+	// Право ManageVideo — аккаунтное или групповое (Access.CanManageVideo, §2 дизайна эпика Э4).
+	if err := s.srv.Access.CanManageVideo(ctx, accountID, groupID, initiatorID); err != nil {
+		return err
 	}
 
 	// Проверка, что видео принадлежит указанной группе (Б-1 ревью эпика: без неё право

@@ -677,6 +677,202 @@ func TestService_Access_CanWatchVideo(t *testing.T) {
 	}
 }
 
+// TestService_Access_CanManageVideo проверяет OR-логику допуска к управлению видео группы
+// (§2 дизайна эпика Э4 — вынесенная логика бывшего VideoService.canManageVideo): аккаунтное
+// или групповое ManageVideo (в т.ч. Owner), иначе — отказ.
+func TestService_Access_CanManageVideo(t *testing.T) {
+	t.Parallel()
+
+	testAccountID := uuid.New()
+	testInitiatorID := uuid.New()
+	testGroupID := uuid.New()
+	testRoleID := uuid.New()
+	testGroupRoleID := uuid.New()
+
+	tests := []struct {
+		name       string
+		setupMocks func(
+			*service_mocks.UserGroupMock,
+			*service_mocks.AccountMock,
+			*service_mocks.UserMock,
+			*service_mocks.AccountRoleMock,
+			*service_mocks.GroupMemberMock,
+			*service_mocks.GroupRoleMock,
+		)
+		wantErr error
+	}{
+		{
+			name: "account permission manage video grants access",
+			setupMocks: func(
+				userGroup *service_mocks.UserGroupMock,
+				acc *service_mocks.AccountMock,
+				user *service_mocks.UserMock,
+				role *service_mocks.AccountRoleMock,
+				_ *service_mocks.GroupMemberMock,
+				_ *service_mocks.GroupRoleMock,
+			) {
+				userGroup.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID}}, nil)
+				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).Return(nil)
+				user.GetByIDMock.Expect(minimock.AnyContext, testInitiatorID).
+					Return([]domain.User{{ID: testInitiatorID, RoleID: testRoleID}}, nil)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{
+						{PermissionMask: domain.SetBits(0, domain.AccountPermissionManageVideo)},
+					}, nil)
+			},
+			wantErr: nil,
+		},
+		{
+			name: "account owner grants access without explicit manage video bit",
+			setupMocks: func(
+				userGroup *service_mocks.UserGroupMock,
+				acc *service_mocks.AccountMock,
+				user *service_mocks.UserMock,
+				role *service_mocks.AccountRoleMock,
+				_ *service_mocks.GroupMemberMock,
+				_ *service_mocks.GroupRoleMock,
+			) {
+				userGroup.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID}}, nil)
+				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).Return(nil)
+				user.GetByIDMock.Expect(minimock.AnyContext, testInitiatorID).
+					Return([]domain.User{{ID: testInitiatorID, RoleID: testRoleID}}, nil)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{
+						{PermissionMask: domain.SetBits(0, domain.AccountPermissionOwner)},
+					}, nil)
+			},
+			wantErr: nil,
+		},
+		{
+			name: "group permission manage video grants access",
+			setupMocks: func(
+				userGroup *service_mocks.UserGroupMock,
+				acc *service_mocks.AccountMock,
+				user *service_mocks.UserMock,
+				role *service_mocks.AccountRoleMock,
+				groupMember *service_mocks.GroupMemberMock,
+				groupRole *service_mocks.GroupRoleMock,
+			) {
+				userGroup.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID}}, nil)
+				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).Return(nil)
+				user.GetByIDMock.Expect(minimock.AnyContext, testInitiatorID).
+					Return([]domain.User{{ID: testInitiatorID, RoleID: testRoleID}}, nil)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{PermissionMask: domain.PermissionMask(0)}}, nil)
+				groupMember.GetByUserIDAndGroupIDMock.
+					Expect(minimock.AnyContext, testInitiatorID, testGroupID).
+					Return(domain.GroupMember{RoleID: testGroupRoleID}, nil)
+				groupRole.GetByIDMock.Expect(minimock.AnyContext, testGroupRoleID).
+					Return([]domain.GroupRole{{
+						ID:             testGroupRoleID,
+						PermissionMask: domain.SetBits(0, domain.GroupPermissionManageVideo),
+					}}, nil)
+			},
+			wantErr: nil,
+		},
+		{
+			name: "group owner grants access without explicit manage video bit",
+			setupMocks: func(
+				userGroup *service_mocks.UserGroupMock,
+				acc *service_mocks.AccountMock,
+				user *service_mocks.UserMock,
+				role *service_mocks.AccountRoleMock,
+				groupMember *service_mocks.GroupMemberMock,
+				groupRole *service_mocks.GroupRoleMock,
+			) {
+				userGroup.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID}}, nil)
+				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).Return(nil)
+				user.GetByIDMock.Expect(minimock.AnyContext, testInitiatorID).
+					Return([]domain.User{{ID: testInitiatorID, RoleID: testRoleID}}, nil)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{PermissionMask: domain.PermissionMask(0)}}, nil)
+				groupMember.GetByUserIDAndGroupIDMock.
+					Expect(minimock.AnyContext, testInitiatorID, testGroupID).
+					Return(domain.GroupMember{RoleID: testGroupRoleID}, nil)
+				groupRole.GetByIDMock.Expect(minimock.AnyContext, testGroupRoleID).
+					Return([]domain.GroupRole{{
+						ID:             testGroupRoleID,
+						PermissionMask: domain.SetBits(0, domain.GroupPermissionOwner),
+					}}, nil)
+			},
+			wantErr: nil,
+		},
+		{
+			name: "no permission and no membership is forbidden",
+			setupMocks: func(
+				userGroup *service_mocks.UserGroupMock,
+				acc *service_mocks.AccountMock,
+				user *service_mocks.UserMock,
+				role *service_mocks.AccountRoleMock,
+				groupMember *service_mocks.GroupMemberMock,
+				_ *service_mocks.GroupRoleMock,
+			) {
+				userGroup.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: testAccountID}}, nil)
+				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).Return(nil)
+				user.GetByIDMock.Expect(minimock.AnyContext, testInitiatorID).
+					Return([]domain.User{{ID: testInitiatorID, RoleID: testRoleID}}, nil)
+				role.GetByIDMock.Expect(minimock.AnyContext, testRoleID).
+					Return([]domain.AccountRole{{PermissionMask: domain.PermissionMask(0)}}, nil)
+				groupMember.GetByUserIDAndGroupIDMock.
+					Expect(minimock.AnyContext, testInitiatorID, testGroupID).
+					Return(domain.GroupMember{}, errors.New("not a member"))
+			},
+			wantErr: service.ErrForbidden,
+		},
+		{
+			name: "group from another account is not found",
+			setupMocks: func(
+				userGroup *service_mocks.UserGroupMock,
+				_ *service_mocks.AccountMock,
+				_ *service_mocks.UserMock,
+				_ *service_mocks.AccountRoleMock,
+				_ *service_mocks.GroupMemberMock,
+				_ *service_mocks.GroupRoleMock,
+			) {
+				userGroup.GetByIDMock.Expect(minimock.AnyContext, testGroupID).
+					Return([]domain.UserGroup{{ID: testGroupID, AccountID: uuid.New()}}, nil)
+			},
+			wantErr: service.ErrNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			testutil.TestService(
+				t,
+				func(mockServices *testutil.ServiceMock, _ *testutil.RepositoryMock) {
+					tt.setupMocks(
+						mockServices.UserGroup,
+						mockServices.Account,
+						mockServices.User,
+						mockServices.AccountRole,
+						mockServices.GroupMember,
+						mockServices.GroupRole,
+					)
+				},
+				func(s *service.Service, _ *repository.Repository) {
+					srv := service.NewAccessService(s)
+
+					err := srv.CanManageVideo(t.Context(), testAccountID, testGroupID, testInitiatorID)
+
+					if tt.wantErr == nil {
+						require.NoError(t, err)
+					} else {
+						require.ErrorIs(t, err, tt.wantErr)
+					}
+				},
+			)
+		})
+	}
+}
+
 // TestService_Access_ManagedAssignmentGroups проверяет область чтения отчётов по назначениям
 // (В-8 решение владельца): аккаунтное право ManageAssignments/Owner даёt all=true; иначе —
 // список групп, где у инициатора Owner/ManageAssignments в групповой роли.

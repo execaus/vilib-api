@@ -70,6 +70,7 @@ type userGroupVideoR struct {
 	VideoAssignments     AssignmentSlice    // assignments.fk_assignments_video_id
 	AuthorUser           *User              // user_group_videos.user_group_videos_author_fkey
 	VideoVideoAssets     VideoAssetSlice    // video_assets.video_assets_video_id_fkey
+	VideoVideoChapters   VideoChapterSlice  // video_chapters.fk_video_chapters_video_id
 	VideoWatchProgresses WatchProgressSlice // watch_progress.fk_watch_progress_video_id
 	VideoWatchSessions   WatchSessionSlice  // watch_sessions.fk_watch_sessions_video_id
 }
@@ -712,6 +713,30 @@ func (os UserGroupVideoSlice) VideoVideoAssets(mods ...bob.Mod[*dialect.SelectQu
 	)...)
 }
 
+// VideoVideoChapters starts a query for related objects on video_chapters
+func (o *UserGroupVideo) VideoVideoChapters(mods ...bob.Mod[*dialect.SelectQuery]) VideoChaptersQuery {
+	return VideoChapters.Query(append(mods,
+		sm.Where(VideoChapters.Columns.VideoID.EQ(psql.Arg(o.ID))),
+	)...)
+}
+
+func (os UserGroupVideoSlice) VideoVideoChapters(mods ...bob.Mod[*dialect.SelectQuery]) VideoChaptersQuery {
+	pkID := make(pgtypes.Array[uuid.UUID], 0, len(os))
+	for _, o := range os {
+		if o == nil {
+			continue
+		}
+		pkID = append(pkID, o.ID)
+	}
+	PKArgExpr := psql.Select(sm.Columns(
+		psql.F("unnest", psql.Cast(psql.Arg(pkID), "uuid[]")),
+	))
+
+	return VideoChapters.Query(append(mods,
+		sm.Where(psql.Group(VideoChapters.Columns.VideoID).OP("IN", PKArgExpr)),
+	)...)
+}
+
 // VideoWatchProgresses starts a query for related objects on watch_progress
 func (o *UserGroupVideo) VideoWatchProgresses(mods ...bob.Mod[*dialect.SelectQuery]) WatchProgressesQuery {
 	return WatchProgresses.Query(append(mods,
@@ -936,6 +961,74 @@ func (userGroupVideo0 *UserGroupVideo) AttachVideoVideoAssets(ctx context.Contex
 	}
 
 	userGroupVideo0.R.VideoVideoAssets = append(userGroupVideo0.R.VideoVideoAssets, videoAssets1...)
+
+	for _, rel := range related {
+		rel.R.VideoUserGroupVideo = userGroupVideo0
+	}
+
+	return nil
+}
+
+func insertUserGroupVideoVideoVideoChapters0(ctx context.Context, exec bob.Executor, videoChapters1 []*VideoChapterSetter, userGroupVideo0 *UserGroupVideo) (VideoChapterSlice, error) {
+	for i := range videoChapters1 {
+		videoChapters1[i].VideoID = omit.From(userGroupVideo0.ID)
+	}
+
+	ret, err := VideoChapters.Insert(bob.ToMods(videoChapters1...)).All(ctx, exec)
+	if err != nil {
+		return ret, fmt.Errorf("insertUserGroupVideoVideoVideoChapters0: %w", err)
+	}
+
+	return ret, nil
+}
+
+func attachUserGroupVideoVideoVideoChapters0(ctx context.Context, exec bob.Executor, count int, videoChapters1 VideoChapterSlice, userGroupVideo0 *UserGroupVideo) (VideoChapterSlice, error) {
+	setter := &VideoChapterSetter{
+		VideoID: omit.From(userGroupVideo0.ID),
+	}
+
+	err := videoChapters1.UpdateAll(ctx, exec, *setter)
+	if err != nil {
+		return nil, fmt.Errorf("attachUserGroupVideoVideoVideoChapters0: %w", err)
+	}
+
+	return videoChapters1, nil
+}
+
+func (userGroupVideo0 *UserGroupVideo) InsertVideoVideoChapters(ctx context.Context, exec bob.Executor, related ...*VideoChapterSetter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+
+	videoChapters1, err := insertUserGroupVideoVideoVideoChapters0(ctx, exec, related, userGroupVideo0)
+	if err != nil {
+		return err
+	}
+
+	userGroupVideo0.R.VideoVideoChapters = append(userGroupVideo0.R.VideoVideoChapters, videoChapters1...)
+
+	for _, rel := range videoChapters1 {
+		rel.R.VideoUserGroupVideo = userGroupVideo0
+	}
+	return nil
+}
+
+func (userGroupVideo0 *UserGroupVideo) AttachVideoVideoChapters(ctx context.Context, exec bob.Executor, related ...*VideoChapter) error {
+	if len(related) == 0 {
+		return nil
+	}
+
+	var err error
+	videoChapters1 := VideoChapterSlice(related)
+
+	_, err = attachUserGroupVideoVideoVideoChapters0(ctx, exec, len(related), videoChapters1, userGroupVideo0)
+	if err != nil {
+		return err
+	}
+
+	userGroupVideo0.R.VideoVideoChapters = append(userGroupVideo0.R.VideoVideoChapters, videoChapters1...)
 
 	for _, rel := range related {
 		rel.R.VideoUserGroupVideo = userGroupVideo0

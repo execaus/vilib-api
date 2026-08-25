@@ -27,6 +27,13 @@ type AccessMock struct {
 	beforeCanManageAssignmentsCounter uint64
 	CanManageAssignmentsMock          mAccessMockCanManageAssignments
 
+	funcCanManageVideo          func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (err error)
+	funcCanManageVideoOrigin    string
+	inspectFuncCanManageVideo   func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID)
+	afterCanManageVideoCounter  uint64
+	beforeCanManageVideoCounter uint64
+	CanManageVideoMock          mAccessMockCanManageVideo
+
 	funcCanWatchVideo          func(ctx context.Context, accountID uuid.UUID, userID uuid.UUID, groupID uuid.UUID) (b1 bool)
 	funcCanWatchVideoOrigin    string
 	inspectFuncCanWatchVideo   func(ctx context.Context, accountID uuid.UUID, userID uuid.UUID, groupID uuid.UUID)
@@ -66,6 +73,9 @@ func NewAccessMock(t minimock.Tester) *AccessMock {
 
 	m.CanManageAssignmentsMock = mAccessMockCanManageAssignments{mock: m}
 	m.CanManageAssignmentsMock.callArgs = []*AccessMockCanManageAssignmentsParams{}
+
+	m.CanManageVideoMock = mAccessMockCanManageVideo{mock: m}
+	m.CanManageVideoMock.callArgs = []*AccessMockCanManageVideoParams{}
 
 	m.CanWatchVideoMock = mAccessMockCanWatchVideo{mock: m}
 	m.CanWatchVideoMock.callArgs = []*AccessMockCanWatchVideoParams{}
@@ -485,6 +495,410 @@ func (m *AccessMock) MinimockCanManageAssignmentsInspect() {
 	if !m.CanManageAssignmentsMock.invocationsDone() && afterCanManageAssignmentsCounter > 0 {
 		m.t.Errorf("Expected %d calls to AccessMock.CanManageAssignments at\n%s but found %d calls",
 			mm_atomic.LoadUint64(&m.CanManageAssignmentsMock.expectedInvocations), m.CanManageAssignmentsMock.expectedInvocationsOrigin, afterCanManageAssignmentsCounter)
+	}
+}
+
+type mAccessMockCanManageVideo struct {
+	optional           bool
+	mock               *AccessMock
+	defaultExpectation *AccessMockCanManageVideoExpectation
+	expectations       []*AccessMockCanManageVideoExpectation
+
+	callArgs []*AccessMockCanManageVideoParams
+	mutex    sync.RWMutex
+
+	expectedInvocations       uint64
+	expectedInvocationsOrigin string
+}
+
+// AccessMockCanManageVideoExpectation specifies expectation struct of the Access.CanManageVideo
+type AccessMockCanManageVideoExpectation struct {
+	mock               *AccessMock
+	params             *AccessMockCanManageVideoParams
+	paramPtrs          *AccessMockCanManageVideoParamPtrs
+	expectationOrigins AccessMockCanManageVideoExpectationOrigins
+	results            *AccessMockCanManageVideoResults
+	returnOrigin       string
+	Counter            uint64
+}
+
+// AccessMockCanManageVideoParams contains parameters of the Access.CanManageVideo
+type AccessMockCanManageVideoParams struct {
+	ctx         context.Context
+	accountID   uuid.UUID
+	groupID     uuid.UUID
+	initiatorID uuid.UUID
+}
+
+// AccessMockCanManageVideoParamPtrs contains pointers to parameters of the Access.CanManageVideo
+type AccessMockCanManageVideoParamPtrs struct {
+	ctx         *context.Context
+	accountID   *uuid.UUID
+	groupID     *uuid.UUID
+	initiatorID *uuid.UUID
+}
+
+// AccessMockCanManageVideoResults contains results of the Access.CanManageVideo
+type AccessMockCanManageVideoResults struct {
+	err error
+}
+
+// AccessMockCanManageVideoOrigins contains origins of expectations of the Access.CanManageVideo
+type AccessMockCanManageVideoExpectationOrigins struct {
+	origin            string
+	originCtx         string
+	originAccountID   string
+	originGroupID     string
+	originInitiatorID string
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmCanManageVideo *mAccessMockCanManageVideo) Optional() *mAccessMockCanManageVideo {
+	mmCanManageVideo.optional = true
+	return mmCanManageVideo
+}
+
+// Expect sets up expected params for Access.CanManageVideo
+func (mmCanManageVideo *mAccessMockCanManageVideo) Expect(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) *mAccessMockCanManageVideo {
+	if mmCanManageVideo.mock.funcCanManageVideo != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Set")
+	}
+
+	if mmCanManageVideo.defaultExpectation == nil {
+		mmCanManageVideo.defaultExpectation = &AccessMockCanManageVideoExpectation{}
+	}
+
+	if mmCanManageVideo.defaultExpectation.paramPtrs != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by ExpectParams functions")
+	}
+
+	mmCanManageVideo.defaultExpectation.params = &AccessMockCanManageVideoParams{ctx, accountID, groupID, initiatorID}
+	mmCanManageVideo.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
+	for _, e := range mmCanManageVideo.expectations {
+		if minimock.Equal(e.params, mmCanManageVideo.defaultExpectation.params) {
+			mmCanManageVideo.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmCanManageVideo.defaultExpectation.params)
+		}
+	}
+
+	return mmCanManageVideo
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Access.CanManageVideo
+func (mmCanManageVideo *mAccessMockCanManageVideo) ExpectCtxParam1(ctx context.Context) *mAccessMockCanManageVideo {
+	if mmCanManageVideo.mock.funcCanManageVideo != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Set")
+	}
+
+	if mmCanManageVideo.defaultExpectation == nil {
+		mmCanManageVideo.defaultExpectation = &AccessMockCanManageVideoExpectation{}
+	}
+
+	if mmCanManageVideo.defaultExpectation.params != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Expect")
+	}
+
+	if mmCanManageVideo.defaultExpectation.paramPtrs == nil {
+		mmCanManageVideo.defaultExpectation.paramPtrs = &AccessMockCanManageVideoParamPtrs{}
+	}
+	mmCanManageVideo.defaultExpectation.paramPtrs.ctx = &ctx
+	mmCanManageVideo.defaultExpectation.expectationOrigins.originCtx = minimock.CallerInfo(1)
+
+	return mmCanManageVideo
+}
+
+// ExpectAccountIDParam2 sets up expected param accountID for Access.CanManageVideo
+func (mmCanManageVideo *mAccessMockCanManageVideo) ExpectAccountIDParam2(accountID uuid.UUID) *mAccessMockCanManageVideo {
+	if mmCanManageVideo.mock.funcCanManageVideo != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Set")
+	}
+
+	if mmCanManageVideo.defaultExpectation == nil {
+		mmCanManageVideo.defaultExpectation = &AccessMockCanManageVideoExpectation{}
+	}
+
+	if mmCanManageVideo.defaultExpectation.params != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Expect")
+	}
+
+	if mmCanManageVideo.defaultExpectation.paramPtrs == nil {
+		mmCanManageVideo.defaultExpectation.paramPtrs = &AccessMockCanManageVideoParamPtrs{}
+	}
+	mmCanManageVideo.defaultExpectation.paramPtrs.accountID = &accountID
+	mmCanManageVideo.defaultExpectation.expectationOrigins.originAccountID = minimock.CallerInfo(1)
+
+	return mmCanManageVideo
+}
+
+// ExpectGroupIDParam3 sets up expected param groupID for Access.CanManageVideo
+func (mmCanManageVideo *mAccessMockCanManageVideo) ExpectGroupIDParam3(groupID uuid.UUID) *mAccessMockCanManageVideo {
+	if mmCanManageVideo.mock.funcCanManageVideo != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Set")
+	}
+
+	if mmCanManageVideo.defaultExpectation == nil {
+		mmCanManageVideo.defaultExpectation = &AccessMockCanManageVideoExpectation{}
+	}
+
+	if mmCanManageVideo.defaultExpectation.params != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Expect")
+	}
+
+	if mmCanManageVideo.defaultExpectation.paramPtrs == nil {
+		mmCanManageVideo.defaultExpectation.paramPtrs = &AccessMockCanManageVideoParamPtrs{}
+	}
+	mmCanManageVideo.defaultExpectation.paramPtrs.groupID = &groupID
+	mmCanManageVideo.defaultExpectation.expectationOrigins.originGroupID = minimock.CallerInfo(1)
+
+	return mmCanManageVideo
+}
+
+// ExpectInitiatorIDParam4 sets up expected param initiatorID for Access.CanManageVideo
+func (mmCanManageVideo *mAccessMockCanManageVideo) ExpectInitiatorIDParam4(initiatorID uuid.UUID) *mAccessMockCanManageVideo {
+	if mmCanManageVideo.mock.funcCanManageVideo != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Set")
+	}
+
+	if mmCanManageVideo.defaultExpectation == nil {
+		mmCanManageVideo.defaultExpectation = &AccessMockCanManageVideoExpectation{}
+	}
+
+	if mmCanManageVideo.defaultExpectation.params != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Expect")
+	}
+
+	if mmCanManageVideo.defaultExpectation.paramPtrs == nil {
+		mmCanManageVideo.defaultExpectation.paramPtrs = &AccessMockCanManageVideoParamPtrs{}
+	}
+	mmCanManageVideo.defaultExpectation.paramPtrs.initiatorID = &initiatorID
+	mmCanManageVideo.defaultExpectation.expectationOrigins.originInitiatorID = minimock.CallerInfo(1)
+
+	return mmCanManageVideo
+}
+
+// Inspect accepts an inspector function that has same arguments as the Access.CanManageVideo
+func (mmCanManageVideo *mAccessMockCanManageVideo) Inspect(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID)) *mAccessMockCanManageVideo {
+	if mmCanManageVideo.mock.inspectFuncCanManageVideo != nil {
+		mmCanManageVideo.mock.t.Fatalf("Inspect function is already set for AccessMock.CanManageVideo")
+	}
+
+	mmCanManageVideo.mock.inspectFuncCanManageVideo = f
+
+	return mmCanManageVideo
+}
+
+// Return sets up results that will be returned by Access.CanManageVideo
+func (mmCanManageVideo *mAccessMockCanManageVideo) Return(err error) *AccessMock {
+	if mmCanManageVideo.mock.funcCanManageVideo != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Set")
+	}
+
+	if mmCanManageVideo.defaultExpectation == nil {
+		mmCanManageVideo.defaultExpectation = &AccessMockCanManageVideoExpectation{mock: mmCanManageVideo.mock}
+	}
+	mmCanManageVideo.defaultExpectation.results = &AccessMockCanManageVideoResults{err}
+	mmCanManageVideo.defaultExpectation.returnOrigin = minimock.CallerInfo(1)
+	return mmCanManageVideo.mock
+}
+
+// Set uses given function f to mock the Access.CanManageVideo method
+func (mmCanManageVideo *mAccessMockCanManageVideo) Set(f func(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (err error)) *AccessMock {
+	if mmCanManageVideo.defaultExpectation != nil {
+		mmCanManageVideo.mock.t.Fatalf("Default expectation is already set for the Access.CanManageVideo method")
+	}
+
+	if len(mmCanManageVideo.expectations) > 0 {
+		mmCanManageVideo.mock.t.Fatalf("Some expectations are already set for the Access.CanManageVideo method")
+	}
+
+	mmCanManageVideo.mock.funcCanManageVideo = f
+	mmCanManageVideo.mock.funcCanManageVideoOrigin = minimock.CallerInfo(1)
+	return mmCanManageVideo.mock
+}
+
+// When sets expectation for the Access.CanManageVideo which will trigger the result defined by the following
+// Then helper
+func (mmCanManageVideo *mAccessMockCanManageVideo) When(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) *AccessMockCanManageVideoExpectation {
+	if mmCanManageVideo.mock.funcCanManageVideo != nil {
+		mmCanManageVideo.mock.t.Fatalf("AccessMock.CanManageVideo mock is already set by Set")
+	}
+
+	expectation := &AccessMockCanManageVideoExpectation{
+		mock:               mmCanManageVideo.mock,
+		params:             &AccessMockCanManageVideoParams{ctx, accountID, groupID, initiatorID},
+		expectationOrigins: AccessMockCanManageVideoExpectationOrigins{origin: minimock.CallerInfo(1)},
+	}
+	mmCanManageVideo.expectations = append(mmCanManageVideo.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Access.CanManageVideo return parameters for the expectation previously defined by the When method
+func (e *AccessMockCanManageVideoExpectation) Then(err error) *AccessMock {
+	e.results = &AccessMockCanManageVideoResults{err}
+	return e.mock
+}
+
+// Times sets number of times Access.CanManageVideo should be invoked
+func (mmCanManageVideo *mAccessMockCanManageVideo) Times(n uint64) *mAccessMockCanManageVideo {
+	if n == 0 {
+		mmCanManageVideo.mock.t.Fatalf("Times of AccessMock.CanManageVideo mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmCanManageVideo.expectedInvocations, n)
+	mmCanManageVideo.expectedInvocationsOrigin = minimock.CallerInfo(1)
+	return mmCanManageVideo
+}
+
+func (mmCanManageVideo *mAccessMockCanManageVideo) invocationsDone() bool {
+	if len(mmCanManageVideo.expectations) == 0 && mmCanManageVideo.defaultExpectation == nil && mmCanManageVideo.mock.funcCanManageVideo == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmCanManageVideo.mock.afterCanManageVideoCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmCanManageVideo.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// CanManageVideo implements mm_service.Access
+func (mmCanManageVideo *AccessMock) CanManageVideo(ctx context.Context, accountID uuid.UUID, groupID uuid.UUID, initiatorID uuid.UUID) (err error) {
+	mm_atomic.AddUint64(&mmCanManageVideo.beforeCanManageVideoCounter, 1)
+	defer mm_atomic.AddUint64(&mmCanManageVideo.afterCanManageVideoCounter, 1)
+
+	mmCanManageVideo.t.Helper()
+
+	if mmCanManageVideo.inspectFuncCanManageVideo != nil {
+		mmCanManageVideo.inspectFuncCanManageVideo(ctx, accountID, groupID, initiatorID)
+	}
+
+	mm_params := AccessMockCanManageVideoParams{ctx, accountID, groupID, initiatorID}
+
+	// Record call args
+	mmCanManageVideo.CanManageVideoMock.mutex.Lock()
+	mmCanManageVideo.CanManageVideoMock.callArgs = append(mmCanManageVideo.CanManageVideoMock.callArgs, &mm_params)
+	mmCanManageVideo.CanManageVideoMock.mutex.Unlock()
+
+	for _, e := range mmCanManageVideo.CanManageVideoMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmCanManageVideo.CanManageVideoMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmCanManageVideo.CanManageVideoMock.defaultExpectation.Counter, 1)
+		mm_want := mmCanManageVideo.CanManageVideoMock.defaultExpectation.params
+		mm_want_ptrs := mmCanManageVideo.CanManageVideoMock.defaultExpectation.paramPtrs
+
+		mm_got := AccessMockCanManageVideoParams{ctx, accountID, groupID, initiatorID}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmCanManageVideo.t.Errorf("AccessMock.CanManageVideo got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanManageVideo.CanManageVideoMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountID != nil && !minimock.Equal(*mm_want_ptrs.accountID, mm_got.accountID) {
+				mmCanManageVideo.t.Errorf("AccessMock.CanManageVideo got unexpected parameter accountID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanManageVideo.CanManageVideoMock.defaultExpectation.expectationOrigins.originAccountID, *mm_want_ptrs.accountID, mm_got.accountID, minimock.Diff(*mm_want_ptrs.accountID, mm_got.accountID))
+			}
+
+			if mm_want_ptrs.groupID != nil && !minimock.Equal(*mm_want_ptrs.groupID, mm_got.groupID) {
+				mmCanManageVideo.t.Errorf("AccessMock.CanManageVideo got unexpected parameter groupID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanManageVideo.CanManageVideoMock.defaultExpectation.expectationOrigins.originGroupID, *mm_want_ptrs.groupID, mm_got.groupID, minimock.Diff(*mm_want_ptrs.groupID, mm_got.groupID))
+			}
+
+			if mm_want_ptrs.initiatorID != nil && !minimock.Equal(*mm_want_ptrs.initiatorID, mm_got.initiatorID) {
+				mmCanManageVideo.t.Errorf("AccessMock.CanManageVideo got unexpected parameter initiatorID, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCanManageVideo.CanManageVideoMock.defaultExpectation.expectationOrigins.originInitiatorID, *mm_want_ptrs.initiatorID, mm_got.initiatorID, minimock.Diff(*mm_want_ptrs.initiatorID, mm_got.initiatorID))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmCanManageVideo.t.Errorf("AccessMock.CanManageVideo got unexpected parameters, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+				mmCanManageVideo.CanManageVideoMock.defaultExpectation.expectationOrigins.origin, *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmCanManageVideo.CanManageVideoMock.defaultExpectation.results
+		if mm_results == nil {
+			mmCanManageVideo.t.Fatal("No results are set for the AccessMock.CanManageVideo")
+		}
+		return (*mm_results).err
+	}
+	if mmCanManageVideo.funcCanManageVideo != nil {
+		return mmCanManageVideo.funcCanManageVideo(ctx, accountID, groupID, initiatorID)
+	}
+	mmCanManageVideo.t.Fatalf("Unexpected call to AccessMock.CanManageVideo. %v %v %v %v", ctx, accountID, groupID, initiatorID)
+	return
+}
+
+// CanManageVideoAfterCounter returns a count of finished AccessMock.CanManageVideo invocations
+func (mmCanManageVideo *AccessMock) CanManageVideoAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCanManageVideo.afterCanManageVideoCounter)
+}
+
+// CanManageVideoBeforeCounter returns a count of AccessMock.CanManageVideo invocations
+func (mmCanManageVideo *AccessMock) CanManageVideoBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmCanManageVideo.beforeCanManageVideoCounter)
+}
+
+// Calls returns a list of arguments used in each call to AccessMock.CanManageVideo.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmCanManageVideo *mAccessMockCanManageVideo) Calls() []*AccessMockCanManageVideoParams {
+	mmCanManageVideo.mutex.RLock()
+
+	argCopy := make([]*AccessMockCanManageVideoParams, len(mmCanManageVideo.callArgs))
+	copy(argCopy, mmCanManageVideo.callArgs)
+
+	mmCanManageVideo.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockCanManageVideoDone returns true if the count of the CanManageVideo invocations corresponds
+// the number of defined expectations
+func (m *AccessMock) MinimockCanManageVideoDone() bool {
+	if m.CanManageVideoMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CanManageVideoMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CanManageVideoMock.invocationsDone()
+}
+
+// MinimockCanManageVideoInspect logs each unmet expectation
+func (m *AccessMock) MinimockCanManageVideoInspect() {
+	for _, e := range m.CanManageVideoMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to AccessMock.CanManageVideo at\n%s with params: %#v", e.expectationOrigins.origin, *e.params)
+		}
+	}
+
+	afterCanManageVideoCounter := mm_atomic.LoadUint64(&m.afterCanManageVideoCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CanManageVideoMock.defaultExpectation != nil && afterCanManageVideoCounter < 1 {
+		if m.CanManageVideoMock.defaultExpectation.params == nil {
+			m.t.Errorf("Expected call to AccessMock.CanManageVideo at\n%s", m.CanManageVideoMock.defaultExpectation.returnOrigin)
+		} else {
+			m.t.Errorf("Expected call to AccessMock.CanManageVideo at\n%s with params: %#v", m.CanManageVideoMock.defaultExpectation.expectationOrigins.origin, *m.CanManageVideoMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcCanManageVideo != nil && afterCanManageVideoCounter < 1 {
+		m.t.Errorf("Expected call to AccessMock.CanManageVideo at\n%s", m.funcCanManageVideoOrigin)
+	}
+
+	if !m.CanManageVideoMock.invocationsDone() && afterCanManageVideoCounter > 0 {
+		m.t.Errorf("Expected %d calls to AccessMock.CanManageVideo at\n%s but found %d calls",
+			mm_atomic.LoadUint64(&m.CanManageVideoMock.expectedInvocations), m.CanManageVideoMock.expectedInvocationsOrigin, afterCanManageVideoCounter)
 	}
 }
 
@@ -2143,6 +2557,8 @@ func (m *AccessMock) MinimockFinish() {
 		if !m.minimockDone() {
 			m.MinimockCanManageAssignmentsInspect()
 
+			m.MinimockCanManageVideoInspect()
+
 			m.MinimockCanWatchVideoInspect()
 
 			m.MinimockIsCheckAccountActionInspect()
@@ -2174,6 +2590,7 @@ func (m *AccessMock) minimockDone() bool {
 	done := true
 	return done &&
 		m.MinimockCanManageAssignmentsDone() &&
+		m.MinimockCanManageVideoDone() &&
 		m.MinimockCanWatchVideoDone() &&
 		m.MinimockIsCheckAccountActionDone() &&
 		m.MinimockIsCheckGroupActionDone() &&

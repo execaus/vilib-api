@@ -61,6 +61,9 @@ var _ bob.HookableType = &User{}
 // Make sure the type VideoAsset runs hooks after queries
 var _ bob.HookableType = &VideoAsset{}
 
+// Make sure the type VideoChapter runs hooks after queries
+var _ bob.HookableType = &VideoChapter{}
+
 // Make sure the type WatchProgress runs hooks after queries
 var _ bob.HookableType = &WatchProgress{}
 

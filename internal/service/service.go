@@ -321,6 +321,11 @@ type Access interface {
 	// VideoWatch/ManageVideo/Owner. В отличие от IsCheck*Action не возвращает ошибку —
 	// используется там, где отсутствие доступа не единственная причина отказа (В-4, отчёты).
 	CanWatchVideo(ctx context.Context, accountID, userID, groupID uuid.UUID) bool
+	// CanManageVideo проверяет право инициатора управлять видео группы groupID — переименование,
+	// удаление, разметка глав (§2 дизайна эпика Э4): аккаунтное или групповое ManageVideo (в
+	// т.ч. Owner). Парный метод CanWatchVideo, но, в отличие от него, возвращает ошибку — на
+	// операциях изменения отсутствие права всегда единственная причина отказа.
+	CanManageVideo(ctx context.Context, accountID, groupID, initiatorID uuid.UUID) error
 	// ManagedAssignmentGroups определяет область чтения отчётов по назначениям инициатора
 	// (В-8): all=true — аккаунтное право ManageAssignments/Owner (видны все назначения
 	// аккаунта); иначе — список групп, где у инициатора Owner/ManageAssignments в групповой
