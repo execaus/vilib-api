@@ -501,6 +501,7 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 		r.WatchProgress,
 		r.Video,
 		r.GroupMember,
+		r.Chapter,
 		s,
 		cfg.Video,
 	)

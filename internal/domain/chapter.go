@@ -117,6 +117,26 @@ type ChapterUserProgress struct {
 	UserID uuid.UUID
 }
 
+// ParticipantChapterStatus — статус одной главы для конкретного участника отчёта по назначению
+// (§6 дизайна эпика Э4): без служебных полей главы (границ, идентификатора) — только то, что
+// показывает отчёт.
+type ParticipantChapterStatus struct {
+	Name        string
+	CoveragePct int
+	Status      ChapterStatus
+}
+
+// ChapterProgressSummary — сводка пройденности глав видео для участника назначения (§6 дизайна
+// эпика Э4, В-6): Total/Completed считаются по текущей разметке глав и текущему покрытию
+// просмотра — правка границ меняет сводку, но не зачёт видео (completed/completed_at
+// назначения). Chapters — детализация по каждой главе; nil в сводном списке назначений
+// (GET .../assignments?expand_participants=true, §6), чтобы не раздувать ответ.
+type ChapterProgressSummary struct {
+	Total     int
+	Completed int
+	Chapters  []ParticipantChapterStatus
+}
+
 // CreateChapter — параметры создания главы (§4 дизайна эпика Э4): StartMs проверяется на
 // вхождение в [0, duration_ms) видео сервисом, Name — на длину 1–200 символов биндингом DTO.
 type CreateChapter struct {

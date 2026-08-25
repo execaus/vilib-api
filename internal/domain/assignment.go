@@ -259,12 +259,14 @@ type AssignmentCounters struct {
 
 // ParticipantDetails — участник назначения вместе с данными пользователя для карточки отчёта
 // (§4 дизайна эпика Э3): CoveragePct — completed_coverage_pct для завершивших, иначе текущий
-// прогресс просмотра; HasAccess — доступен ли участнику видео на текущий момент.
+// прогресс просмотра; HasAccess — доступен ли участнику видео на текущий момент. ChapterProgress
+// — сводка пройденности глав видео (§6 дизайна эпика Э4); nil — видео без глав или удалено.
 type ParticipantDetails struct {
-	Participant AssignmentParticipant
-	User        User
-	CoveragePct int
-	HasAccess   bool
+	Participant     AssignmentParticipant
+	User            User
+	CoveragePct     int
+	HasAccess       bool
+	ChapterProgress *ChapterProgressSummary
 }
 
 // EventDetails — событие журнала назначения вместе с данными инициировавшего пользователя

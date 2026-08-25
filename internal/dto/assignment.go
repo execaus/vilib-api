@@ -119,21 +119,63 @@ func (a *Assignment) FromDomain(
 
 // AssignmentParticipant — персональная запись участника назначения (§5 контракта эпика Э3,
 // пожелание фронта В-55: добавлено CancelledAt). IsOverdue/CompletedLate — вычисляются от
-// времени ответа, не хранятся (Э3-Т4).
+// времени ответа, не хранятся (Э3-Т4). ChapterProgress — сводка пройденности глав видео (§6
+// дизайна эпика Э4); отсутствует у видео без глав или удалённого видео.
 type AssignmentParticipant struct {
-	User          AssignmentUser `json:"user"`
-	Status        string         `json:"status"`
-	Source        string         `json:"source"`
-	SourceGroupID *uuid.UUID     `json:"source_group_id,omitempty"`
-	EnrolledAt    time.Time      `json:"enrolled_at"`
-	DueAt         time.Time      `json:"due_at"`
-	CompletedAt   *time.Time     `json:"completed_at,omitempty"`
-	CancelledAt   *time.Time     `json:"cancelled_at,omitempty"`
-	CoveragePct   int            `json:"coverage_pct"`
-	IsOverdue     bool           `json:"is_overdue"`
-	CompletedLate bool           `json:"completed_late"`
-	HasAccess     bool           `json:"has_access"`
-	CancelReason  *string        `json:"cancel_reason,omitempty"`
+	User            AssignmentUser          `json:"user"`
+	Status          string                  `json:"status"`
+	Source          string                  `json:"source"`
+	SourceGroupID   *uuid.UUID              `json:"source_group_id,omitempty"`
+	EnrolledAt      time.Time               `json:"enrolled_at"`
+	DueAt           time.Time               `json:"due_at"`
+	CompletedAt     *time.Time              `json:"completed_at,omitempty"`
+	CancelledAt     *time.Time              `json:"cancelled_at,omitempty"`
+	CoveragePct     int                     `json:"coverage_pct"`
+	IsOverdue       bool                    `json:"is_overdue"`
+	CompletedLate   bool                    `json:"completed_late"`
+	HasAccess       bool                    `json:"has_access"`
+	CancelReason    *string                 `json:"cancel_reason,omitempty"`
+	ChapterProgress *ChapterProgressSummary `json:"chapter_progress,omitempty"`
+}
+
+// ParticipantChapterStatus — статус одной главы для конкретного участника отчёта по назначению
+// (§6 дизайна эпика Э4).
+type ParticipantChapterStatus struct {
+	Name        string `json:"name"`
+	CoveragePct int    `json:"coverage_pct"`
+	Status      string `json:"status"`
+}
+
+// FromDomain заполняет ParticipantChapterStatus доменным статусом главы участника.
+func (s *ParticipantChapterStatus) FromDomain(status domain.ParticipantChapterStatus) {
+	s.Name = status.Name
+	s.CoveragePct = status.CoveragePct
+	s.Status = string(status.Status)
+}
+
+// ChapterProgressSummary — сводка пройденности глав видео для участника назначения (§6 дизайна
+// эпика Э4): Total/Completed — «глав пройдено X из Y», всегда заполняются вместе с полем;
+// Chapters — раскрываемая детализация по каждой главе, отсутствует в сводном списке назначений
+// (GET .../assignments?expand_participants=true, §6 — чтобы не раздувать ответ).
+type ChapterProgressSummary struct {
+	Total     int                        `json:"total"`
+	Completed int                        `json:"completed"`
+	Chapters  []ParticipantChapterStatus `json:"chapters,omitempty"`
+}
+
+// FromDomain заполняет ChapterProgressSummary доменной сводкой пройденности глав.
+func (s *ChapterProgressSummary) FromDomain(summary domain.ChapterProgressSummary) {
+	s.Total = summary.Total
+	s.Completed = summary.Completed
+
+	if summary.Chapters == nil {
+		return
+	}
+
+	s.Chapters = make([]ParticipantChapterStatus, len(summary.Chapters))
+	for i, c := range summary.Chapters {
+		s.Chapters[i].FromDomain(c)
+	}
 }
 
 // FromDomain заполняет AssignmentParticipant доменной карточкой участника (§4 дизайна эпика
@@ -156,6 +198,11 @@ func (p *AssignmentParticipant) FromDomain(details domain.ParticipantDetails) {
 	if participant.CancelReason != nil {
 		reason := string(*participant.CancelReason)
 		p.CancelReason = &reason
+	}
+	if details.ChapterProgress != nil {
+		summary := ChapterProgressSummary{}
+		summary.FromDomain(*details.ChapterProgress)
+		p.ChapterProgress = &summary
 	}
 }
 

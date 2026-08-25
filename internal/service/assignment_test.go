@@ -26,6 +26,7 @@ type assignmentMocks struct {
 	Progress     *repository_mocks.WatchProgressMock
 	Video        *repository_mocks.VideoMock
 	GroupMembers *repository_mocks.GroupMemberMock
+	Chapters     *repository_mocks.ChapterMock
 	Access       *service_mocks.AccessMock
 	User         *service_mocks.UserMock
 	UserGroup    *service_mocks.UserGroupMock
@@ -41,6 +42,7 @@ func newAssignmentMocks(mc *minimock.Controller) assignmentMocks {
 		Progress:     repository_mocks.NewWatchProgressMock(mc),
 		Video:        repository_mocks.NewVideoMock(mc),
 		GroupMembers: repository_mocks.NewGroupMemberMock(mc),
+		Chapters:     repository_mocks.NewChapterMock(mc),
 		Access:       service_mocks.NewAccessMock(mc),
 		User:         service_mocks.NewUserMock(mc),
 		UserGroup:    service_mocks.NewUserGroupMock(mc),
@@ -53,7 +55,7 @@ func newAssignmentService(m assignmentMocks, cfg config.VideoConfig, now time.Ti
 		Access: m.Access, User: m.User, UserGroup: m.UserGroup, AccountRole: m.AccountRole,
 	}
 	return service.NewAssignmentService(
-		m.Assignment, m.Targets, m.Participants, m.Events, m.Progress, m.Video, m.GroupMembers,
+		m.Assignment, m.Targets, m.Participants, m.Events, m.Progress, m.Video, m.GroupMembers, m.Chapters,
 		svc, cfg,
 		service.WithAssignmentNow(func() time.Time { return now }),
 	)
@@ -694,6 +696,226 @@ func TestService_AssignmentGet_AllowedForAccountWideManager(t *testing.T) {
 	require.Equal(t, f.AssignmentID, details.Assignment.ID)
 }
 
+// TestService_AssignmentGet_ChapterProgressForParticipants проверяет КП-4 (§6 дизайна эпика
+// Э4): карточка назначения отдаёт по каждому участнику «глав пройдено X из Y» и раскрываемую
+// детализацию, посчитанную по текущему покрытию (в т.ч. участник, ни разу не открывавший
+// видео — все главы "не просмотрены"). Границы и покрытие запрашиваются одним обращением к
+// каждому из двух методов репозитория глав независимо от числа участников — не по одному на
+// участника (Н1): проверяется счётчиком вызовов мока.
+func TestService_AssignmentGet_ChapterProgressForParticipants(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	f.Video.DurationMs = ptrInt64(10000)
+	watchedUserID := uuid.New()
+	freshUserID := uuid.New()
+	chapter1ID := uuid.New()
+	chapter2ID := uuid.New()
+
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	assignment := domain.Assignment{
+		ID: f.AssignmentID, AccountID: f.AccountID, VideoID: &f.VideoID, GroupID: &f.GroupID,
+		CreatedBy: f.InitiatorID,
+	}
+	m.Assignment.SelectByIDMock.Return(assignment, nil)
+	m.Targets.SelectByAssignmentIDsMock.Return(nil, nil)
+	m.Participants.SelectByAssignmentIDsMock.Return([]domain.AssignmentParticipant{
+		{AssignmentID: f.AssignmentID, UserID: watchedUserID, Status: domain.AssignmentParticipantStatusInProgress},
+		{AssignmentID: f.AssignmentID, UserID: freshUserID, Status: domain.AssignmentParticipantStatusAssigned},
+	}, nil)
+	m.Participants.CountByAssignmentIDsMock.Return(map[uuid.UUID]domain.AssignmentCounters{}, nil)
+	m.Events.SelectByAssignmentIDMock.Return(nil, nil)
+	m.User.GetByIDsMock.Return([]domain.User{
+		{ID: watchedUserID, Name: "Смотрел"}, {ID: freshUserID, Name: "Не открывал"},
+	}, nil)
+	m.Video.SelectMock.Return(&f.Video, nil)
+	m.Progress.SelectByVideoIDsMock.Return(nil, nil)
+	m.Access.CanWatchVideoMock.Return(true)
+
+	bounds := []domain.ChapterBound{
+		{Chapter: domain.Chapter{ID: chapter1ID, VideoID: f.VideoID, Name: "Глава 1", StartMs: 0}, EndMs: 5000},
+		{Chapter: domain.Chapter{ID: chapter2ID, VideoID: f.VideoID, Name: "Глава 2", StartMs: 5000}, EndMs: 10000},
+	}
+	m.Chapters.SelectBoundsByVideoIDMock.Expect(minimock.AnyContext, f.VideoID, int64(10000)).Return(bounds, nil)
+	m.Chapters.SelectProgressByVideoAndUsersMock.
+		Expect(minimock.AnyContext, f.VideoID, []uuid.UUID{watchedUserID, freshUserID}, int64(10000)).
+		Return([]domain.ChapterUserProgress{
+			{
+				ChapterProgress: domain.ChapterProgress{ChapterBound: bounds[0], CoveredMs: 5000},
+				UserID:          watchedUserID,
+			},
+			{
+				ChapterProgress: domain.ChapterProgress{ChapterBound: bounds[1], CoveredMs: 2000},
+				UserID:          watchedUserID,
+			},
+		}, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	details, err := svc.Get(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID)
+
+	require.NoError(t, err)
+	require.Len(t, details.Participants, 2)
+
+	byUser := make(map[uuid.UUID]domain.ParticipantDetails, len(details.Participants))
+	for _, p := range details.Participants {
+		byUser[p.Participant.UserID] = p
+	}
+
+	watched := byUser[watchedUserID].ChapterProgress
+	require.NotNil(t, watched)
+	require.Equal(t, 2, watched.Total)
+	require.Equal(t, 1, watched.Completed)
+	require.Equal(t, []domain.ParticipantChapterStatus{
+		{Name: "Глава 1", CoveragePct: 100, Status: domain.ChapterStatusDone},
+		{Name: "Глава 2", CoveragePct: 40, Status: domain.ChapterStatusPartial},
+	}, watched.Chapters)
+
+	fresh := byUser[freshUserID].ChapterProgress
+	require.NotNil(t, fresh)
+	require.Equal(t, 2, fresh.Total)
+	require.Equal(t, 0, fresh.Completed)
+	require.Equal(t, []domain.ParticipantChapterStatus{
+		{Name: "Глава 1", CoveragePct: 0, Status: domain.ChapterStatusNotStarted},
+		{Name: "Глава 2", CoveragePct: 0, Status: domain.ChapterStatusNotStarted},
+	}, fresh.Chapters)
+
+	// Ровно один запрос на карточку на каждый из двух методов — не по одному на участника (Н1).
+	require.EqualValues(t, 1, m.Chapters.SelectBoundsByVideoIDAfterCounter())
+	require.EqualValues(t, 1, m.Chapters.SelectProgressByVideoAndUsersAfterCounter())
+}
+
+// TestService_AssignmentGet_ChapterProgressAbsentWithoutChaptersOrVideo проверяет §6 дизайна
+// эпика Э4: сводка по главам отсутствует (nil), если у видео нет глав, а к репозиторию глав для
+// удалённого видео (VideoID == nil) не обращаются вовсе.
+func TestService_AssignmentGet_ChapterProgressAbsentWithoutChaptersOrVideo(t *testing.T) {
+	t.Parallel()
+
+	t.Run("видео без глав", func(t *testing.T) {
+		t.Parallel()
+
+		f := newAssignmentFixture()
+		userID := uuid.New()
+		mc := minimock.NewController(t)
+		m := newAssignmentMocks(mc)
+
+		m.Assignment.SelectByIDMock.Return(domain.Assignment{
+			ID: f.AssignmentID, AccountID: f.AccountID, VideoID: &f.VideoID, GroupID: &f.GroupID,
+			CreatedBy: f.InitiatorID,
+		}, nil)
+		m.Targets.SelectByAssignmentIDsMock.Return(nil, nil)
+		m.Participants.SelectByAssignmentIDsMock.Return([]domain.AssignmentParticipant{
+			{AssignmentID: f.AssignmentID, UserID: userID, Status: domain.AssignmentParticipantStatusAssigned},
+		}, nil)
+		m.Participants.CountByAssignmentIDsMock.Return(map[uuid.UUID]domain.AssignmentCounters{}, nil)
+		m.Events.SelectByAssignmentIDMock.Return(nil, nil)
+		m.User.GetByIDsMock.Return([]domain.User{{ID: userID, Name: "Иван"}}, nil)
+		m.Video.SelectMock.Return(&f.Video, nil)
+		m.Progress.SelectByVideoIDsMock.Return(nil, nil)
+		m.Access.CanWatchVideoMock.Return(true)
+		m.Chapters.SelectBoundsByVideoIDMock.Return(nil, nil)
+
+		svc := newAssignmentService(m, f.Cfg, f.Now)
+		details, err := svc.Get(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID)
+
+		require.NoError(t, err)
+		require.Len(t, details.Participants, 1)
+		require.Nil(t, details.Participants[0].ChapterProgress)
+		require.Zero(t, m.Chapters.SelectProgressByVideoAndUsersAfterCounter())
+	})
+
+	t.Run("видео удалено", func(t *testing.T) {
+		t.Parallel()
+
+		f := newAssignmentFixture()
+		userID := uuid.New()
+		mc := minimock.NewController(t)
+		m := newAssignmentMocks(mc)
+
+		m.Assignment.SelectByIDMock.Return(domain.Assignment{
+			ID: f.AssignmentID, AccountID: f.AccountID, GroupID: &f.GroupID, CreatedBy: f.InitiatorID,
+		}, nil)
+		m.Targets.SelectByAssignmentIDsMock.Return(nil, nil)
+		m.Participants.SelectByAssignmentIDsMock.Return([]domain.AssignmentParticipant{
+			{AssignmentID: f.AssignmentID, UserID: userID, Status: domain.AssignmentParticipantStatusCompleted},
+		}, nil)
+		m.Participants.CountByAssignmentIDsMock.Return(map[uuid.UUID]domain.AssignmentCounters{}, nil)
+		m.Events.SelectByAssignmentIDMock.Return(nil, nil)
+		m.User.GetByIDsMock.Return([]domain.User{{ID: userID, Name: "Иван"}}, nil)
+
+		svc := newAssignmentService(m, f.Cfg, f.Now)
+		details, err := svc.Get(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID)
+
+		require.NoError(t, err)
+		require.Len(t, details.Participants, 1)
+		require.Nil(t, details.Participants[0].ChapterProgress)
+		require.Zero(t, m.Chapters.SelectBoundsByVideoIDAfterCounter())
+	})
+}
+
+// TestService_AssignmentGet_ChapterProgressFollowsCurrentBoundsNotCompletion проверяет решение
+// В-6 файла эпика Э4 (КП-5): правка границ глав меняет детализацию по текущей разметке, но
+// зачёт видео (Status/CompletedAt участника) от неё никак не зависит.
+func TestService_AssignmentGet_ChapterProgressFollowsCurrentBoundsNotCompletion(t *testing.T) {
+	t.Parallel()
+
+	completedAt := time.Date(2026, time.August, 20, 9, 0, 0, 0, time.UTC)
+	coveragePct := 100
+
+	buildDetails := func(t *testing.T, bounds []domain.ChapterBound) domain.AssignmentDetails {
+		t.Helper()
+
+		f := newAssignmentFixture()
+		userID := uuid.New()
+		mc := minimock.NewController(t)
+		m := newAssignmentMocks(mc)
+
+		participant := domain.AssignmentParticipant{
+			AssignmentID: f.AssignmentID, UserID: userID,
+			Status:      domain.AssignmentParticipantStatusCompleted,
+			CompletedAt: &completedAt, CompletedCoveragePct: &coveragePct,
+		}
+
+		m.Assignment.SelectByIDMock.Return(domain.Assignment{
+			ID: f.AssignmentID, AccountID: f.AccountID, VideoID: &f.VideoID, GroupID: &f.GroupID,
+			CreatedBy: f.InitiatorID,
+		}, nil)
+		m.Targets.SelectByAssignmentIDsMock.Return(nil, nil)
+		m.Participants.SelectByAssignmentIDsMock.Return([]domain.AssignmentParticipant{participant}, nil)
+		m.Participants.CountByAssignmentIDsMock.Return(map[uuid.UUID]domain.AssignmentCounters{}, nil)
+		m.Events.SelectByAssignmentIDMock.Return(nil, nil)
+		m.User.GetByIDsMock.Return([]domain.User{{ID: userID, Name: "Иван"}}, nil)
+		m.Video.SelectMock.Return(&f.Video, nil)
+		m.Progress.SelectByVideoIDsMock.Return(nil, nil)
+		m.Chapters.SelectBoundsByVideoIDMock.Return(bounds, nil)
+		m.Chapters.SelectProgressByVideoAndUsersMock.Return(nil, nil)
+
+		svc := newAssignmentService(m, f.Cfg, f.Now)
+		details, err := svc.Get(t.Context(), f.AccountID, f.InitiatorID, f.AssignmentID)
+		require.NoError(t, err)
+
+		return details
+	}
+
+	before := buildDetails(t, []domain.ChapterBound{
+		{Chapter: domain.Chapter{ID: uuid.New(), Name: "Один блок", StartMs: 0}, EndMs: 10000},
+	})
+	after := buildDetails(t, []domain.ChapterBound{
+		{Chapter: domain.Chapter{ID: uuid.New(), Name: "Часть 1", StartMs: 0}, EndMs: 5000},
+		{Chapter: domain.Chapter{ID: uuid.New(), Name: "Часть 2", StartMs: 5000}, EndMs: 10000},
+	})
+
+	// Зачёт видео не зависит от разметки глав (BR-47, В-6).
+	require.Equal(t, domain.AssignmentParticipantStatusCompleted, before.Participants[0].Participant.Status)
+	require.Equal(t, domain.AssignmentParticipantStatusCompleted, after.Participants[0].Participant.Status)
+	require.Equal(t, before.Participants[0].Participant.CompletedAt, after.Participants[0].Participant.CompletedAt)
+
+	// Детализация по главам считается заново по текущей разметке.
+	require.Equal(t, 1, before.Participants[0].ChapterProgress.Total)
+	require.Equal(t, 2, after.Participants[0].ChapterProgress.Total)
+}
+
 func TestService_AssignmentListMine_EmptyWhenNoParticipants(t *testing.T) {
 	t.Parallel()
 
@@ -919,6 +1141,8 @@ func TestService_AssignmentList_ExpandParticipantsExcludesDeactivatedByDefault(t
 	m.Video.SelectByIDsMock.Return([]domain.Video{f.Video}, nil)
 	m.Progress.SelectByVideoIDsMock.Return(nil, nil)
 	m.Access.CanWatchVideoMock.Return(true)
+	// Видео без глав — сводка по главам не запрашивается (Э4-Т4).
+	m.Chapters.SelectBoundsByVideoIDMock.Return(nil, nil)
 
 	svc := newAssignmentService(m, f.Cfg, f.Now)
 	items, err := svc.List(t.Context(), f.AccountID, f.InitiatorID, domain.AssignmentFilter{ExpandParticipants: true})
@@ -969,6 +1193,8 @@ func TestService_AssignmentList_IncludeDeactivatedKeepsAllParticipants(t *testin
 	m.Video.SelectByIDsMock.Return([]domain.Video{f.Video}, nil)
 	m.Progress.SelectByVideoIDsMock.Return(nil, nil)
 	m.Access.CanWatchVideoMock.Return(true)
+	// Видео без глав — сводка по главам не запрашивается (Э4-Т4).
+	m.Chapters.SelectBoundsByVideoIDMock.Return(nil, nil)
 
 	svc := newAssignmentService(m, f.Cfg, f.Now)
 	items, err := svc.List(t.Context(), f.AccountID, f.InitiatorID, domain.AssignmentFilter{
@@ -978,6 +1204,60 @@ func TestService_AssignmentList_IncludeDeactivatedKeepsAllParticipants(t *testin
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	require.Len(t, items[0].Participants, 2)
+}
+
+// TestService_AssignmentList_ExpandParticipantsIncludesChapterTotalsOnly проверяет §6 дизайна
+// эпика Э4: сводный список назначений (expand_participants=true) отдаёт по главам только
+// Total/Completed — раскрываемая детализация (Chapters) туда не попадает, чтобы не раздувать
+// ответ на сотне назначений.
+func TestService_AssignmentList_ExpandParticipantsIncludesChapterTotalsOnly(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	f.Video.DurationMs = ptrInt64(10000)
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	assignment := activeAssignment(f)
+	userID := uuid.New()
+
+	m.Access.ManagedAssignmentGroupsMock.Return(true, nil, nil)
+	m.Assignment.SelectByFilterMock.Return([]domain.Assignment{assignment}, nil)
+	m.Targets.SelectByAssignmentIDsMock.Return(nil, nil)
+	m.Participants.SelectByAssignmentIDsMock.Return([]domain.AssignmentParticipant{
+		{
+			AssignmentID: f.AssignmentID, UserID: userID,
+			Status: domain.AssignmentParticipantStatusInProgress, DueAt: f.Now.Add(time.Hour),
+		},
+	}, nil)
+	m.User.GetByIDsMock.Return([]domain.User{
+		{ID: f.InitiatorID, Name: "Автор"}, {ID: userID, Name: "Сотрудник"},
+	}, nil)
+	m.Participants.CountByAssignmentIDsMock.Return(map[uuid.UUID]domain.AssignmentCounters{}, nil)
+	m.Video.SelectByIDsMock.Return([]domain.Video{f.Video}, nil)
+	m.Progress.SelectByVideoIDsMock.Return(nil, nil)
+	m.Access.CanWatchVideoMock.Return(true)
+
+	bounds := []domain.ChapterBound{
+		{Chapter: domain.Chapter{ID: uuid.New(), Name: "Глава 1", StartMs: 0}, EndMs: 10000},
+	}
+	m.Chapters.SelectBoundsByVideoIDMock.Return(bounds, nil)
+	m.Chapters.SelectProgressByVideoAndUsersMock.Return([]domain.ChapterUserProgress{
+		{ChapterProgress: domain.ChapterProgress{ChapterBound: bounds[0], CoveredMs: 10000}, UserID: userID},
+	}, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	items, err := svc.List(t.Context(), f.AccountID, f.InitiatorID, domain.AssignmentFilter{ExpandParticipants: true})
+
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Len(t, items[0].Participants, 1)
+
+	summary := items[0].Participants[0].ChapterProgress
+	require.NotNil(t, summary)
+	require.Equal(t, 1, summary.Total)
+	require.Equal(t, 1, summary.Completed)
+	require.Nil(t, summary.Chapters, "сводный список не раскрывает детализацию по главам (§6)")
 }
 
 // TestService_AssignmentListForUser_NotFoundWhenUserNotInAccount проверяет 404 для сотрудника
@@ -1070,6 +1350,8 @@ func TestService_AssignmentListForUser_FiltersByScope(t *testing.T) {
 	m.Video.SelectByIDsMock.Expect(minimock.AnyContext, []uuid.UUID{f.VideoID}).
 		Return([]domain.Video{f.Video}, nil)
 	m.Progress.SelectByVideoIDsMock.Return(nil, nil)
+	// Видео без глав — сводка по главам не запрашивается (Э4-Т4).
+	m.Chapters.SelectBoundsByVideoIDMock.Return(nil, nil)
 
 	svc := newAssignmentService(m, f.Cfg, f.Now)
 	items, err := svc.ListForUser(t.Context(), f.AccountID, f.InitiatorID, targetUserID)
@@ -1077,6 +1359,59 @@ func TestService_AssignmentListForUser_FiltersByScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	require.Equal(t, inScope.ID, items[0].Assignment.ID)
+}
+
+// TestService_AssignmentListForUser_IncludesFullChapterDetail проверяет §6 дизайна эпика Э4:
+// отчёт по сотруднику, в отличие от сводного списка назначений, отдаёт полную раскрываемую
+// детализацию по главам на каждое назначение с главами.
+func TestService_AssignmentListForUser_IncludesFullChapterDetail(t *testing.T) {
+	t.Parallel()
+
+	f := newAssignmentFixture()
+	f.Video.DurationMs = ptrInt64(10000)
+	targetUserID := uuid.New()
+	roleID := uuid.New()
+	mc := minimock.NewController(t)
+	m := newAssignmentMocks(mc)
+
+	assignment := activeAssignment(f)
+	participant := domain.AssignmentParticipant{
+		AssignmentID: assignment.ID, UserID: targetUserID, DueAt: f.Now.Add(time.Hour),
+	}
+
+	m.User.GetByIDMock.Expect(minimock.AnyContext, targetUserID).
+		Return([]domain.User{{ID: targetUserID, RoleID: roleID}}, nil)
+	m.AccountRole.GetByIDMock.Return([]domain.AccountRole{{ID: roleID, AccountID: f.AccountID}}, nil)
+	m.Access.ManagedAssignmentGroupsMock.Return(true, nil, nil)
+	m.Participants.SelectByUserIDMock.Expect(minimock.AnyContext, targetUserID).
+		Return([]domain.AssignmentParticipant{participant}, nil)
+	m.Assignment.SelectByIDsMock.Return([]domain.Assignment{assignment}, nil)
+	m.Targets.SelectByAssignmentIDsMock.Return(nil, nil)
+	m.User.GetByIDsMock.Return([]domain.User{
+		{ID: f.InitiatorID, Name: "Автор"}, {ID: targetUserID, Name: "Сотрудник"},
+	}, nil)
+	m.Participants.CountByAssignmentIDsMock.Return(map[uuid.UUID]domain.AssignmentCounters{}, nil)
+	m.Video.SelectByIDsMock.Return([]domain.Video{f.Video}, nil)
+	m.Progress.SelectByVideoIDsMock.Return(nil, nil)
+
+	bounds := []domain.ChapterBound{
+		{Chapter: domain.Chapter{ID: uuid.New(), Name: "Глава 1", StartMs: 0}, EndMs: 10000},
+	}
+	m.Chapters.SelectBoundsByVideoIDMock.Return(bounds, nil)
+	m.Chapters.SelectProgressByVideoAndUsersMock.Return(nil, nil)
+
+	svc := newAssignmentService(m, f.Cfg, f.Now)
+	items, err := svc.ListForUser(t.Context(), f.AccountID, f.InitiatorID, targetUserID)
+
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+
+	summary := items[0].Participant.ChapterProgress
+	require.NotNil(t, summary)
+	require.Equal(t, 1, summary.Total)
+	require.Equal(t, []domain.ParticipantChapterStatus{
+		{Name: "Глава 1", CoveragePct: 0, Status: domain.ChapterStatusNotStarted},
+	}, summary.Chapters)
 }
 
 func ptrTime(t time.Time) *time.Time { return &t }

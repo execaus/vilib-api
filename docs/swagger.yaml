@@ -204,6 +204,8 @@ definitions:
         type: string
       cancelled_at:
         type: string
+      chapter_progress:
+        $ref: '#/definitions/dto.ChapterProgressSummary'
       completed_at:
         type: string
       completed_late:
@@ -282,6 +284,17 @@ definitions:
       status:
         description: Status — not_started | partial | done.
         type: string
+    type: object
+  dto.ChapterProgressSummary:
+    properties:
+      chapters:
+        items:
+          $ref: '#/definitions/dto.ParticipantChapterStatus'
+        type: array
+      completed:
+        type: integer
+      total:
+        type: integer
     type: object
   dto.ChapterResponse:
     properties:
@@ -720,6 +733,15 @@ definitions:
       role_id:
         type: string
       role_name:
+        type: string
+    type: object
+  dto.ParticipantChapterStatus:
+    properties:
+      coverage_pct:
+        type: integer
+      name:
+        type: string
+      status:
         type: string
     type: object
   dto.RegisterRequest:

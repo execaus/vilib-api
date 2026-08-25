@@ -3797,6 +3797,9 @@ const docTemplate = `{
                 "cancelled_at": {
                     "type": "string"
                 },
+                "chapter_progress": {
+                    "$ref": "#/definitions/dto.ChapterProgressSummary"
+                },
                 "completed_at": {
                     "type": "string"
                 },
@@ -3910,6 +3913,23 @@ const docTemplate = `{
                 "status": {
                     "description": "Status — not_started | partial | done.",
                     "type": "string"
+                }
+            }
+        },
+        "dto.ChapterProgressSummary": {
+            "type": "object",
+            "properties": {
+                "chapters": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ParticipantChapterStatus"
+                    }
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -4561,6 +4581,20 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "role_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.ParticipantChapterStatus": {
+            "type": "object",
+            "properties": {
+                "coverage_pct": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }

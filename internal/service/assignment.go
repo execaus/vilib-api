@@ -52,6 +52,7 @@ type AssignmentService struct {
 	progress     repository.WatchProgress
 	video        repository.Video
 	groupMembers repository.GroupMember
+	chapters     repository.Chapter
 	srv          *Service
 	cfg          config.VideoConfig
 	// now — источник текущего времени; в проде time.Now, в тестах подменяется опцией
@@ -78,13 +79,14 @@ func NewAssignmentService(
 	progress repository.WatchProgress,
 	video repository.Video,
 	groupMembers repository.GroupMember,
+	chapters repository.Chapter,
 	srv *Service,
 	cfg config.VideoConfig,
 	opts ...AssignmentServiceOption,
 ) *AssignmentService {
 	s := &AssignmentService{
 		repo: repo, targets: targets, participants: participants, events: events,
-		progress: progress, video: video, groupMembers: groupMembers, srv: srv, cfg: cfg,
+		progress: progress, video: video, groupMembers: groupMembers, chapters: chapters, srv: srv, cfg: cfg,
 		now: time.Now,
 	}
 
@@ -750,7 +752,8 @@ func assignmentTargetName(
 }
 
 // buildParticipantDetails собирает участников карточки с данными пользователя, текущим
-// покрытием и признаком доступа к видео (§4 дизайна эпика Э3, Get).
+// покрытием, признаком доступа к видео и сводкой пройденности глав (§4 дизайна эпика Э3, Get;
+// §6 дизайна эпика Э4).
 func (s *AssignmentService) buildParticipantDetails(
 	ctx context.Context, accountID uuid.UUID, assignment domain.Assignment, participants []domain.AssignmentParticipant,
 ) ([]domain.ParticipantDetails, error) {
@@ -765,13 +768,27 @@ func (s *AssignmentService) buildParticipantDetails(
 
 	progressByUser, durationMs := s.videoProgressForAssignment(ctx, assignment)
 
+	durationByVideo := map[uuid.UUID]*int64{}
+	if assignment.VideoID != nil {
+		durationByVideo[*assignment.VideoID] = durationMs
+	}
+	assignmentByID := map[uuid.UUID]domain.Assignment{assignment.ID: assignment}
+
+	// full=true — карточка одного назначения (Get) отдаёт полную детализацию по главам
+	// (§6 дизайна эпика Э4).
+	chapterProgress, err := s.chapterProgressForParticipants(ctx, assignmentByID, participants, durationByVideo, true)
+	if err != nil {
+		return nil, err
+	}
+
 	details := make([]domain.ParticipantDetails, len(participants))
 	for i, p := range participants {
 		details[i] = domain.ParticipantDetails{
-			Participant: p,
-			User:        userByID[p.UserID],
-			CoveragePct: participantCoveragePct(p, progressByUser, durationMs),
-			HasAccess:   s.participantHasAccess(ctx, accountID, assignment, p),
+			Participant:     p,
+			User:            userByID[p.UserID],
+			CoveragePct:     participantCoveragePct(p, progressByUser, durationMs),
+			HasAccess:       s.participantHasAccess(ctx, accountID, assignment, p),
+			ChapterProgress: chapterProgress[i],
 		}
 	}
 
@@ -1189,7 +1206,9 @@ func (s *AssignmentService) groupedParticipantDetails(
 		return empty, nil
 	}
 
-	details, err := s.participantDetailsBatch(ctx, accountID, assignmentByID, participants, userByID)
+	// full=false — сводный список назначений отдаёт только Total/Completed по главам, без
+	// раскрываемой детализации (§6 дизайна эпика Э4, чтобы не раздувать ответ).
+	details, err := s.participantDetailsBatch(ctx, accountID, assignmentByID, participants, userByID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1221,13 +1240,20 @@ func filterActiveParticipants(
 // participantDetailsBatch собирает ParticipantDetails для произвольного набора участников
 // сразу нескольких назначений одним проходом по батчам прогресса/длительности видео (§4
 // дизайна эпика Э3, «батчи вместо JOIN» — в отличие от Get, где назначение всегда одно).
+// full управляет детализацией сводки по главам (§6 дизайна эпика Э4): true — отчёт по
+// сотруднику (ListForUser), false — сводный список назначений (List, expand_participants).
 // Результат выровнен по индексу входного среза participants.
 func (s *AssignmentService) participantDetailsBatch(
 	ctx context.Context, accountID uuid.UUID,
 	assignmentByID map[uuid.UUID]domain.Assignment, participants []domain.AssignmentParticipant,
-	userByID map[uuid.UUID]domain.User,
+	userByID map[uuid.UUID]domain.User, full bool,
 ) ([]domain.ParticipantDetails, error) {
 	progressByVideoUser, durationByVideo, err := s.progressForAssignments(ctx, assignmentByID)
+	if err != nil {
+		return nil, err
+	}
+
+	chapterProgress, err := s.chapterProgressForParticipants(ctx, assignmentByID, participants, durationByVideo, full)
 	if err != nil {
 		return nil, err
 	}
@@ -1246,13 +1272,148 @@ func (s *AssignmentService) participantDetailsBatch(
 		}
 
 		details[i] = domain.ParticipantDetails{
-			Participant: p, User: userByID[p.UserID],
-			CoveragePct: participantCoveragePct(p, progressByUser, durationMs),
-			HasAccess:   s.participantHasAccess(ctx, accountID, assignment, p),
+			Participant:     p,
+			User:            userByID[p.UserID],
+			CoveragePct:     participantCoveragePct(p, progressByUser, durationMs),
+			HasAccess:       s.participantHasAccess(ctx, accountID, assignment, p),
+			ChapterProgress: chapterProgress[i],
 		}
 	}
 
 	return details, nil
+}
+
+// chapterProgressForParticipants батчем строит сводку пройденности глав для набора участников,
+// сгруппированных по видео их назначения (§6 дизайна эпика Э4): на каждое различное видео —
+// не более двух SQL-запросов (границы глав + покрытие сразу всех его участников,
+// SelectProgressByVideoAndUsers) независимо от числа участников и назначений на это видео
+// (Н1, КП-4). Результат выровнен по индексу participants; элемент — nil, если у назначения нет
+// видео (удалено) либо у видео нет глав (Э4-Т4). full — заполнять ли Chapters (§6: в сводном
+// списке назначений — только Total/Completed).
+func (s *AssignmentService) chapterProgressForParticipants(
+	ctx context.Context,
+	assignmentByID map[uuid.UUID]domain.Assignment, participants []domain.AssignmentParticipant,
+	durationByVideo map[uuid.UUID]*int64, full bool,
+) ([]*domain.ChapterProgressSummary, error) {
+	result := make([]*domain.ChapterProgressSummary, len(participants))
+
+	indicesByVideo := make(map[uuid.UUID][]int)
+	for i, p := range participants {
+		videoID := assignmentByID[p.AssignmentID].VideoID
+		if videoID == nil {
+			continue
+		}
+		indicesByVideo[*videoID] = append(indicesByVideo[*videoID], i)
+	}
+
+	for videoID, idxs := range indicesByVideo {
+		durationMs := durationMsOrZero(durationByVideo[videoID])
+
+		err := s.fillChapterProgressForVideo(ctx, videoID, durationMs, idxs, participants, full, result)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
+// fillChapterProgressForVideo заполняет result сводками по главам одного видео сразу для всех
+// переданных индексов участников (§6 дизайна эпика Э4) — вынесена из
+// chapterProgressForParticipants ради приемлемой цикломатической сложности.
+func (s *AssignmentService) fillChapterProgressForVideo(
+	ctx context.Context, videoID uuid.UUID, durationMs int64,
+	idxs []int, participants []domain.AssignmentParticipant, full bool,
+	result []*domain.ChapterProgressSummary,
+) error {
+	bounds, err := s.chapters.SelectBoundsByVideoID(ctx, videoID, durationMs)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+	if len(bounds) == 0 {
+		return nil
+	}
+
+	userIDs := make([]uuid.UUID, len(idxs))
+	for i, idx := range idxs {
+		userIDs[i] = participants[idx].UserID
+	}
+	userIDs = dedupeUUIDs(userIDs)
+
+	progressRows, err := s.chapters.SelectProgressByVideoAndUsers(ctx, videoID, userIDs, durationMs)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return err
+	}
+
+	coveredByUser := groupChapterCoverageByUser(progressRows)
+	threshold := s.cfg.WatchCompletionThreshold
+
+	for _, idx := range idxs {
+		summary := buildChapterProgressSummary(bounds, coveredByUser[participants[idx].UserID], threshold, full)
+		result[idx] = &summary
+	}
+
+	return nil
+}
+
+// groupChapterCoverageByUser группирует построчный результат SelectProgressByVideoAndUsers по
+// пользователю и главе — вспомогательная структура для buildChapterProgressSummary.
+func groupChapterCoverageByUser(rows []domain.ChapterUserProgress) map[uuid.UUID]map[uuid.UUID]int64 {
+	byUser := make(map[uuid.UUID]map[uuid.UUID]int64, len(rows))
+	for _, r := range rows {
+		byChapter, ok := byUser[r.UserID]
+		if !ok {
+			byChapter = make(map[uuid.UUID]int64)
+			byUser[r.UserID] = byChapter
+		}
+		byChapter[r.ID] = r.CoveredMs
+	}
+
+	return byUser
+}
+
+// buildChapterProgressSummary строит сводку пройденности глав одного участника по границам
+// глав видео и его покрытию (§3, §6 дизайна эпика Э4, В-6): статус каждой главы всегда
+// считается по актуальной разметке и актуальному покрытию — правка границ меняет сводку без
+// какого-либо влияния на зачёт видео. full=false — Chapters остаётся nil (только Total/
+// Completed, сводный список назначений).
+func buildChapterProgressSummary(
+	bounds []domain.ChapterBound, coveredByChapter map[uuid.UUID]int64, threshold float64, full bool,
+) domain.ChapterProgressSummary {
+	summary := domain.ChapterProgressSummary{Total: len(bounds)}
+
+	var chapters []domain.ParticipantChapterStatus
+	if full {
+		chapters = make([]domain.ParticipantChapterStatus, 0, len(bounds))
+	}
+
+	for _, bound := range bounds {
+		progress := domain.ChapterProgress{ChapterBound: bound, CoveredMs: coveredByChapter[bound.ID]}
+		status := progress.Status(threshold)
+		if status == domain.ChapterStatusDone {
+			summary.Completed++
+		}
+		if full {
+			chapters = append(chapters, domain.ParticipantChapterStatus{
+				Name: bound.Name, CoveragePct: progress.CoveragePct(), Status: status,
+			})
+		}
+	}
+	summary.Chapters = chapters
+
+	return summary
+}
+
+// durationMsOrZero возвращает длительность видео либо ноль, если она неизвестна — безопасно
+// для запросов границ/покрытия глав (тот же приём, что chapterDurationOrZero в chapter.go).
+func durationMsOrZero(durationMs *int64) int64 {
+	if durationMs == nil {
+		return 0
+	}
+
+	return *durationMs
 }
 
 // progressForAssignments батчем выбирает длительность и прогресс просмотра всех видео
@@ -1461,7 +1622,9 @@ func (s *AssignmentService) ListForUser(
 
 	targetsByAssignment := groupTargetsByAssignment(targets, assignmentByID, userByID)
 
-	details, err := s.participantDetailsBatch(ctx, accountID, assignmentByID, inScope, userByID)
+	// full=true — отчёт по сотруднику отдаёт полную детализацию по главам на каждое назначение
+	// (§6 дизайна эпика Э4).
+	details, err := s.participantDetailsBatch(ctx, accountID, assignmentByID, inScope, userByID, true)
 	if err != nil {
 		return nil, err
 	}
