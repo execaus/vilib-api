@@ -51,6 +51,14 @@ type UserGroupVideo struct {
 	Width null.Val[int32] `db:"width" `
 	// Высота видео в пикселях
 	Height null.Val[int32] `db:"height" `
+	// Признак срочного видео: берётся в обработку приоритетной полосой мимо общей очереди (эпик Э5)
+	IsUrgent bool `db:"is_urgent" `
+	// Время постановки в очередь на обработку (переход uploading → queued) — момент complete из метрики публикации
+	QueuedAt null.Val[time.Time] `db:"queued_at" `
+	// Время взятия в обработку конвейером (переход queued → compressing по событию ProcessingStarted)
+	CompressingStartedAt null.Val[time.Time] `db:"compressing_started_at" `
+	// Время готовности видео (переход compressing → ready по событию ProcessingCompleted)
+	ReadyAt null.Val[time.Time] `db:"ready_at" `
 
 	R userGroupVideoR `db:"-" `
 }
@@ -78,41 +86,49 @@ type userGroupVideoR struct {
 func buildUserGroupVideoColumns(alias string) userGroupVideoColumns {
 	return userGroupVideoColumns{
 		ColumnsExpr: expr.NewColumnsExpr(
-			"id", "user_group_id", "name", "author", "status", "created_at", "status_changed_at", "processing_attempt", "failure_class", "failure_reason", "duration_ms", "width", "height",
+			"id", "user_group_id", "name", "author", "status", "created_at", "status_changed_at", "processing_attempt", "failure_class", "failure_reason", "duration_ms", "width", "height", "is_urgent", "queued_at", "compressing_started_at", "ready_at",
 		).WithParent("user_group_videos"),
-		tableAlias:        alias,
-		ID:                psql.Quote(alias, "id"),
-		UserGroupID:       psql.Quote(alias, "user_group_id"),
-		Name:              psql.Quote(alias, "name"),
-		Author:            psql.Quote(alias, "author"),
-		Status:            psql.Quote(alias, "status"),
-		CreatedAt:         psql.Quote(alias, "created_at"),
-		StatusChangedAt:   psql.Quote(alias, "status_changed_at"),
-		ProcessingAttempt: psql.Quote(alias, "processing_attempt"),
-		FailureClass:      psql.Quote(alias, "failure_class"),
-		FailureReason:     psql.Quote(alias, "failure_reason"),
-		DurationMS:        psql.Quote(alias, "duration_ms"),
-		Width:             psql.Quote(alias, "width"),
-		Height:            psql.Quote(alias, "height"),
+		tableAlias:           alias,
+		ID:                   psql.Quote(alias, "id"),
+		UserGroupID:          psql.Quote(alias, "user_group_id"),
+		Name:                 psql.Quote(alias, "name"),
+		Author:               psql.Quote(alias, "author"),
+		Status:               psql.Quote(alias, "status"),
+		CreatedAt:            psql.Quote(alias, "created_at"),
+		StatusChangedAt:      psql.Quote(alias, "status_changed_at"),
+		ProcessingAttempt:    psql.Quote(alias, "processing_attempt"),
+		FailureClass:         psql.Quote(alias, "failure_class"),
+		FailureReason:        psql.Quote(alias, "failure_reason"),
+		DurationMS:           psql.Quote(alias, "duration_ms"),
+		Width:                psql.Quote(alias, "width"),
+		Height:               psql.Quote(alias, "height"),
+		IsUrgent:             psql.Quote(alias, "is_urgent"),
+		QueuedAt:             psql.Quote(alias, "queued_at"),
+		CompressingStartedAt: psql.Quote(alias, "compressing_started_at"),
+		ReadyAt:              psql.Quote(alias, "ready_at"),
 	}
 }
 
 type userGroupVideoColumns struct {
 	expr.ColumnsExpr
-	tableAlias        string
-	ID                psql.Expression
-	UserGroupID       psql.Expression
-	Name              psql.Expression
-	Author            psql.Expression
-	Status            psql.Expression
-	CreatedAt         psql.Expression
-	StatusChangedAt   psql.Expression
-	ProcessingAttempt psql.Expression
-	FailureClass      psql.Expression
-	FailureReason     psql.Expression
-	DurationMS        psql.Expression
-	Width             psql.Expression
-	Height            psql.Expression
+	tableAlias           string
+	ID                   psql.Expression
+	UserGroupID          psql.Expression
+	Name                 psql.Expression
+	Author               psql.Expression
+	Status               psql.Expression
+	CreatedAt            psql.Expression
+	StatusChangedAt      psql.Expression
+	ProcessingAttempt    psql.Expression
+	FailureClass         psql.Expression
+	FailureReason        psql.Expression
+	DurationMS           psql.Expression
+	Width                psql.Expression
+	Height               psql.Expression
+	IsUrgent             psql.Expression
+	QueuedAt             psql.Expression
+	CompressingStartedAt psql.Expression
+	ReadyAt              psql.Expression
 }
 
 func (c userGroupVideoColumns) Alias() string {
@@ -127,23 +143,27 @@ func (userGroupVideoColumns) AliasedAs(alias string) userGroupVideoColumns {
 // All values are optional, and do not have to be set
 // Generated columns are not included
 type UserGroupVideoSetter struct {
-	ID                omit.Val[uuid.UUID]  `db:"id,pk" `
-	UserGroupID       omit.Val[uuid.UUID]  `db:"user_group_id" `
-	Name              omit.Val[string]     `db:"name" `
-	Author            omit.Val[uuid.UUID]  `db:"author" `
-	Status            omit.Val[int32]      `db:"status" `
-	CreatedAt         omit.Val[time.Time]  `db:"created_at" `
-	StatusChangedAt   omit.Val[time.Time]  `db:"status_changed_at" `
-	ProcessingAttempt omit.Val[int32]      `db:"processing_attempt" `
-	FailureClass      omitnull.Val[string] `db:"failure_class" `
-	FailureReason     omitnull.Val[string] `db:"failure_reason" `
-	DurationMS        omitnull.Val[int64]  `db:"duration_ms" `
-	Width             omitnull.Val[int32]  `db:"width" `
-	Height            omitnull.Val[int32]  `db:"height" `
+	ID                   omit.Val[uuid.UUID]     `db:"id,pk" `
+	UserGroupID          omit.Val[uuid.UUID]     `db:"user_group_id" `
+	Name                 omit.Val[string]        `db:"name" `
+	Author               omit.Val[uuid.UUID]     `db:"author" `
+	Status               omit.Val[int32]         `db:"status" `
+	CreatedAt            omit.Val[time.Time]     `db:"created_at" `
+	StatusChangedAt      omit.Val[time.Time]     `db:"status_changed_at" `
+	ProcessingAttempt    omit.Val[int32]         `db:"processing_attempt" `
+	FailureClass         omitnull.Val[string]    `db:"failure_class" `
+	FailureReason        omitnull.Val[string]    `db:"failure_reason" `
+	DurationMS           omitnull.Val[int64]     `db:"duration_ms" `
+	Width                omitnull.Val[int32]     `db:"width" `
+	Height               omitnull.Val[int32]     `db:"height" `
+	IsUrgent             omit.Val[bool]          `db:"is_urgent" `
+	QueuedAt             omitnull.Val[time.Time] `db:"queued_at" `
+	CompressingStartedAt omitnull.Val[time.Time] `db:"compressing_started_at" `
+	ReadyAt              omitnull.Val[time.Time] `db:"ready_at" `
 }
 
 func (s UserGroupVideoSetter) SetColumns() []string {
-	vals := make([]string, 0, 13)
+	vals := make([]string, 0, 17)
 	if s.ID.IsValue() {
 		vals = append(vals, "id")
 	}
@@ -182,6 +202,18 @@ func (s UserGroupVideoSetter) SetColumns() []string {
 	}
 	if !s.Height.IsUnset() {
 		vals = append(vals, "height")
+	}
+	if s.IsUrgent.IsValue() {
+		vals = append(vals, "is_urgent")
+	}
+	if !s.QueuedAt.IsUnset() {
+		vals = append(vals, "queued_at")
+	}
+	if !s.CompressingStartedAt.IsUnset() {
+		vals = append(vals, "compressing_started_at")
+	}
+	if !s.ReadyAt.IsUnset() {
+		vals = append(vals, "ready_at")
 	}
 	return vals
 }
@@ -226,6 +258,18 @@ func (s UserGroupVideoSetter) Overwrite(t *UserGroupVideo) {
 	if !s.Height.IsUnset() {
 		t.Height = s.Height.MustGetNull()
 	}
+	if s.IsUrgent.IsValue() {
+		t.IsUrgent = s.IsUrgent.MustGet()
+	}
+	if !s.QueuedAt.IsUnset() {
+		t.QueuedAt = s.QueuedAt.MustGetNull()
+	}
+	if !s.CompressingStartedAt.IsUnset() {
+		t.CompressingStartedAt = s.CompressingStartedAt.MustGetNull()
+	}
+	if !s.ReadyAt.IsUnset() {
+		t.ReadyAt = s.ReadyAt.MustGetNull()
+	}
 }
 
 func (s *UserGroupVideoSetter) Apply(q *dialect.InsertQuery) {
@@ -234,7 +278,7 @@ func (s *UserGroupVideoSetter) Apply(q *dialect.InsertQuery) {
 	})
 
 	q.AppendValues(bob.ExpressionFunc(func(ctx context.Context, w io.StringWriter, d bob.Dialect, start int) ([]any, error) {
-		vals := make([]bob.Expression, 13)
+		vals := make([]bob.Expression, 17)
 		if s.ID.IsValue() {
 			vals[0] = psql.Arg(s.ID.MustGet())
 		} else {
@@ -313,6 +357,30 @@ func (s *UserGroupVideoSetter) Apply(q *dialect.InsertQuery) {
 			vals[12] = psql.Raw("DEFAULT")
 		}
 
+		if s.IsUrgent.IsValue() {
+			vals[13] = psql.Arg(s.IsUrgent.MustGet())
+		} else {
+			vals[13] = psql.Raw("DEFAULT")
+		}
+
+		if !s.QueuedAt.IsUnset() {
+			vals[14] = psql.Arg(s.QueuedAt.MustGetNull())
+		} else {
+			vals[14] = psql.Raw("DEFAULT")
+		}
+
+		if !s.CompressingStartedAt.IsUnset() {
+			vals[15] = psql.Arg(s.CompressingStartedAt.MustGetNull())
+		} else {
+			vals[15] = psql.Raw("DEFAULT")
+		}
+
+		if !s.ReadyAt.IsUnset() {
+			vals[16] = psql.Arg(s.ReadyAt.MustGetNull())
+		} else {
+			vals[16] = psql.Raw("DEFAULT")
+		}
+
 		return bob.ExpressSlice(ctx, w, d, start, vals, "", ", ", "")
 	}))
 }
@@ -322,7 +390,7 @@ func (s UserGroupVideoSetter) UpdateMod() bob.Mod[*dialect.UpdateQuery] {
 }
 
 func (s UserGroupVideoSetter) Expressions(prefix ...string) []bob.Expression {
-	exprs := make([]bob.Expression, 0, 13)
+	exprs := make([]bob.Expression, 0, 17)
 
 	if s.ID.IsValue() {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
@@ -412,6 +480,34 @@ func (s UserGroupVideoSetter) Expressions(prefix ...string) []bob.Expression {
 		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
 			psql.Quote(append(prefix, "height")...),
 			psql.Arg(s.Height),
+		}})
+	}
+
+	if s.IsUrgent.IsValue() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "is_urgent")...),
+			psql.Arg(s.IsUrgent),
+		}})
+	}
+
+	if !s.QueuedAt.IsUnset() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "queued_at")...),
+			psql.Arg(s.QueuedAt),
+		}})
+	}
+
+	if !s.CompressingStartedAt.IsUnset() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "compressing_started_at")...),
+			psql.Arg(s.CompressingStartedAt),
+		}})
+	}
+
+	if !s.ReadyAt.IsUnset() {
+		exprs = append(exprs, expr.Join{Sep: " = ", Exprs: []bob.Expression{
+			psql.Quote(append(prefix, "ready_at")...),
+			psql.Arg(s.ReadyAt),
 		}})
 	}
 

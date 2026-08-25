@@ -165,6 +165,33 @@ type Video struct {
 	DurationMs        *int64
 	Width             *int
 	Height            *int
+	// IsUrgent — признак срочного видео: берётся в обработку приоритетной полосой мимо общей
+	// очереди (эпик Э5, В-2).
+	IsUrgent bool
+	// QueuedAt — время постановки в очередь на обработку (переход uploading → queued), момент
+	// complete из метрики времени публикации (эпик Э5, Э5-Т5).
+	QueuedAt *time.Time
+	// CompressingStartedAt — время взятия в обработку конвейером (переход queued → compressing
+	// по событию ProcessingStarted).
+	CompressingStartedAt *time.Time
+	// ReadyAt — время готовности видео (переход compressing → ready по событию
+	// ProcessingCompleted).
+	ReadyAt *time.Time
+}
+
+// PipelineProgress — индикатор живости конвейера обработки видео для одной полосы (архивной
+// или срочной): момент последнего успешно обработанного ProcessingStarted в этой полосе.
+// Используется watchdog'ом, чтобы отличить «конвейер обрабатывает, очередь длинная» от
+// «конвейер стоит» (эпик Э5, исправление Д-1).
+type PipelineProgress struct {
+	IsUrgent       bool
+	LastDequeuedAt time.Time
+}
+
+// FromDB заполняет индикатор прогресса конвейера данными строки pipeline_progress.
+func (p *PipelineProgress) FromDB(db *schema.PipelineProgress) {
+	p.IsUrgent = db.IsUrgent
+	p.LastDequeuedAt = db.LastDequeuedAt
 }
 
 // VideoAuthor — краткие сведения об авторе видео для отображения в карточке (П-6 контракта
@@ -226,6 +253,10 @@ func (v *Video) FromDB(db *schema.UserGroupVideo) {
 	v.ProcessingAttempt = int(db.ProcessingAttempt)
 	v.FailureReason = db.FailureReason.Ptr()
 	v.DurationMs = db.DurationMS.Ptr()
+	v.IsUrgent = db.IsUrgent
+	v.QueuedAt = db.QueuedAt.Ptr()
+	v.CompressingStartedAt = db.CompressingStartedAt.Ptr()
+	v.ReadyAt = db.ReadyAt.Ptr()
 
 	if p := db.FailureClass.Ptr(); p != nil {
 		failureClass := VideoFailureClass(*p)
