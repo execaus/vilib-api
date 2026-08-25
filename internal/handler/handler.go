@@ -26,6 +26,7 @@ const (
 	pathKeyGroupMemberUserID
 	pathKeyProfile
 	pathKeyAssignmentID
+	pathKeyChapterID
 )
 
 //nolint:gochecknoglobals // URL-константы — принятая конвенция проекта (rules/CODESTYLE_GOLANG_API.md).
@@ -53,6 +54,8 @@ var (
 	GetVideoHLSMasterURL   = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/hls/master.m3u8")
 	GetVideoHLSPlaylistURL = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/hls/%s/playlist.m3u8")
 	VideoProgressURL       = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/progress")
+	ChaptersURL            = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/chapters")
+	ChapterURL             = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/chapters/%s")
 
 	CreateAssignmentURL            = NewURLSupplier("accounts/%s/assignments")
 	GetAssignmentURL               = NewURLSupplier("accounts/%s/assignments/%s")
@@ -261,6 +264,7 @@ func (h *Handler) GetRouter() *gin.Engine {
 	)
 
 	h.registerAssignmentRoutes(v1)
+	h.registerChapterRoutes(v1)
 
 	return engine
 }
@@ -296,5 +300,30 @@ func (h *Handler) registerAssignmentRoutes(v1 *gin.RouterGroup) {
 		ListUserAssignmentsURL.WithPathParams(pathKeyAccountID, pathKeyUserID),
 		h.RequireAuthMiddleware,
 		h.ListUserAssignments,
+	)
+}
+
+// registerChapterRoutes регистрирует маршруты глав видео (§5 дизайна эпика Э4) — вынесено из
+// GetRouter отдельным методом, чтобы регистрация маршрутов оставалась обозримой по разделам.
+func (h *Handler) registerChapterRoutes(v1 *gin.RouterGroup) {
+	v1.GET(
+		ChaptersURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		h.RequireAuthMiddleware,
+		h.ListChapters,
+	)
+	v1.POST(
+		ChaptersURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		h.RequireAuthMiddleware,
+		h.CreateChapter,
+	)
+	v1.PATCH(
+		ChapterURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID, pathKeyChapterID),
+		h.RequireAuthMiddleware,
+		h.UpdateChapter,
+	)
+	v1.DELETE(
+		ChapterURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID, pathKeyChapterID),
+		h.RequireAuthMiddleware,
+		h.DeleteChapter,
 	)
 }

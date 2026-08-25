@@ -116,3 +116,18 @@ type ChapterUserProgress struct {
 
 	UserID uuid.UUID
 }
+
+// CreateChapter — параметры создания главы (§4 дизайна эпика Э4): StartMs проверяется на
+// вхождение в [0, duration_ms) видео сервисом, Name — на длину 1–200 символов биндингом DTO.
+type CreateChapter struct {
+	StartMs int64
+	Name    string
+}
+
+// ChapterPatch — частичное изменение главы (§4 дизайна эпика Э4, ChapterService.Update): nil
+// в поле — оно не меняется. Переименование без изменения StartMs не требует повторной проверки
+// диапазона и уникальности.
+type ChapterPatch struct {
+	StartMs *int64
+	Name    *string
+}

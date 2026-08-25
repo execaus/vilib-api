@@ -3,7 +3,6 @@ definitions:
   domain.PermissionMask:
     enum:
     - 0
-    format: int64
     type: integer
     x-enum-varnames:
     - DefaultPermissionMask
@@ -262,6 +261,33 @@ definitions:
     - new_password
     - old_password
     type: object
+  dto.Chapter:
+    properties:
+      coverage_pct:
+        description: CoveragePct — покрытие главы просмотром запрашивающего, проценты.
+        type: integer
+      duration_ms:
+        description: DurationMs — длина главы (EndMs - StartMs).
+        type: integer
+      end_ms:
+        description: EndMs — начало следующей главы либо конец ролика; вычисляется
+          сервером.
+        type: integer
+      id:
+        type: string
+      name:
+        type: string
+      start_ms:
+        type: integer
+      status:
+        description: Status — not_started | partial | done.
+        type: string
+    type: object
+  dto.ChapterResponse:
+    properties:
+      chapter:
+        $ref: '#/definitions/dto.Chapter'
+    type: object
   dto.CompleteVideoUploadResponse:
     properties:
       video:
@@ -361,6 +387,18 @@ definitions:
         items:
           $ref: '#/definitions/dto.RejectedTarget'
         type: array
+    type: object
+  dto.CreateChapterRequest:
+    properties:
+      name:
+        maxLength: 200
+        minLength: 1
+        type: string
+      start_ms:
+        minimum: 0
+        type: integer
+    required:
+    - name
     type: object
   dto.CreateGroupRoleRequest:
     properties:
@@ -550,6 +588,13 @@ definitions:
       assignments:
         items:
           $ref: '#/definitions/dto.AssignmentListItem'
+        type: array
+    type: object
+  dto.ListChaptersResponse:
+    properties:
+      chapters:
+        items:
+          $ref: '#/definitions/dto.Chapter'
         type: array
     type: object
   dto.ListUserAssignmentsResponse:
@@ -788,6 +833,16 @@ definitions:
     properties:
       assignment:
         $ref: '#/definitions/dto.AssignmentDetails'
+    type: object
+  dto.UpdateChapterRequest:
+    properties:
+      name:
+        maxLength: 200
+        minLength: 1
+        type: string
+      start_ms:
+        minimum: 0
+        type: integer
     type: object
   dto.UpdateGroupMemberRequest:
     properties:
@@ -2324,6 +2379,237 @@ paths:
       summary: Переименование видео
       tags:
       - videos
+  /api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}/chapters:
+    get:
+      description: |-
+        Возвращает главы видео, упорядоченные по времени начала, вместе с покрытием
+        просмотра инициатора (пройдена/частично/не просмотрена). Видео без глав отдаёт
+        пустой список, а не 404 (§4, §5 дизайна эпика Э4).
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      - description: ID видео
+        in: path
+        name: videoId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ListChaptersResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Список глав видео
+      tags:
+      - chapters
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Создаёт главу видео по моменту начала — конец главы вычисляется сервером как
+        начало следующей главы либо длительность видео (§1, §4, §5 дизайна эпика Э4).
+        Доступно только обладателю права ManageVideo и только у видео в статусе ready.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      - description: ID видео
+        in: path
+        name: videoId
+        required: true
+        type: string
+      - description: Тело запроса
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateChapterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.ChapterResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Создание главы видео
+      tags:
+      - chapters
+  /api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}/chapters/{chapterId}:
+    delete:
+      description: |-
+        Удаляет главу видео; соседние главы автоматически «наследуют» освободившийся
+        промежуток при следующем чтении границ (§1 дизайна эпика Э4). Доступно только
+        обладателю права ManageVideo.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      - description: ID видео
+        in: path
+        name: videoId
+        required: true
+        type: string
+      - description: ID главы
+        in: path
+        name: chapterId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Удаление главы видео
+      tags:
+      - chapters
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Меняет начало и/или название главы; конец главы пересчитывается сервером.
+        Правка допустима и после того, как видео уже смотрели — статусы глав
+        пересчитываются по текущей разметке, зачёт видео не меняется (Э4-Т7). Доступно
+        только обладателю права ManageVideo.
+      parameters:
+      - description: ID аккаунта
+        in: path
+        name: accountId
+        required: true
+        type: string
+      - description: ID группы
+        in: path
+        name: userGroupId
+        required: true
+        type: string
+      - description: ID видео
+        in: path
+        name: videoId
+        required: true
+        type: string
+      - description: ID главы
+        in: path
+        name: chapterId
+        required: true
+        type: string
+      - description: Тело запроса
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.UpdateChapterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ChapterResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/dto.ErrorMessage'
+        "500":
+          description: Internal Server Error
+      security:
+      - BearerAuth: []
+      summary: Редактирование главы видео
+      tags:
+      - chapters
   /api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}/progress:
     get:
       consumes:

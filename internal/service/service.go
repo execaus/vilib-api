@@ -28,6 +28,7 @@ import (
 //go:generate minimock -i Profile -o ./service_mocks/profile_mock.go
 //go:generate minimock -i WatchProgress -o ./service_mocks/watch_progress_mock.go
 //go:generate minimock -i Assignment -o ./service_mocks/assignment_mock.go
+//go:generate minimock -i Chapter -o ./service_mocks/chapter_mock.go
 //go:generate minimock -i vilib-api/internal/s3.S3 -o ./service_mocks/s3_mock.go
 
 type Auth interface {
@@ -411,6 +412,31 @@ type Assignment interface {
 	OnGroupDeleted(ctx context.Context, groupID uuid.UUID) error
 }
 
+// Chapter — CRUD глав видео и выдача глав с покрытием просмотра (§4 дизайна эпика Э4).
+type Chapter interface {
+	// List возвращает главы видео с покрытием инициатора, упорядоченные по времени начала.
+	// Право — Access.CanWatchVideo (включает ManageVideo в OR). Видео без глав — пустой
+	// список, не ошибка (Э4-Т4).
+	List(
+		ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID,
+	) ([]domain.ChapterProgress, error)
+	// Create создаёт главу видео. Право — Access.CanManageVideo. Видео должно быть в статусе
+	// ready, start_ms — в пределах [0, duration_ms), не более 100 глав на видео, начало
+	// уникально в пределах видео.
+	Create(
+		ctx context.Context, accountID, groupID, initiatorID, videoID uuid.UUID, in domain.CreateChapter,
+	) (domain.ChapterBound, error)
+	// Update меняет начало и/или название главы. Право — Access.CanManageVideo. Диапазон
+	// начала и готовность видео проверяются только при изменении StartMs.
+	Update(
+		ctx context.Context,
+		accountID, groupID, initiatorID, videoID, chapterID uuid.UUID,
+		patch domain.ChapterPatch,
+	) (domain.ChapterBound, error)
+	// Delete удаляет главу видео. Право — Access.CanManageVideo.
+	Delete(ctx context.Context, accountID, groupID, initiatorID, videoID, chapterID uuid.UUID) error
+}
+
 // Profile агрегирует контекст текущего пользователя для ручки GET /me (§2.3 дизайна эпика Э2).
 type Profile interface {
 	// Get собирает профиль пользователя userID: организацию текущей строки, все организации
@@ -436,6 +462,7 @@ type Service struct {
 	Profile
 	WatchProgress
 	Assignment
+	Chapter
 }
 
 func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *repository.Repository) *Service {
@@ -477,6 +504,7 @@ func NewService(cfg config.Config, localMailBox chan string, s3 s3.S3, r *reposi
 		s,
 		cfg.Video,
 	)
+	s.Chapter = NewChapterService(r.Chapter, r.Video, s, cfg.Video)
 
 	return s
 }

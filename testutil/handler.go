@@ -50,6 +50,7 @@ type HandlerTestServiceMock struct {
 	Profile       *service_mocks.ProfileMock
 	WatchProgress *service_mocks.WatchProgressMock
 	Assignment    *service_mocks.AssignmentMock
+	Chapter       *service_mocks.ChapterMock
 }
 
 func NewHandlerTestServiceMock(mc *minimock.Controller) *HandlerTestServiceMock {
@@ -68,6 +69,7 @@ func NewHandlerTestServiceMock(mc *minimock.Controller) *HandlerTestServiceMock 
 		Profile:       service_mocks.NewProfileMock(mc),
 		WatchProgress: service_mocks.NewWatchProgressMock(mc),
 		Assignment:    service_mocks.NewAssignmentMock(mc),
+		Chapter:       service_mocks.NewChapterMock(mc),
 	}
 }
 
@@ -87,6 +89,7 @@ func (s *HandlerTestServiceMock) ToService() *service.Service {
 		Profile:       s.Profile,
 		WatchProgress: s.WatchProgress,
 		Assignment:    s.Assignment,
+		Chapter:       s.Chapter,
 	}
 }
 

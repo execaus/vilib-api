@@ -25,6 +25,7 @@ import (
 //go:generate minimock -i AssignmentTarget -o ./repository_mocks/assignment_target_mock.go
 //go:generate minimock -i AssignmentParticipant -o ./repository_mocks/assignment_participant_mock.go
 //go:generate minimock -i AssignmentEvent -o ./repository_mocks/assignment_event_mock.go
+//go:generate minimock -i Chapter -o ./repository_mocks/chapter_mock.go
 
 // UserStatus определяет фильтр по активности пользователей при выборке.
 type UserStatus string
@@ -455,6 +456,39 @@ type AssignmentEvent interface {
 	SelectByAssignmentID(ctx context.Context, assignmentID uuid.UUID) ([]domain.AssignmentEvent, error)
 }
 
+// Chapter — репозиторий глав видео (§4 дизайна эпика Э4): конец главы не хранится, а
+// вычисляется в SQL (LEAD/COALESCE) из start_ms соседних глав и переданной длительности видео.
+type Chapter interface {
+	// Insert создаёт главу видео. Конфликт по UNIQUE(video_id, start_ms) распознаётся
+	// вызывающим сервисом через dberrors.VideoChapterErrors.
+	Insert(ctx context.Context, videoID uuid.UUID, startMs int64, name string) (domain.Chapter, error)
+	// SelectByID выбирает главу по идентификатору. Строка не найдена — ErrNotFound.
+	SelectByID(ctx context.Context, chapterID uuid.UUID) (domain.Chapter, error)
+	// SelectBoundsByVideoID выбирает границы всех глав видео без привязки к пользователю
+	// (редактор, ответ после создания/правки главы) — durationMs подставляется как конец
+	// последней главы. Видео без глав — пустой список, не ошибка.
+	SelectBoundsByVideoID(ctx context.Context, videoID uuid.UUID, durationMs int64) ([]domain.ChapterBound, error)
+	// SelectProgressByVideoAndUser выбирает главы видео с покрытием одного пользователя
+	// (GET .../chapters) — durationMs подставляется как конец последней главы.
+	SelectProgressByVideoAndUser(
+		ctx context.Context, videoID, userID uuid.UUID, durationMs int64,
+	) ([]domain.ChapterProgress, error)
+	// SelectProgressByVideoAndUsers батчем выбирает главы видео с покрытием сразу многих
+	// пользователей (отчёты по назначению/сотруднику) — один SQL-запрос на всю карточку
+	// вместо запроса на участника (Н1). Пустой список идентификаторов не порождает запроса к
+	// БД.
+	SelectProgressByVideoAndUsers(
+		ctx context.Context, videoID uuid.UUID, userIDs []uuid.UUID, durationMs int64,
+	) ([]domain.ChapterUserProgress, error)
+	// Update меняет начало и/или название главы. Конфликт по UNIQUE(video_id, start_ms)
+	// распознаётся вызывающим сервисом. Строка не найдена — ErrNotFound.
+	Update(ctx context.Context, chapterID uuid.UUID, patch domain.ChapterPatch) (domain.Chapter, error)
+	// Delete удаляет главу видео.
+	Delete(ctx context.Context, chapterID uuid.UUID) error
+	// CountByVideoID считает число глав видео — проверка лимита 100 глав на видео (Э4-Т3).
+	CountByVideoID(ctx context.Context, videoID uuid.UUID) (int, error)
+}
+
 // Outbox — репозиторий очереди исходящих событий Kafka (transactional outbox, §7.1 эпика).
 type Outbox interface {
 	// Insert кладёт событие в очередь публикации внутри текущей транзакции.
@@ -483,6 +517,7 @@ type Repository struct {
 	AssignmentTarget
 	AssignmentParticipant
 	AssignmentEvent
+	Chapter
 }
 
 func NewRepository(provider *ExecutorProvider) *Repository {
@@ -503,5 +538,6 @@ func NewRepository(provider *ExecutorProvider) *Repository {
 		AssignmentTarget:      NewAssignmentTargetRepository(provider),
 		AssignmentParticipant: NewAssignmentParticipantRepository(provider),
 		AssignmentEvent:       NewAssignmentEventRepository(provider),
+		Chapter:               NewChapterRepository(provider),
 	}
 }

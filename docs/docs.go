@@ -2171,6 +2171,337 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}/chapters": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает главы видео, упорядоченные по времени начала, вместе с покрытием\nпросмотра инициатора (пройдена/частично/не просмотрена). Видео без глав отдаёт\nпустой список, а не 404 (§4, §5 дизайна эпика Э4).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chapters"
+                ],
+                "summary": "Список глав видео",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ListChaptersResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Создаёт главу видео по моменту начала — конец главы вычисляется сервером как\nначало следующей главы либо длительность видео (§1, §4, §5 дизайна эпика Э4).\nДоступно только обладателю права ManageVideo и только у видео в статусе ready.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chapters"
+                ],
+                "summary": "Создание главы видео",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Тело запроса",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateChapterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ChapterResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}/chapters/{chapterId}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Удаляет главу видео; соседние главы автоматически «наследуют» освободившийся\nпромежуток при следующем чтении границ (§1 дизайна эпика Э4). Доступно только\nобладателю права ManageVideo.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chapters"
+                ],
+                "summary": "Удаление главы видео",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID главы",
+                        "name": "chapterId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Меняет начало и/или название главы; конец главы пересчитывается сервером.\nПравка допустима и после того, как видео уже смотрели — статусы глав\nпересчитываются по текущей разметке, зачёт видео не меняется (Э4-Т7). Доступно\nтолько обладателю права ManageVideo.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "chapters"
+                ],
+                "summary": "Редактирование главы видео",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID аккаунта",
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID группы",
+                        "name": "userGroupId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID видео",
+                        "name": "videoId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID главы",
+                        "name": "chapterId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Тело запроса",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateChapterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ChapterResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error"
+                    }
+                }
+            }
+        },
         "/api/v1/accounts/{accountId}/user-groups/{userGroupId}/video/{videoId}/progress": {
             "get": {
                 "security": [
@@ -3161,7 +3492,6 @@ const docTemplate = `{
     "definitions": {
         "domain.PermissionMask": {
             "type": "integer",
-            "format": "int64",
             "enum": [
                 0
             ],
@@ -3553,6 +3883,44 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.Chapter": {
+            "type": "object",
+            "properties": {
+                "coverage_pct": {
+                    "description": "CoveragePct — покрытие главы просмотром запрашивающего, проценты.",
+                    "type": "integer"
+                },
+                "duration_ms": {
+                    "description": "DurationMs — длина главы (EndMs - StartMs).",
+                    "type": "integer"
+                },
+                "end_ms": {
+                    "description": "EndMs — начало следующей главы либо конец ролика; вычисляется сервером.",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "start_ms": {
+                    "type": "integer"
+                },
+                "status": {
+                    "description": "Status — not_started | partial | done.",
+                    "type": "string"
+                }
+            }
+        },
+        "dto.ChapterResponse": {
+            "type": "object",
+            "properties": {
+                "chapter": {
+                    "$ref": "#/definitions/dto.Chapter"
+                }
+            }
+        },
         "dto.CompleteVideoUploadResponse": {
             "type": "object",
             "properties": {
@@ -3685,6 +4053,23 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/dto.RejectedTarget"
                     }
+                }
+            }
+        },
+        "dto.CreateChapterRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 1
+                },
+                "start_ms": {
+                    "type": "integer",
+                    "minimum": 0
                 }
             }
         },
@@ -3974,6 +4359,17 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.AssignmentListItem"
+                    }
+                }
+            }
+        },
+        "dto.ListChaptersResponse": {
+            "type": "object",
+            "properties": {
+                "chapters": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.Chapter"
                     }
                 }
             }
@@ -4332,6 +4728,20 @@ const docTemplate = `{
             "properties": {
                 "assignment": {
                     "$ref": "#/definitions/dto.AssignmentDetails"
+                }
+            }
+        },
+        "dto.UpdateChapterRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "minLength": 1
+                },
+                "start_ms": {
+                    "type": "integer",
+                    "minimum": 0
                 }
             }
         },
