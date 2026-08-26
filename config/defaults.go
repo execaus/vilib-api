@@ -62,7 +62,7 @@ const (
 
 // defaultVideoProfiles — дефолтный набор профилей качества видео.
 func defaultVideoProfiles() []string {
-	return []string{"360p", "720p", "1080p"}
+	return []string{"240p", "360p", "720p", "1080p"}
 }
 
 // setDefaults регистрирует дефолтное значение для каждого ключа конфигурации.

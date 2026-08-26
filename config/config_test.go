@@ -32,7 +32,7 @@ func TestLoadConfig_UsesDefaultsWhenFileIsAbsent(t *testing.T) {
 	require.Equal(t, 500*time.Millisecond, cfg.Kafka.OutboxPollInterval)
 	require.Equal(t, 100, cfg.Kafka.OutboxBatchSize)
 	require.Equal(t, int64(4294967296), cfg.Video.MaxUploadSizeBytes)
-	require.Equal(t, []string{"360p", "720p", "1080p"}, cfg.Video.Profiles)
+	require.Equal(t, []string{"240p", "360p", "720p", "1080p"}, cfg.Video.Profiles)
 	require.Equal(t, 3, cfg.Video.MaxProcessingAttempts)
 	require.Equal(t, 2*time.Hour, cfg.Video.UploadTimeout)
 	require.Equal(t, 15*time.Minute, cfg.Video.QueuedStallTimeout)
