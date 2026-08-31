@@ -17,11 +17,14 @@ RUN git config --global url."ssh://git@github.com/".insteadOf "https://github.co
 WORKDIR /src
 
 COPY go.mod go.sum ./
-RUN --mount=type=ssh go mod download
+RUN --mount=type=ssh \
+    --mount=type=cache,target=/root/go/pkg/mod \
+    go mod download
 
 COPY . .
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/root/go/pkg/mod \
     go build -trimpath -ldflags="-s -w" -o /out/vilib-api ./cmd
 
 # goose собирается отдельной командой из своего модуля (а не как сторонний build-tool этого
