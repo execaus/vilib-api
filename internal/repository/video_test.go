@@ -37,7 +37,7 @@ func newTestVideoWithUrgency(
 ) domain.Video {
 	t.Helper()
 
-	account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+	account, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 	group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
 	accountRole, _ := r.AccountRole.Insert(
 		t.Context(),
@@ -81,7 +81,7 @@ func TestRepository_VideoInsert_PersistsIsUrgentFlag(t *testing.T) {
 			t.Parallel()
 
 			testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-				account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+				account, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 				group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
 				accountRole, _ := r.AccountRole.Insert(
 					t.Context(),
@@ -124,7 +124,7 @@ func TestRepository_VideoSelect_Success(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
 		accountRole, _ := r.AccountRole.Insert(
 			t.Context(),
@@ -791,7 +791,7 @@ func TestRepository_VideoSelectQueuePositions_ComputesPositionAndTotalPerLane(t 
 		r := repository.NewRepository(provider)
 		f := testutil.Faker
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		accountRole, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
 		user, _ := r.User.Insert(
 			t.Context(),

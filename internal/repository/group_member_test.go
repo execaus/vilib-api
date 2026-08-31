@@ -18,24 +18,27 @@ func TestRepository_GroupMemberInsert_Success(t *testing.T) {
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		var (
 			userCount = 8
-			name      = f.Beer().Name()
+			name      = testutil.UniqueName(f)
 		)
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		group, _ := r.UserGroup.Insert(t.Context(), account.ID, name)
-		accountRole, _ := r.AccountRole.Insert(
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		group, err := r.UserGroup.Insert(t.Context(), account.ID, name)
+		require.NoError(t, err)
+		accountRole, err := r.AccountRole.Insert(
 			t.Context(),
 			account.ID,
-			f.Beer().Name(),
+			testutil.UniqueName(f),
 			nil,
 			4,
 			true,
 			false,
 		)
+		require.NoError(t, err)
 
 		generatedUsersID := make([]uuid.UUID, userCount)
 		for i := range userCount {
-			user, err := r.User.Insert(
+			user, insertErr := r.User.Insert(
 				t.Context(),
 				f.Person().FirstName(),
 				f.Person().LastName(),
@@ -43,11 +46,12 @@ func TestRepository_GroupMemberInsert_Success(t *testing.T) {
 				f.Person().Contact().Email,
 				accountRole.ID,
 			)
-			_ = err
+			require.NoError(t, insertErr)
 			generatedUsersID[i] = user.ID
 		}
 
-		groupRole, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 4, true)
+		groupRole, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 4, true)
+		require.NoError(t, err)
 
 		members, err := r.GroupMember.Insert(t.Context(), group.ID, groupRole.ID, generatedUsersID[:4]...)
 
@@ -69,10 +73,13 @@ func TestRepository_GroupMemberInsert_JoinedAtFilled(t *testing.T) {
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		before := time.Now().UTC().Add(-time.Second)
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
-		accountRole, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
-		user, _ := r.User.Insert(
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		group, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
+		require.NoError(t, err)
+		accountRole, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 4, true, false)
+		require.NoError(t, err)
+		user, err := r.User.Insert(
 			t.Context(),
 			f.Person().FirstName(),
 			f.Person().LastName(),
@@ -80,7 +87,9 @@ func TestRepository_GroupMemberInsert_JoinedAtFilled(t *testing.T) {
 			f.Person().Contact().Email,
 			accountRole.ID,
 		)
-		groupRole, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 4, true)
+		require.NoError(t, err)
+		groupRole, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 4, true)
+		require.NoError(t, err)
 
 		members, err := r.GroupMember.Insert(t.Context(), group.ID, groupRole.ID, user.ID)
 		require.NoError(t, err)
@@ -98,23 +107,30 @@ func TestRepository_GroupMemberSelectByGroupID_Success(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		accountRole, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
-		groupRole, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 4, true)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		accountRole, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 4, true, false)
+		require.NoError(t, err)
+		groupRole, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 4, true)
+		require.NoError(t, err)
 
-		groupOne, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
-		groupTwo, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		groupOne, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
+		require.NoError(t, err)
+		groupTwo, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
+		require.NoError(t, err)
 
-		userOne, _ := r.User.Insert(
+		userOne, err := r.User.Insert(
 			t.Context(), f.Person().FirstName(), f.Person().LastName(), f.Hash().MD5(),
 			f.Person().Contact().Email, accountRole.ID,
 		)
-		userTwo, _ := r.User.Insert(
+		require.NoError(t, err)
+		userTwo, err := r.User.Insert(
 			t.Context(), f.Person().FirstName(), f.Person().LastName(), f.Hash().MD5(),
 			f.Person().Contact().Email, accountRole.ID,
 		)
+		require.NoError(t, err)
 
-		_, err := r.GroupMember.Insert(t.Context(), groupOne.ID, groupRole.ID, userOne.ID, userTwo.ID)
+		_, err = r.GroupMember.Insert(t.Context(), groupOne.ID, groupRole.ID, userOne.ID, userTwo.ID)
 		require.NoError(t, err)
 		_, err = r.GroupMember.Insert(t.Context(), groupTwo.ID, groupRole.ID, userOne.ID)
 		require.NoError(t, err)
@@ -148,17 +164,23 @@ func TestRepository_GroupMemberUpdateRole_Success(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
-		accountRole, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
-		user, _ := r.User.Insert(
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		group, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
+		require.NoError(t, err)
+		accountRole, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 4, true, false)
+		require.NoError(t, err)
+		user, err := r.User.Insert(
 			t.Context(), f.Person().FirstName(), f.Person().LastName(), f.Hash().MD5(),
 			f.Person().Contact().Email, accountRole.ID,
 		)
-		oldRole, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 4, true)
-		newRole, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 6, false)
+		require.NoError(t, err)
+		oldRole, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 4, true)
+		require.NoError(t, err)
+		newRole, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 6, false)
+		require.NoError(t, err)
 
-		_, err := r.GroupMember.Insert(t.Context(), group.ID, oldRole.ID, user.ID)
+		_, err = r.GroupMember.Insert(t.Context(), group.ID, oldRole.ID, user.ID)
 		require.NoError(t, err)
 
 		member, err := r.GroupMember.UpdateRole(t.Context(), group.ID, user.ID, newRole.ID)
@@ -189,18 +211,21 @@ func TestRepository_GroupMemberSelectByUserIDAndGroupID_Success(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		group, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
-		accountRole, _ := r.AccountRole.Insert(
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		group, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
+		require.NoError(t, err)
+		accountRole, err := r.AccountRole.Insert(
 			t.Context(),
 			account.ID,
-			f.Beer().Name(),
+			testutil.UniqueName(f),
 			nil,
 			4,
 			true,
 			false,
 		)
-		user, _ := r.User.Insert(
+		require.NoError(t, err)
+		user, err := r.User.Insert(
 			t.Context(),
 			f.Person().FirstName(),
 			f.Person().LastName(),
@@ -208,9 +233,11 @@ func TestRepository_GroupMemberSelectByUserIDAndGroupID_Success(t *testing.T) {
 			f.Person().Contact().Email,
 			accountRole.ID,
 		)
-		groupRole, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 4, true)
+		require.NoError(t, err)
+		groupRole, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 4, true)
+		require.NoError(t, err)
 
-		_, err := r.GroupMember.Insert(t.Context(), group.ID, groupRole.ID, user.ID)
+		_, err = r.GroupMember.Insert(t.Context(), group.ID, groupRole.ID, user.ID)
 		require.Nil(t, err)
 
 		member, err := r.GroupMember.SelectByUserIDAndGroupID(t.Context(), user.ID, group.ID)
@@ -237,9 +264,11 @@ func TestRepository_GroupMemberSelectByUserID_Success(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		accountRole, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
-		user, _ := r.User.Insert(
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		accountRole, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 4, true, false)
+		require.NoError(t, err)
+		user, err := r.User.Insert(
 			t.Context(),
 			f.Person().FirstName(),
 			f.Person().LastName(),
@@ -247,12 +276,16 @@ func TestRepository_GroupMemberSelectByUserID_Success(t *testing.T) {
 			f.Person().Contact().Email,
 			accountRole.ID,
 		)
+		require.NoError(t, err)
 
-		groupOne, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
-		groupTwo, _ := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
-		groupRole, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 4, true)
+		groupOne, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
+		require.NoError(t, err)
+		groupTwo, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
+		require.NoError(t, err)
+		groupRole, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 4, true)
+		require.NoError(t, err)
 
-		_, err := r.GroupMember.Insert(t.Context(), groupOne.ID, groupRole.ID, user.ID)
+		_, err = r.GroupMember.Insert(t.Context(), groupOne.ID, groupRole.ID, user.ID)
 		require.NoError(t, err)
 		_, err = r.GroupMember.Insert(t.Context(), groupTwo.ID, groupRole.ID, user.ID)
 		require.NoError(t, err)

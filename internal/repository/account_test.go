@@ -43,7 +43,8 @@ func TestRepository_AccountSelectByID_Success(t *testing.T) {
 		generationAccounts := make([]domain.Account, accountCount)
 		accountsID := make([]uuid.UUID, accountCount)
 		for i := range accountCount {
-			account, _ := r.Account.Insert(t.Context(), f.Person().Name(), f.Person().Contact().Email)
+			account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+			require.NoError(t, err)
 			generationAccounts[i] = account
 			accountsID[i] = account.ID
 		}
@@ -84,7 +85,8 @@ func TestRepository_AccountSelectByUsersID_Success(t *testing.T) {
 
 		// создать аккаунты
 		for i := range accountCount {
-			acc, _ := r.Account.Insert(t.Context(), f.Person().Name(), f.Person().Contact().Email)
+			acc, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+			require.NoError(t, err)
 			generatedAccounts[i] = acc
 		}
 
@@ -93,16 +95,18 @@ func TestRepository_AccountSelectByUsersID_Success(t *testing.T) {
 		for i, account := range generatedAccounts {
 			roles[i] = make([]domain.AccountRole, roleInAccountCount)
 			for j := range roleInAccountCount {
-				roles[i][j], _ = r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
+				role, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 0, false, false)
+				require.NoError(t, err)
+				roles[i][j] = role
 			}
 		}
 
 		// создать пользователей
 		users := make([][]domain.User, accountCount)
-		for i, _ := range generatedAccounts {
+		for i := range generatedAccounts {
 			users[i] = make([]domain.User, userInAccountCount)
 			for j := range userInAccountCount {
-				users[i][j], _ = r.User.Insert(
+				user, err := r.User.Insert(
 					t.Context(),
 					f.Person().FirstName(),
 					f.Person().LastName(),
@@ -110,11 +114,13 @@ func TestRepository_AccountSelectByUsersID_Success(t *testing.T) {
 					f.Person().Contact().Email,
 					roles[i][j%roleInAccountCount].ID,
 				)
+				require.NoError(t, err)
+				users[i][j] = user
 			}
 		}
 
 		// проверка метода
-		accounts, _ := r.Account.SelectByUsersID(
+		accounts, err := r.Account.SelectByUsersID(
 			t.Context(),
 			users[0][0].ID,
 			users[0][3].ID,
@@ -124,6 +130,7 @@ func TestRepository_AccountSelectByUsersID_Success(t *testing.T) {
 			users[9][0].ID,
 			users[9][0].ID,
 		)
+		require.NoError(t, err)
 		actualIDs := make([]uuid.UUID, len(accounts))
 		for i, account := range accounts {
 			actualIDs[i] = account.ID

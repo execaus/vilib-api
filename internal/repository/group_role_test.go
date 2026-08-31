@@ -19,9 +19,10 @@ func TestRepository_GroupRoleInsert_Success(t *testing.T) {
 		var (
 			permission domain.PermissionMask = 3
 			isDefault                        = true
-			name                             = f.Beer().Name()
+			name                             = testutil.UniqueName(f)
 		)
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
 
 		role, err := r.GroupRole.Insert(t.Context(), account.ID, name, permission, isDefault)
 
@@ -48,16 +49,21 @@ func TestRepository_GroupRoleSelectByAccount_Success(t *testing.T) {
 		accounts := make([]domain.Account, accountCount)
 		generatedRoles := make([][]domain.GroupRole, accountCount)
 		for i := range accountCount {
-			accounts[i], _ = r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+			account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+			require.NoError(t, err)
+			accounts[i] = account
+
 			generatedRoles[i] = make([]domain.GroupRole, roleCount)
 			for j := range roleCount {
-				generatedRoles[i][j], _ = r.GroupRole.Insert(
+				role, insertErr := r.GroupRole.Insert(
 					t.Context(),
 					accounts[i].ID,
-					f.Beer().Name(),
+					testutil.UniqueName(f),
 					permission,
 					isDefault,
 				)
+				require.NoError(t, insertErr)
+				generatedRoles[i][j] = role
 			}
 		}
 
@@ -95,11 +101,13 @@ func TestRepository_GroupRoleSelectByID_Success(t *testing.T) {
 		var (
 			permission domain.PermissionMask = 5
 			isDefault                        = false
-			name                             = f.Beer().Name()
+			name                             = testutil.UniqueName(f)
 		)
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		createdRole, _ := r.GroupRole.Insert(t.Context(), account.ID, name, permission, isDefault)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		createdRole, err := r.GroupRole.Insert(t.Context(), account.ID, name, permission, isDefault)
+		require.NoError(t, err)
 
 		roles, err := r.GroupRole.SelectByID(t.Context(), createdRole.ID)
 
@@ -127,10 +135,13 @@ func TestRepository_GroupRoleGetDefault_Success(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
 
-		defaultRole, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 1, true)
-		_, _ = r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 2, false)
+		defaultRole, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 1, true)
+		require.NoError(t, err)
+		_, err = r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 2, false)
+		require.NoError(t, err)
 
 		role, err := r.GroupRole.GetDefault(t.Context(), account.ID)
 
@@ -155,12 +166,14 @@ func TestRepository_GroupRoleUpdate_Success(t *testing.T) {
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		var (
-			newName                             = f.Beer().Name()
+			newName                             = testutil.UniqueName(f)
 			newPermission domain.PermissionMask = 6
 		)
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		role, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 1, false)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		role, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 1, false)
+		require.NoError(t, err)
 
 		updated, err := r.GroupRole.Update(t.Context(), role.ID, newName, newPermission, true)
 
@@ -180,7 +193,7 @@ func TestRepository_GroupRoleUpdate_NotFound(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		_, err := r.GroupRole.Update(t.Context(), uuid.New(), f.Beer().Name(), 0, false)
+		_, err := r.GroupRole.Update(t.Context(), uuid.New(), testutil.UniqueName(f), 0, false)
 
 		require.ErrorIs(t, err, repository.ErrNotFound)
 	})
@@ -190,11 +203,14 @@ func TestRepository_GroupRoleUpdate_DuplicateNameReturnsError(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		existing, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 0, false)
-		role, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 0, false)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		existing, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 0, false)
+		require.NoError(t, err)
+		role, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 0, false)
+		require.NoError(t, err)
 
-		_, err := r.GroupRole.Update(t.Context(), role.ID, existing.Name, 0, false)
+		_, err = r.GroupRole.Update(t.Context(), role.ID, existing.Name, 0, false)
 
 		require.ErrorIs(t, dberrors.GroupRoleErrors.ErrUniqueGroupRolesAccountIdNameKey, err)
 	})
@@ -204,14 +220,19 @@ func TestRepository_GroupRoleClearDefault_UnsetsFlagForAllAccountRoles(t *testin
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		otherAccount, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		otherAccount, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
 
-		roleA, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 0, true)
-		roleB, _ := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 0, false)
-		otherRole, _ := r.GroupRole.Insert(t.Context(), otherAccount.ID, f.Beer().Name(), 0, true)
+		roleA, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 0, true)
+		require.NoError(t, err)
+		roleB, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 0, false)
+		require.NoError(t, err)
+		otherRole, err := r.GroupRole.Insert(t.Context(), otherAccount.ID, testutil.UniqueName(f), 0, true)
+		require.NoError(t, err)
 
-		err := r.GroupRole.ClearDefault(t.Context(), account.ID)
+		err = r.GroupRole.ClearDefault(t.Context(), account.ID)
 		require.NoError(t, err)
 
 		roles, err := r.GroupRole.SelectByID(t.Context(), roleA.ID)

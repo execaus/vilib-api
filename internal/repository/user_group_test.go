@@ -18,10 +18,11 @@ func TestRepository_UserGroupInsert_Success(t *testing.T) {
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		var (
-			name = f.Beer().Name()
+			name = testutil.UniqueName(f)
 		)
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
 		group, err := r.UserGroup.Insert(t.Context(), account.ID, name)
 
 		require.Nil(t, err)
@@ -46,11 +47,14 @@ func TestRepository_UserGroupSelectByID_Success(t *testing.T) {
 		generatedUserGroupsID := make([][]uuid.UUID, userGroupCount)
 
 		for i := range accountCount {
-			generatedAccount[i], _ = r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+			account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+			require.NoError(t, err)
+			generatedAccount[i] = account
 
 			generatedUserGroupsID[i] = make([]uuid.UUID, userGroupCount)
 			for j := range userGroupCount {
-				userGroup, _ := r.UserGroup.Insert(t.Context(), generatedAccount[i].ID, f.Company().Name())
+				userGroup, insertErr := r.UserGroup.Insert(t.Context(), generatedAccount[i].ID, testutil.UniqueName(f))
+				require.NoError(t, insertErr)
 				generatedUserGroupsID[i][j] = userGroup.ID
 			}
 		}
@@ -91,13 +95,13 @@ func TestRepository_UserGroupDeleteCascade_RemovesGroupVideosAssetsFilesAndMembe
 		r := repository.NewRepository(provider)
 		f := testutil.Faker
 
-		account, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		require.NoError(t, err)
 
-		group, err := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		group, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
 		require.NoError(t, err)
 
-		accountRole, err := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
+		accountRole, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 4, true, false)
 		require.NoError(t, err)
 
 		user, err := r.User.Insert(
@@ -110,7 +114,9 @@ func TestRepository_UserGroupDeleteCascade_RemovesGroupVideosAssetsFilesAndMembe
 		)
 		require.NoError(t, err)
 
-		video, err := r.Video.Insert(t.Context(), f.Beer().Name(), group.ID, user.ID, domain.VideoStatusReady, false)
+		video, err := r.Video.Insert(
+			t.Context(), testutil.UniqueName(f), group.ID, user.ID, domain.VideoStatusReady, false,
+		)
 		require.NoError(t, err)
 
 		asset, err := r.VideoAsset.Insert(
@@ -125,7 +131,7 @@ func TestRepository_UserGroupDeleteCascade_RemovesGroupVideosAssetsFilesAndMembe
 		)
 		require.NoError(t, err)
 
-		groupRole, err := r.GroupRole.Insert(t.Context(), account.ID, f.Beer().Name(), 1, true)
+		groupRole, err := r.GroupRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), 1, true)
 		require.NoError(t, err)
 
 		_, err = r.GroupMember.Insert(t.Context(), group.ID, groupRole.ID, user.ID)
@@ -161,10 +167,10 @@ func TestRepository_UserGroupDeleteCascade_EmptyGroup_ReturnsNoIDs(t *testing.T)
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		require.NoError(t, err)
 
-		group, err := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		group, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
 		require.NoError(t, err)
 
 		deletedVideoIDs, err := r.UserGroup.DeleteCascade(t.Context(), group.ID)
@@ -180,13 +186,13 @@ func TestRepository_UserGroupUpdateName_Success(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		require.NoError(t, err)
 
-		group, err := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		group, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
 		require.NoError(t, err)
 
-		newName := f.Beer().Name()
+		newName := testutil.UniqueName(f)
 
 		updated, err := r.UserGroup.UpdateName(t.Context(), group.ID, newName)
 		require.NoError(t, err)
@@ -204,7 +210,7 @@ func TestRepository_UserGroupUpdateName_NotFound(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		_, err := r.UserGroup.UpdateName(t.Context(), uuid.New(), f.Beer().Name())
+		_, err := r.UserGroup.UpdateName(t.Context(), uuid.New(), testutil.UniqueName(f))
 
 		require.ErrorIs(t, err, repository.ErrNotFound)
 	})
@@ -214,13 +220,13 @@ func TestRepository_UserGroupUpdateName_DuplicateNameReturnsError(t *testing.T) 
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		require.NoError(t, err)
 
-		existing, err := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		existing, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
 		require.NoError(t, err)
 
-		group, err := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())
+		group, err := r.UserGroup.Insert(t.Context(), account.ID, testutil.UniqueName(f))
 		require.NoError(t, err)
 
 		_, err = r.UserGroup.UpdateName(t.Context(), group.ID, existing.Name)

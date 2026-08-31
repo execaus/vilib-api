@@ -26,7 +26,7 @@ func TestRepository_UserSelectByEmail_Success(t *testing.T) {
 		generatedUsers := make([][]domain.User, emailCount)
 		for i := range emailCount {
 			emails[i] = f.Person().Contact().Email
-			account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+			account, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 			role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, permission, true, false)
 			generatedUsers[i] = make([]domain.User, userWithEmailCount)
 			for j := range userWithEmailCount {
@@ -80,7 +80,7 @@ func TestRepository_UserInsert_Success(t *testing.T) {
 			surname                          = f.Person().LastName()
 		)
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		role, _ := r.AccountRole.Insert(
 			t.Context(),
 			account.ID,
@@ -114,7 +114,7 @@ func TestRepository_UserSelectByID_Success(t *testing.T) {
 			userCount = 7
 		)
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		role, _ := r.AccountRole.Insert(
 			t.Context(),
 			account.ID,
@@ -166,7 +166,7 @@ func TestRepository_UserSelectByIDs_Success(t *testing.T) {
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		const userCount = 7
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
 
 		generatedUsersID := make([]uuid.UUID, userCount)
@@ -201,7 +201,7 @@ func TestRepository_UserSelectByIDs_MissingIDsSkipped(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 4, true, false)
 
 		user, _ := r.User.Insert(
@@ -234,7 +234,7 @@ func TestRepository_UserSelectByEmailAndAccountID_Success(t *testing.T) {
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		email := f.Person().Contact().Email
 
-		accountOne, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		accountOne, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		roleOne, _ := r.AccountRole.Insert(t.Context(), accountOne.ID, f.Beer().Name(), nil, 4, true, false)
 		userOne, err := r.User.Insert(
 			t.Context(),
@@ -246,7 +246,7 @@ func TestRepository_UserSelectByEmailAndAccountID_Success(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		accountTwo, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		accountTwo, _ := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		roleTwo, _ := r.AccountRole.Insert(t.Context(), accountTwo.ID, f.Beer().Name(), nil, 4, true, false)
 		_, err = r.User.Insert(
 			t.Context(),
@@ -281,7 +281,7 @@ func TestRepository_UserSelectByEmailAndAccountID_NotFound(t *testing.T) {
 func insertTestUser(t *testing.T, r *repository.Repository, f faker.Faker) domain.User {
 	t.Helper()
 
-	account, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+	account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 	require.NoError(t, err)
 
 	role, err := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, true, false)
@@ -384,7 +384,7 @@ func TestRepository_UserUpdatePasswordHash_UpdatesOnlyTargetRow(t *testing.T) {
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		email := f.Person().Contact().Email
 
-		account1, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account1, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		require.NoError(t, err)
 		role1, err := r.AccountRole.Insert(t.Context(), account1.ID, f.Beer().Name(), nil, 0, true, false)
 		require.NoError(t, err)
@@ -398,7 +398,7 @@ func TestRepository_UserUpdatePasswordHash_UpdatesOnlyTargetRow(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		account2, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account2, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 		require.NoError(t, err)
 		role2, err := r.AccountRole.Insert(t.Context(), account2.ID, f.Beer().Name(), nil, 0, true, false)
 		require.NoError(t, err)

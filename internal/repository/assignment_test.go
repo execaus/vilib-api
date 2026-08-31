@@ -51,7 +51,7 @@ func newTestAssignment(
 func newTestAccountAndVideo(t *testing.T, r *repository.Repository, f faker.Faker) assignmentFixture {
 	t.Helper()
 
-	account, err := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+	account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
 	require.NoError(t, err)
 
 	group, err := r.UserGroup.Insert(t.Context(), account.ID, f.Beer().Name())

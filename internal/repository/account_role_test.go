@@ -18,14 +18,16 @@ func TestRepository_AccountRoleInsert_Success(t *testing.T) {
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		var (
 			permission domain.PermissionMask = 5
-			name                             = f.Beer().Name()
+			name                             = testutil.UniqueName(f)
 			isDefault                        = true
 			isSystem                         = true
 		)
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
 
-		parent, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
+		parent, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 0, false, false)
+		require.NoError(t, err)
 		role, err := r.AccountRole.Insert(t.Context(), account.ID, name, &parent.ID, permission, isDefault, isSystem)
 
 		require.Nil(t, err)
@@ -50,18 +52,23 @@ func TestRepository_AccountRoleSelectByAccountID_Success(t *testing.T) {
 		accounts := make([]domain.Account, accountCount)
 		generatedRoles := make([][]domain.AccountRole, accountCount)
 		for i := range accountCount {
-			accounts[i], _ = r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+			account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+			require.NoError(t, err)
+			accounts[i] = account
+
 			generatedRoles[i] = make([]domain.AccountRole, roleInAccountCount)
 			for j := range roleInAccountCount {
-				generatedRoles[i][j], _ = r.AccountRole.Insert(
+				role, insertErr := r.AccountRole.Insert(
 					t.Context(),
 					accounts[i].ID,
-					f.Beer().Name(),
+					testutil.UniqueName(f),
 					nil,
 					0,
 					false,
 					false,
 				)
+				require.NoError(t, insertErr)
+				generatedRoles[i][j] = role
 			}
 		}
 
@@ -98,18 +105,23 @@ func TestRepository_AccountRoleSelectByID_Success(t *testing.T) {
 		accounts := make([]domain.Account, accountCount)
 		generatedRoles := make([][]domain.AccountRole, accountCount)
 		for i := range accountCount {
-			accounts[i], _ = r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+			account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+			require.NoError(t, err)
+			accounts[i] = account
+
 			generatedRoles[i] = make([]domain.AccountRole, roleInAccountCount)
 			for j := range roleInAccountCount {
-				generatedRoles[i][j], _ = r.AccountRole.Insert(
+				role, insertErr := r.AccountRole.Insert(
 					t.Context(),
 					accounts[i].ID,
-					f.Beer().Name(),
+					testutil.UniqueName(f),
 					nil,
 					0,
 					false,
 					false,
 				)
+				require.NoError(t, insertErr)
+				generatedRoles[i][j] = role
 			}
 		}
 
@@ -136,13 +148,16 @@ func TestRepository_AccountRoleUpdate_Success(t *testing.T) {
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
 		var (
-			newName                             = f.Beer().Name()
+			newName                             = testutil.UniqueName(f)
 			newPermission domain.PermissionMask = 7
 		)
 
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		parent, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
-		role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 1, false, false)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		parent, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 0, false, false)
+		require.NoError(t, err)
+		role, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 1, false, false)
+		require.NoError(t, err)
 
 		updated, err := r.AccountRole.Update(t.Context(), role.ID, newName, &parent.ID, newPermission, true)
 
@@ -163,7 +178,7 @@ func TestRepository_AccountRoleUpdate_NotFound(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		_, err := r.AccountRole.Update(t.Context(), uuid.New(), f.Beer().Name(), nil, 0, false)
+		_, err := r.AccountRole.Update(t.Context(), uuid.New(), testutil.UniqueName(f), nil, 0, false)
 
 		require.ErrorIs(t, err, repository.ErrNotFound)
 	})
@@ -173,11 +188,14 @@ func TestRepository_AccountRoleUpdate_DuplicateNameReturnsError(t *testing.T) {
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		existing, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
-		role, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		existing, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 0, false, false)
+		require.NoError(t, err)
+		role, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 0, false, false)
+		require.NoError(t, err)
 
-		_, err := r.AccountRole.Update(t.Context(), role.ID, existing.Name, nil, 0, false)
+		_, err = r.AccountRole.Update(t.Context(), role.ID, existing.Name, nil, 0, false)
 
 		require.ErrorIs(t, dberrors.AccountRoleErrors.ErrUniqueUniqueAccountRole, err)
 	})
@@ -187,14 +205,21 @@ func TestRepository_AccountRoleClearDefault_UnsetsFlagForAllAccountRoles(t *test
 	t.Parallel()
 
 	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
-		account, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
-		otherAccount, _ := r.Account.Insert(t.Context(), f.Company().Name(), f.Person().Contact().Email)
+		account, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
+		otherAccount, err := r.Account.Insert(t.Context(), testutil.UniqueName(f), f.Person().Contact().Email)
+		require.NoError(t, err)
 
-		roleA, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, true, false)
-		roleB, _ := r.AccountRole.Insert(t.Context(), account.ID, f.Beer().Name(), nil, 0, false, false)
-		otherRole, _ := r.AccountRole.Insert(t.Context(), otherAccount.ID, f.Beer().Name(), nil, 0, true, false)
+		roleA, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 0, true, false)
+		require.NoError(t, err)
+		roleB, err := r.AccountRole.Insert(t.Context(), account.ID, testutil.UniqueName(f), nil, 0, false, false)
+		require.NoError(t, err)
+		otherRole, err := r.AccountRole.Insert(
+			t.Context(), otherAccount.ID, testutil.UniqueName(f), nil, 0, true, false,
+		)
+		require.NoError(t, err)
 
-		err := r.AccountRole.ClearDefault(t.Context(), account.ID)
+		err = r.AccountRole.ClearDefault(t.Context(), account.ID)
 		require.NoError(t, err)
 
 		roles, err := r.AccountRole.SelectByID(t.Context(), roleA.ID, roleB.ID)

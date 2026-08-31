@@ -1,7 +1,20 @@
 package testutil
 
-import f "github.com/jaswdr/faker/v2"
+import (
+	"github.com/google/uuid"
+	f "github.com/jaswdr/faker/v2"
+)
 
 var (
 	Faker = f.New()
 )
+
+// UniqueName возвращает человекочитаемое имя из словаря faker с гарантированно уникальным
+// суффиксом (UUID). Словари faker (например, Beer().Name() — около сотни значений) не спасают
+// от коллизий при массовой генерации тестовых данных под реальными ограничениями уникальности
+// БД (account_id+name, user_group_id+name и т.п.): при совпадении имени тест либо падает не там,
+// где произошла ошибка, либо (если ошибка вставки проигнорирована) тихо продолжает с пустым
+// значением. Суффикс убирает саму возможность коллизии, а не маскирует её.
+func UniqueName(fk f.Faker) string {
+	return fk.Beer().Name() + " " + uuid.New().String()
+}
