@@ -33,7 +33,7 @@ func (s *AccountService) Create(ctx context.Context, userName, userSurname, emai
 	// Создание аккаунта
 	account, err := s.repo.Insert(ctx, accountName, email)
 	if err != nil {
-		if errors.Is(err, dberrors.AccountErrors.ErrUniqueAccountsNameKey) {
+		if errors.Is(dberrors.AccountErrors.ErrUniqueAccountsNameKey, err) {
 			zap.L().Warn(err.Error())
 			return account, ErrAccountNameExists
 		}
