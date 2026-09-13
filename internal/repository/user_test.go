@@ -43,7 +43,7 @@ func TestRepository_UserSelectByEmail_Success(t *testing.T) {
 
 		users, err := r.User.SelectByEmail(t.Context(), emails[4])
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Len(t, users, userWithEmailCount)
 
 		expectedIDs := make([]uuid.UUID, userWithEmailCount)
@@ -94,7 +94,7 @@ func TestRepository_UserInsert_Success(t *testing.T) {
 		timeStart := time.Now()
 		user, err := r.User.Insert(t.Context(), name, surname, hash, email, role.ID)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		require.NotEmpty(t, user.ID)
 		require.Equal(t, email, user.Email)
@@ -140,7 +140,7 @@ func TestRepository_UserSelectByID_Success(t *testing.T) {
 
 		users, err := r.User.SelectByID(t.Context(), generatedUsersID[:5]...)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		expectedIDs := generatedUsersID[:5]
 		for _, user := range users {
@@ -152,7 +152,7 @@ func TestRepository_UserSelectByID_Success(t *testing.T) {
 func TestRepository_UserSelectByID_NilNotFound(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		users, err := r.User.SelectByID(t.Context(), uuid.New())
 
 		require.Nil(t, users)

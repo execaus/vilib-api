@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -25,9 +24,9 @@ func (a *Account) FromDB(db *schema.Account) {
 }
 
 func NameFromEmail(email string) (string, error) {
-	if i := strings.Index(email, "@"); i != -1 {
-		return email[:i], nil
+	if name, _, found := strings.Cut(email, "@"); found {
+		return name, nil
 	}
 
-	return "", errors.New(fmt.Sprintf("invalid email: %s", email))
+	return "", fmt.Errorf("invalid email: %s", email)
 }

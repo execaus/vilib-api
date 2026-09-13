@@ -48,7 +48,6 @@ func TestHandler_DeleteChapter(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -75,7 +74,6 @@ func TestHandler_DeleteChapter(t *testing.T) {
 
 	t.Run("forbidden without manage video right", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -102,7 +100,6 @@ func TestHandler_DeleteChapter(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -129,7 +126,6 @@ func TestHandler_DeleteChapter(t *testing.T) {
 
 	t.Run("invalid video id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(

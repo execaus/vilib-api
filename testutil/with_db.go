@@ -71,8 +71,8 @@ func WithDB(t *testing.T, migrationsPath []string, fn func(bobDB *bob.DB)) {
 	stdlibDB := stdlib.OpenDBFromPool(stdlibDBConn)
 
 	for _, path := range migrationsPath {
-		if err := goose.Up(stdlibDB, path); err != nil {
-			t.Fatalf("failed to apply migrations: %v", err)
+		if upErr := goose.Up(stdlibDB, path); upErr != nil {
+			t.Fatalf("failed to apply migrations: %v", upErr)
 		}
 	}
 

@@ -47,7 +47,7 @@ func TestService_GroupRole_Create(t *testing.T) {
 	}{
 		{
 			name: "forbidden",
-			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.GroupRoleMock) {
+			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.GroupRoleMock) {
 				access.IsCheckAccountActionMock.
 					Expect(
 						minimock.AnyContext,

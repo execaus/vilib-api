@@ -21,7 +21,7 @@ func HasBit(mask PermissionMask, bitPosition PermissionFlag) bool {
 // bitPositions - список позиций битов для установки.
 func SetBits(mask PermissionMask, bitPositions ...PermissionFlag) PermissionMask {
 	for _, bitPosition := range bitPositions {
-		mask = mask | (1 << bitPosition)
+		mask |= 1 << bitPosition
 	}
 	return mask
 }
@@ -31,7 +31,7 @@ func SetBits(mask PermissionMask, bitPositions ...PermissionFlag) PermissionMask
 // bitPositions - список позиций битов для очистки.
 func ClearBits(mask PermissionMask, bitPositions ...PermissionFlag) PermissionMask {
 	for _, bitPosition := range bitPositions {
-		mask = mask &^ (1 << bitPosition)
+		mask &^= 1 << bitPosition
 	}
 	return mask
 }

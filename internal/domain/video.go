@@ -271,7 +271,7 @@ func (v *Video) FromDB(db *schema.UserGroupVideo) {
 	v.GroupID = db.UserGroupID
 	v.Name = db.Name
 	v.Author = db.Author
-	v.Status = VideoStatus(db.Status)
+	v.Status = VideoStatus(db.Status) //nolint:gosec // статус пишет только сам сервис константами 0..4
 	v.CreatedAt = db.CreatedAt
 	v.StatusChangedAt = db.StatusChangedAt
 	v.ProcessingAttempt = int(db.ProcessingAttempt)

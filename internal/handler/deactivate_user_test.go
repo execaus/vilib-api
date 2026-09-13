@@ -33,17 +33,16 @@ func TestHandler_DeactivateUser(t *testing.T) {
 		return repo, tx
 	}
 
-	setupRollbackTx := func(mc *minimock.Controller) (*saga_mocks.TransactableMock, *saga_mocks.BobTransactionMock) {
+	setupRollbackTx := func(mc *minimock.Controller) *saga_mocks.TransactableMock {
 		tx := saga_mocks.NewBobTransactionMock(mc)
 		tx.RollbackMock.Expect(minimock.AnyContext).Return(nil)
 		repo := saga_mocks.NewTransactableMock(mc)
 		repo.WithTxMock.When(minimock.AnyContext).Then(tx, nil)
-		return repo, tx
+		return repo
 	}
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo, _ := setupSuccessTx(mc)
@@ -70,10 +69,9 @@ func TestHandler_DeactivateUser(t *testing.T) {
 
 	t.Run("conflict - owner", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
-		repo, _ := setupRollbackTx(mc)
+		repo := setupRollbackTx(mc)
 
 		svcMock.Auth.GetClaimsFromTokenMock.When("Bearer "+testToken).Then(&domain.AuthClaims{
 			UserID:           testInitiatorID,
@@ -97,10 +95,9 @@ func TestHandler_DeactivateUser(t *testing.T) {
 
 	t.Run("conflict - already deactivated", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
-		repo, _ := setupRollbackTx(mc)
+		repo := setupRollbackTx(mc)
 
 		svcMock.Auth.GetClaimsFromTokenMock.When("Bearer "+testToken).Then(&domain.AuthClaims{
 			UserID:           testInitiatorID,
@@ -124,10 +121,9 @@ func TestHandler_DeactivateUser(t *testing.T) {
 
 	t.Run("forbidden", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
-		repo, _ := setupRollbackTx(mc)
+		repo := setupRollbackTx(mc)
 
 		svcMock.Auth.GetClaimsFromTokenMock.When("Bearer "+testToken).Then(&domain.AuthClaims{
 			UserID:           testInitiatorID,
@@ -151,7 +147,6 @@ func TestHandler_DeactivateUser(t *testing.T) {
 
 	t.Run("invalid account id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(
@@ -172,7 +167,6 @@ func TestHandler_DeactivateUser(t *testing.T) {
 
 	t.Run("invalid user id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(

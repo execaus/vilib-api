@@ -43,7 +43,6 @@ func TestHandler_DeleteUserGroup(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -70,7 +69,6 @@ func TestHandler_DeleteUserGroup(t *testing.T) {
 
 	t.Run("forbidden", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -97,7 +95,6 @@ func TestHandler_DeleteUserGroup(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -124,7 +121,6 @@ func TestHandler_DeleteUserGroup(t *testing.T) {
 
 	t.Run("invalid account id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(
@@ -145,7 +141,6 @@ func TestHandler_DeleteUserGroup(t *testing.T) {
 
 	t.Run("invalid group id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(

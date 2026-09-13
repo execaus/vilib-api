@@ -215,7 +215,7 @@ func (s *GroupRoleService) Delete(
 	}
 
 	// Удалить роль
-	if err := s.repo.Delete(ctx, roleID); err != nil {
+	if err = s.repo.Delete(ctx, roleID); err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}

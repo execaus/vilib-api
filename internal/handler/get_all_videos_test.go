@@ -35,7 +35,6 @@ func TestHandler_ListVideos(t *testing.T) {
 		t.Helper()
 
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 
@@ -135,7 +134,6 @@ func TestHandler_ListVideos(t *testing.T) {
 
 	t.Run("invalid account id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(
@@ -156,7 +154,6 @@ func TestHandler_ListVideos(t *testing.T) {
 
 	t.Run("invalid group id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(

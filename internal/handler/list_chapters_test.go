@@ -50,7 +50,6 @@ func TestHandler_ListChapters(t *testing.T) {
 
 	t.Run("success returns chapters with own coverage", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -95,7 +94,6 @@ func TestHandler_ListChapters(t *testing.T) {
 
 	t.Run("video without chapters returns empty list, not 404", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -127,7 +125,6 @@ func TestHandler_ListChapters(t *testing.T) {
 
 	t.Run("forbidden without watch right", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -154,7 +151,6 @@ func TestHandler_ListChapters(t *testing.T) {
 
 	t.Run("invalid video id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(

@@ -253,7 +253,7 @@ func TestService_AccountRole_Create(t *testing.T) {
 	}{
 		{
 			name: "forbidden",
-			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.AccountRoleMock) {
+			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.AccountRoleMock) {
 				access.IsCheckAccountActionMock.
 					Expect(
 						minimock.AnyContext,

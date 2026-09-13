@@ -51,7 +51,6 @@ func TestHandler_CreateChapter(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -92,7 +91,6 @@ func TestHandler_CreateChapter(t *testing.T) {
 
 	t.Run("forbidden without manage video right", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -124,7 +122,6 @@ func TestHandler_CreateChapter(t *testing.T) {
 
 	t.Run("video not ready returns conflict", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -160,7 +157,6 @@ func TestHandler_CreateChapter(t *testing.T) {
 
 	t.Run("missing name returns bad request without reaching service", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(

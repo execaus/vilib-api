@@ -27,7 +27,6 @@ func TestHandler_Login(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.LoginMock.Expect(minimock.AnyContext, testEmail, testPassword).Return(testToken, nil)
@@ -82,7 +81,6 @@ func TestHandler_Login(t *testing.T) {
 
 	t.Run("invalid json", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)

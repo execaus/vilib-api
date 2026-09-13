@@ -53,7 +53,6 @@ func TestHandler_UploadVideo(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -96,7 +95,6 @@ func TestHandler_UploadVideo(t *testing.T) {
 
 	t.Run("success with is_urgent flag passed through to service", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		urgentRequest := dto.UploadVideoRequest{
 			Name:        "test video",
@@ -141,7 +139,6 @@ func TestHandler_UploadVideo(t *testing.T) {
 
 	t.Run("forbidden", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -179,7 +176,6 @@ func TestHandler_UploadVideo(t *testing.T) {
 
 	t.Run("conflict on duplicate name", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -217,7 +213,6 @@ func TestHandler_UploadVideo(t *testing.T) {
 
 	t.Run("invalid body", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(
@@ -239,7 +234,6 @@ func TestHandler_UploadVideo(t *testing.T) {
 
 	t.Run("unauthorized without token", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)

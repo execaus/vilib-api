@@ -14,6 +14,10 @@ type VideoAssetService struct {
 	srv  *Service
 }
 
+func NewVideoAssetService(repo repository.VideoAsset, srv *Service) *VideoAssetService {
+	return &VideoAssetService{repo: repo, srv: srv}
+}
+
 func (s *VideoAssetService) Get(ctx context.Context, videoID uuid.UUID) ([]domain.VideoAsset, error) {
 	// Получение ассетов видео
 	assets, err := s.repo.Select(ctx, videoID)
@@ -35,10 +39,6 @@ func (s *VideoAssetService) SelectByVideoIDs(ctx context.Context, videoIDs []uui
 	}
 
 	return assets, nil
-}
-
-func NewVideoAssetService(repo repository.VideoAsset, srv *Service) *VideoAssetService {
-	return &VideoAssetService{repo: repo, srv: srv}
 }
 
 func (s *VideoAssetService) Create(

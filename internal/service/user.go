@@ -70,45 +70,14 @@ func (s *UserService) Update(
 		}
 	}
 
-	// Целевой пользователь должен состоять в accountID (роль пользователя принадлежит
-	// accountID) — иначе не раскрываем чужих пользователей (ErrNotFound).
-	users, err := s.repo.SelectByID(ctx, targetUserID)
+	target, err := s.userInAccount(ctx, accountID, targetUserID)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return domain.User{}, ErrNotFound
-		}
-		zap.L().Error(err.Error())
 		return domain.User{}, err
-	}
-	target := users[0]
-
-	targetRoles, err := s.srv.AccountRole.GetByID(ctx, target.RoleID)
-	if err != nil {
-		zap.L().Error(err.Error())
-		return domain.User{}, err
-	}
-	if len(targetRoles) == 0 || targetRoles[0].AccountID != accountID {
-		return domain.User{}, ErrNotFound
 	}
 
 	if patch.RoleID != nil {
-		// Проверить, что новая роль принадлежит аккаунту
-		var newRoles []domain.AccountRole
-		newRoles, err = s.srv.AccountRole.GetByID(ctx, *patch.RoleID)
+		target, err = s.changeRole(ctx, accountID, targetUserID, *patch.RoleID)
 		if err != nil {
-			zap.L().Error(err.Error())
-			return domain.User{}, err
-		}
-		if len(newRoles) == 0 {
-			return domain.User{}, ErrNotFound
-		}
-		if newRoles[0].AccountID != accountID {
-			return domain.User{}, ErrForbidden
-		}
-
-		target, err = s.repo.UpdateRole(ctx, targetUserID, *patch.RoleID)
-		if err != nil {
-			zap.L().Error(err.Error())
 			return domain.User{}, err
 		}
 	}
@@ -222,7 +191,7 @@ func (s *UserService) Deactivate(
 	}
 
 	// Деактивация пользователя
-	if err := s.repo.Deactivate(ctx, targetID); err != nil {
+	if err = s.repo.Deactivate(ctx, targetID); err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
@@ -262,7 +231,7 @@ func (s *UserService) Reactivate(
 	}
 
 	// Реактивация пользователя
-	if err := s.repo.Reactivate(ctx, targetID); err != nil {
+	if err = s.repo.Reactivate(ctx, targetID); err != nil {
 		zap.L().Error(err.Error())
 		return err
 	}
@@ -270,14 +239,14 @@ func (s *UserService) Reactivate(
 	// Проверка, что роль существует; если нет — назначить дефолтную
 	roles, err := s.srv.AccountRole.GetByID(ctx, user.RoleID)
 	if err != nil || len(roles) == 0 {
-		defaultRole, err := s.srv.AccountRole.GetDefault(ctx, accountID)
-		if err != nil {
-			zap.L().Error(err.Error())
-			return err
+		defaultRole, defaultErr := s.srv.AccountRole.GetDefault(ctx, accountID)
+		if defaultErr != nil {
+			zap.L().Error(defaultErr.Error())
+			return defaultErr
 		}
-		if _, err := s.repo.UpdateRole(ctx, targetID, defaultRole.ID); err != nil {
-			zap.L().Error(err.Error())
-			return err
+		if _, updateErr := s.repo.UpdateRole(ctx, targetID, defaultRole.ID); updateErr != nil {
+			zap.L().Error(updateErr.Error())
+			return updateErr
 		}
 	}
 
@@ -308,4 +277,52 @@ func (s *UserService) ListByAccount(
 	}
 
 	return users, nil
+}
+
+// userInAccount возвращает пользователя, если он состоит в accountID (роль пользователя принадлежит
+// accountID); иначе ErrNotFound — чужих пользователей не раскрываем.
+func (s *UserService) userInAccount(ctx context.Context, accountID, userID uuid.UUID) (domain.User, error) {
+	users, err := s.repo.SelectByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return domain.User{}, ErrNotFound
+		}
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+	target := users[0]
+
+	targetRoles, err := s.srv.AccountRole.GetByID(ctx, target.RoleID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+	if len(targetRoles) == 0 || targetRoles[0].AccountID != accountID {
+		return domain.User{}, ErrNotFound
+	}
+
+	return target, nil
+}
+
+// changeRole назначает пользователю роль roleID, проверив, что роль существует и принадлежит accountID.
+func (s *UserService) changeRole(ctx context.Context, accountID, userID, roleID uuid.UUID) (domain.User, error) {
+	newRoles, err := s.srv.AccountRole.GetByID(ctx, roleID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+	if len(newRoles) == 0 {
+		return domain.User{}, ErrNotFound
+	}
+	if newRoles[0].AccountID != accountID {
+		return domain.User{}, ErrForbidden
+	}
+
+	user, err := s.repo.UpdateRole(ctx, userID, roleID)
+	if err != nil {
+		zap.L().Error(err.Error())
+		return domain.User{}, err
+	}
+
+	return user, nil
 }

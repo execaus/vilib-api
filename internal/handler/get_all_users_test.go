@@ -31,7 +31,6 @@ func TestHandler_ListUsers(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 
@@ -63,7 +62,6 @@ func TestHandler_ListUsers(t *testing.T) {
 
 	t.Run("forbidden", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 
@@ -95,7 +93,6 @@ func TestHandler_ListUsers(t *testing.T) {
 
 	t.Run("invalid account id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(

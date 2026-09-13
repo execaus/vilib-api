@@ -36,7 +36,6 @@ func TestHandler_CreateAccountRole(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 
@@ -75,7 +74,6 @@ func TestHandler_CreateAccountRole(t *testing.T) {
 
 	t.Run("invalid account id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(
@@ -96,7 +94,6 @@ func TestHandler_CreateAccountRole(t *testing.T) {
 
 	t.Run("invalid json", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(
@@ -118,7 +115,6 @@ func TestHandler_CreateAccountRole(t *testing.T) {
 
 	t.Run("service error", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 

@@ -33,8 +33,8 @@ func (s *URLSupplier) WithValues(values ...string) string {
 }
 
 // toInterfaceSlice преобразует срез строк в срез интерфейсов.
-func (s *URLSupplier) toInterfaceSlice(ss []string) []interface{} {
-	res := make([]interface{}, len(ss))
+func (s *URLSupplier) toInterfaceSlice(ss []string) []any {
+	res := make([]any, len(ss))
 	for i, v := range ss {
 		res[i] = v
 	}

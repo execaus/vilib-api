@@ -973,7 +973,7 @@ func TestService_Video_ApplyProcessingCompleted(t *testing.T) {
 
 		attempt := 1
 		m.Video.UpdateStatusIfMock.Set(func(
-			_ context.Context, id uuid.UUID, from []domain.VideoStatus, to domain.VideoStatus, patch domain.VideoPatch,
+			_ context.Context, id uuid.UUID, _ []domain.VideoStatus, to domain.VideoStatus, patch domain.VideoPatch,
 		) (bool, error) {
 			require.Equal(t, testVideoID, id)
 			require.Equal(t, domain.VideoStatusFailed, to)
@@ -1552,7 +1552,7 @@ func TestService_Video_ApplyProcessingFailed(t *testing.T) {
 		// оригинала (Д-3 ревью эпика). Различаются по порядку вызова, а не по значению to,
 		// чтобы не заводить switch по domain.VideoStatus (exhaustive требует все ветки).
 		m.Video.UpdateStatusIfMock.Set(func(
-			_ context.Context, id uuid.UUID, from []domain.VideoStatus, to domain.VideoStatus, patch domain.VideoPatch,
+			_ context.Context, id uuid.UUID, _ []domain.VideoStatus, to domain.VideoStatus, patch domain.VideoPatch,
 		) (bool, error) {
 			require.Equal(t, testVideoID, id)
 			callCount++

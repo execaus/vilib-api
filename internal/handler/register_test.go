@@ -28,7 +28,6 @@ func TestHandler_Register(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Account.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail).
@@ -53,7 +52,6 @@ func TestHandler_Register(t *testing.T) {
 
 	t.Run("invalid json", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
@@ -69,7 +67,6 @@ func TestHandler_Register(t *testing.T) {
 
 	t.Run("service error", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Account.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail).

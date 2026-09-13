@@ -155,7 +155,7 @@ func (s *EmailService) sendLocalMail(body string) {
 	}
 }
 
-func (s *EmailService) sendRealMail(ctx context.Context, to []string, subject string, body string) error {
+func (s *EmailService) sendRealMail(_ context.Context, to []string, subject string, body string) error {
 	// Формирование SMTP-сообщения в MIME: без этого кириллица в теме и тексте у получателя нечитаема
 	msg := buildMessage(s.cfg.From, to[0], subject, body)
 

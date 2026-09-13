@@ -30,7 +30,7 @@ func TestRepository_AccountRoleInsert_Success(t *testing.T) {
 		require.NoError(t, err)
 		role, err := r.AccountRole.Insert(t.Context(), account.ID, name, &parent.ID, permission, isDefault, isSystem)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.NotEmpty(t, role.ID)
 		require.Equal(t, permission, role.PermissionMask)
 		require.Equal(t, name, role.Name)
@@ -74,7 +74,7 @@ func TestRepository_AccountRoleSelectByAccountID_Success(t *testing.T) {
 
 		roles, err := r.AccountRole.SelectByAccountID(t.Context(), accounts[3].ID)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Len(t, roles, roleInAccountCount)
 		for _, role := range roles {
 			require.Contains(t, generatedRoles[3], role)
@@ -85,7 +85,7 @@ func TestRepository_AccountRoleSelectByAccountID_Success(t *testing.T) {
 func TestRepository_AccountRoleSelectByAccountID_NilNotFound(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		roles, err := r.AccountRole.SelectByAccountID(t.Context(), uuid.New())
 
 		require.Nil(t, roles)
@@ -127,7 +127,7 @@ func TestRepository_AccountRoleSelectByID_Success(t *testing.T) {
 
 		roles, err := r.AccountRole.SelectByID(t.Context(), generatedRoles[3][0].ID)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Contains(t, generatedRoles[3], roles[0])
 	})
 }
@@ -135,7 +135,7 @@ func TestRepository_AccountRoleSelectByID_Success(t *testing.T) {
 func TestRepository_AccountRoleSelectByID_NilNotFound(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		roles, err := r.AccountRole.SelectByID(t.Context(), uuid.New())
 
 		require.Nil(t, roles)

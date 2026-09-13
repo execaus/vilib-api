@@ -46,7 +46,6 @@ func TestHandler_GetVideoHLSMaster(t *testing.T) {
 
 	t.Run("success returns rewritten playlist", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -70,7 +69,6 @@ func TestHandler_GetVideoHLSMaster(t *testing.T) {
 
 	t.Run("missing token returns bad request", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
@@ -84,7 +82,6 @@ func TestHandler_GetVideoHLSMaster(t *testing.T) {
 
 	t.Run("invalid token returns unauthorized", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -105,7 +102,6 @@ func TestHandler_GetVideoHLSMaster(t *testing.T) {
 
 	t.Run("token for another video returns forbidden", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -126,7 +122,6 @@ func TestHandler_GetVideoHLSMaster(t *testing.T) {
 
 	t.Run("missing master asset returns not found", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -147,7 +142,6 @@ func TestHandler_GetVideoHLSMaster(t *testing.T) {
 
 	t.Run("video not ready returns conflict", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)

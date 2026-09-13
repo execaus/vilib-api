@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"vilib-api/internal/domain"
 	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 )
 
 type AccountService struct {

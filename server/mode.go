@@ -6,8 +6,8 @@ type Mode string
 
 const (
 	HybridMode      Mode = "hybrid"
-	ProductionMode       = "production"
-	DevelopmentMode      = "development"
+	ProductionMode  Mode = "production"
+	DevelopmentMode Mode = "development"
 )
 
 var (

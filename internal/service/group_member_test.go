@@ -136,8 +136,8 @@ func TestService_GroupMember_RemoveMember(t *testing.T) {
 			name: "no access is forbidden",
 			setupMocks: func(
 				access *service_mocks.AccessMock,
-				repo *repository_mocks.GroupMemberMock,
-				assignment *service_mocks.AssignmentMock,
+				_ *repository_mocks.GroupMemberMock,
+				_ *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(
@@ -153,8 +153,8 @@ func TestService_GroupMember_RemoveMember(t *testing.T) {
 			name: "group belongs to another account is not found",
 			setupMocks: func(
 				access *service_mocks.AccessMock,
-				repo *repository_mocks.GroupMemberMock,
-				assignment *service_mocks.AssignmentMock,
+				_ *repository_mocks.GroupMemberMock,
+				_ *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
 					Expect(

@@ -49,7 +49,7 @@ func TestService_UserGroup_Create(t *testing.T) {
 		{
 			// По ТЗ §6.4 создание группы требует именно ManageGroups, а не ManageUsers.
 			name: "forbidden",
-			setupMocks: func(access *service_mocks.AccessMock, repo *repository_mocks.UserGroupMock) {
+			setupMocks: func(access *service_mocks.AccessMock, _ *repository_mocks.UserGroupMock) {
 				access.IsCheckAccountActionMock.
 					Expect(
 						minimock.AnyContext,
@@ -182,12 +182,12 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 		{
 			name: "no access is forbidden",
 			setupMocks: func(
-				repo *repository_mocks.UserGroupMock,
-				user *service_mocks.UserMock,
-				accRole *service_mocks.AccountRoleMock,
+				_ *repository_mocks.UserGroupMock,
+				_ *service_mocks.UserMock,
+				_ *service_mocks.AccountRoleMock,
 				access *service_mocks.AccessMock,
-				groupMember *service_mocks.GroupMemberMock,
-				groupRole *service_mocks.GroupRoleMock,
+				_ *service_mocks.GroupMemberMock,
+				_ *service_mocks.GroupRoleMock,
 				_ *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
@@ -204,7 +204,7 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 		{
 			name: "account owner adds members without group membership",
 			setupMocks: func(
-				repo *repository_mocks.UserGroupMock,
+				_ *repository_mocks.UserGroupMock,
 				user *service_mocks.UserMock,
 				accRole *service_mocks.AccountRoleMock,
 				access *service_mocks.AccessMock,
@@ -239,12 +239,12 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 		{
 			name: "target user from another account is forbidden",
 			setupMocks: func(
-				repo *repository_mocks.UserGroupMock,
+				_ *repository_mocks.UserGroupMock,
 				user *service_mocks.UserMock,
 				accRole *service_mocks.AccountRoleMock,
 				access *service_mocks.AccessMock,
-				groupMember *service_mocks.GroupMemberMock,
-				groupRole *service_mocks.GroupRoleMock,
+				_ *service_mocks.GroupMemberMock,
+				_ *service_mocks.GroupRoleMock,
 				_ *service_mocks.AssignmentMock,
 			) {
 				access.IsCheckGroupActionMock.
@@ -265,7 +265,7 @@ func TestService_UserGroup_AddMembers(t *testing.T) {
 		{
 			name: "group member with ManageMembers adds members",
 			setupMocks: func(
-				repo *repository_mocks.UserGroupMock,
+				_ *repository_mocks.UserGroupMock,
 				user *service_mocks.UserMock,
 				accRole *service_mocks.AccountRoleMock,
 				access *service_mocks.AccessMock,

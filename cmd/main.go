@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -26,6 +27,10 @@ import (
 
 // shutdownTimeout — время на штатное завершение HTTP-сервера при получении сигнала остановки.
 const shutdownTimeout = 30 * time.Second
+
+// readHeaderTimeout — предел на чтение заголовков запроса: без него медленный клиент держит соединение
+// сколько угодно (атака Slowloris).
+const readHeaderTimeout = 10 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -56,7 +61,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize logger: %w", err)
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 	zap.ReplaceGlobals(logger)
 
 	db, pool, err := repository.NewPostgresDB(ctx, cfg.Database)
@@ -96,14 +101,15 @@ func run() error {
 
 	h := handler.NewHandler(sagaRunner, handler.Deps{Auth: svc.Auth, PublicConfig: handler.BuildPublicConfig(cfg)})
 	srv := &http.Server{
-		Addr:    ":" + cfg.Server.Port,
-		Handler: h.GetRouter(),
+		Addr:              ":" + cfg.Server.Port,
+		Handler:           h.GetRouter(),
+		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
 	go func() {
 		zap.L().Info("starting server", zap.String("port", cfg.Server.Port))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			zap.L().Error("failed to start server", zap.Error(err))
+		if serveErr := srv.ListenAndServe(); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			zap.L().Error("failed to start server", zap.Error(serveErr))
 		}
 	}()
 

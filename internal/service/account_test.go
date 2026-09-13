@@ -57,12 +57,12 @@ func TestService_Account_Create(t *testing.T) {
 	}{
 		{
 			name: "invalid email",
-			setupMocks: func(t *testing.T,
-				ar *service_mocks.AccountRoleMock,
-				auth *service_mocks.AuthMock,
-				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
-				repo *repository_mocks.AccountMock,
+			setupMocks: func(_ *testing.T,
+				_ *service_mocks.AccountRoleMock,
+				_ *service_mocks.AuthMock,
+				_ *service_mocks.UserMock,
+				_ *service_mocks.EmailMock,
+				_ *repository_mocks.AccountMock,
 			) {
 			},
 			args:    args{testName, testSurname, testInvalid},
@@ -71,11 +71,11 @@ func TestService_Account_Create(t *testing.T) {
 		},
 		{
 			name: "duplicate account name",
-			setupMocks: func(t *testing.T,
-				ar *service_mocks.AccountRoleMock,
-				auth *service_mocks.AuthMock,
-				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+			setupMocks: func(_ *testing.T,
+				_ *service_mocks.AccountRoleMock,
+				_ *service_mocks.AuthMock,
+				_ *service_mocks.UserMock,
+				_ *service_mocks.EmailMock,
 				repo *repository_mocks.AccountMock,
 			) {
 				repo.InsertMock.Expect(minimock.AnyContext, testAccountName, testEmail).
@@ -86,11 +86,11 @@ func TestService_Account_Create(t *testing.T) {
 		},
 		{
 			name: "insert error",
-			setupMocks: func(t *testing.T,
-				ar *service_mocks.AccountRoleMock,
-				auth *service_mocks.AuthMock,
-				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+			setupMocks: func(_ *testing.T,
+				_ *service_mocks.AccountRoleMock,
+				_ *service_mocks.AuthMock,
+				_ *service_mocks.UserMock,
+				_ *service_mocks.EmailMock,
 				repo *repository_mocks.AccountMock,
 			) {
 				repo.InsertMock.Expect(minimock.AnyContext, testAccountName, testEmail).
@@ -101,11 +101,11 @@ func TestService_Account_Create(t *testing.T) {
 		},
 		{
 			name: "owner role error",
-			setupMocks: func(t *testing.T,
+			setupMocks: func(_ *testing.T,
 				ar *service_mocks.AccountRoleMock,
-				auth *service_mocks.AuthMock,
-				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+				_ *service_mocks.AuthMock,
+				_ *service_mocks.UserMock,
+				_ *service_mocks.EmailMock,
 				repo *repository_mocks.AccountMock,
 			) {
 				acc := domain.Account{ID: uuid.New()}
@@ -121,11 +121,11 @@ func TestService_Account_Create(t *testing.T) {
 		},
 		{
 			name: "generate password error",
-			setupMocks: func(t *testing.T,
+			setupMocks: func(_ *testing.T,
 				ar *service_mocks.AccountRoleMock,
 				auth *service_mocks.AuthMock,
-				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+				_ *service_mocks.UserMock,
+				_ *service_mocks.EmailMock,
 				repo *repository_mocks.AccountMock,
 			) {
 				acc := domain.Account{ID: uuid.New()}
@@ -144,11 +144,11 @@ func TestService_Account_Create(t *testing.T) {
 		},
 		{
 			name: "hash password error",
-			setupMocks: func(t *testing.T,
+			setupMocks: func(_ *testing.T,
 				ar *service_mocks.AccountRoleMock,
 				auth *service_mocks.AuthMock,
-				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+				_ *service_mocks.UserMock,
+				_ *service_mocks.EmailMock,
 				repo *repository_mocks.AccountMock,
 			) {
 				acc := domain.Account{ID: uuid.New()}
@@ -170,11 +170,11 @@ func TestService_Account_Create(t *testing.T) {
 		},
 		{
 			name: "user create error",
-			setupMocks: func(t *testing.T,
+			setupMocks: func(_ *testing.T,
 				ar *service_mocks.AccountRoleMock,
 				auth *service_mocks.AuthMock,
 				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+				_ *service_mocks.EmailMock,
 				repo *repository_mocks.AccountMock,
 			) {
 				acc := domain.Account{ID: uuid.New()}
@@ -200,7 +200,7 @@ func TestService_Account_Create(t *testing.T) {
 		},
 		{
 			name: "email send error",
-			setupMocks: func(t *testing.T,
+			setupMocks: func(_ *testing.T,
 				ar *service_mocks.AccountRoleMock,
 				auth *service_mocks.AuthMock,
 				user *service_mocks.UserMock,
@@ -233,7 +233,7 @@ func TestService_Account_Create(t *testing.T) {
 		},
 		{
 			name: "success",
-			setupMocks: func(t *testing.T,
+			setupMocks: func(_ *testing.T,
 				ar *service_mocks.AccountRoleMock,
 				auth *service_mocks.AuthMock,
 				user *service_mocks.UserMock,
@@ -336,13 +336,13 @@ func TestService_Account_CreateUser(t *testing.T) {
 		{
 			name: "user already exists",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
-				auth *service_mocks.AuthMock,
-				ar *service_mocks.AccountRoleMock,
+				_ *service_mocks.AccountMock,
+				_ *service_mocks.AuthMock,
+				_ *service_mocks.AccountRoleMock,
 				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+				_ *service_mocks.EmailMock,
 				access *service_mocks.AccessMock,
-				repoAcc *repository_mocks.AccountMock,
+				_ *repository_mocks.AccountMock,
 			) {
 				access.IsCheckAccountActionMock.
 					Expect(
@@ -384,13 +384,13 @@ func TestService_Account_CreateUser(t *testing.T) {
 		{
 			name: "generate testPassword error",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
+				_ *service_mocks.AccountMock,
 				auth *service_mocks.AuthMock,
-				ar *service_mocks.AccountRoleMock,
+				_ *service_mocks.AccountRoleMock,
 				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+				_ *service_mocks.EmailMock,
 				access *service_mocks.AccessMock,
-				repoAcc *repository_mocks.AccountMock,
+				_ *repository_mocks.AccountMock,
 			) {
 				access.IsCheckAccountActionMock.
 					Expect(
@@ -410,13 +410,13 @@ func TestService_Account_CreateUser(t *testing.T) {
 		{
 			name: "hash password error",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
+				_ *service_mocks.AccountMock,
 				auth *service_mocks.AuthMock,
-				ar *service_mocks.AccountRoleMock,
+				_ *service_mocks.AccountRoleMock,
 				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+				_ *service_mocks.EmailMock,
 				access *service_mocks.AccessMock,
-				repoAcc *repository_mocks.AccountMock,
+				_ *repository_mocks.AccountMock,
 			) {
 				access.IsCheckAccountActionMock.
 					Expect(
@@ -438,13 +438,13 @@ func TestService_Account_CreateUser(t *testing.T) {
 		{
 			name: "get default role error",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
+				_ *service_mocks.AccountMock,
 				auth *service_mocks.AuthMock,
 				ar *service_mocks.AccountRoleMock,
 				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+				_ *service_mocks.EmailMock,
 				access *service_mocks.AccessMock,
-				repoAcc *repository_mocks.AccountMock,
+				_ *repository_mocks.AccountMock,
 			) {
 				access.IsCheckAccountActionMock.
 					Expect(
@@ -468,13 +468,13 @@ func TestService_Account_CreateUser(t *testing.T) {
 		{
 			name: "user create error",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
+				_ *service_mocks.AccountMock,
 				auth *service_mocks.AuthMock,
 				ar *service_mocks.AccountRoleMock,
 				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+				_ *service_mocks.EmailMock,
 				access *service_mocks.AccessMock,
-				repoAcc *repository_mocks.AccountMock,
+				_ *repository_mocks.AccountMock,
 			) {
 				access.IsCheckAccountActionMock.
 					Expect(
@@ -503,13 +503,13 @@ func TestService_Account_CreateUser(t *testing.T) {
 		{
 			name: "email send error",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
+				_ *service_mocks.AccountMock,
 				auth *service_mocks.AuthMock,
 				ar *service_mocks.AccountRoleMock,
 				user *service_mocks.UserMock,
 				email *service_mocks.EmailMock,
 				access *service_mocks.AccessMock,
-				repoAcc *repository_mocks.AccountMock,
+				_ *repository_mocks.AccountMock,
 			) {
 				access.IsCheckAccountActionMock.
 					Expect(
@@ -540,13 +540,13 @@ func TestService_Account_CreateUser(t *testing.T) {
 		{
 			name: "create user forbidden",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
-				auth *service_mocks.AuthMock,
-				ar *service_mocks.AccountRoleMock,
-				user *service_mocks.UserMock,
-				email *service_mocks.EmailMock,
+				_ *service_mocks.AccountMock,
+				_ *service_mocks.AuthMock,
+				_ *service_mocks.AccountRoleMock,
+				_ *service_mocks.UserMock,
+				_ *service_mocks.EmailMock,
 				access *service_mocks.AccessMock,
-				repoAcc *repository_mocks.AccountMock,
+				_ *repository_mocks.AccountMock,
 			) {
 				access.IsCheckAccountActionMock.
 					Expect(minimock.AnyContext, testAccountID, testInitiatorID, domain.AccountPermissionManageUsers).
@@ -558,13 +558,13 @@ func TestService_Account_CreateUser(t *testing.T) {
 		{
 			name: "success",
 			setupMocks: func(
-				acc *service_mocks.AccountMock,
+				_ *service_mocks.AccountMock,
 				auth *service_mocks.AuthMock,
 				ar *service_mocks.AccountRoleMock,
 				user *service_mocks.UserMock,
 				email *service_mocks.EmailMock,
 				access *service_mocks.AccessMock,
-				repoAcc *repository_mocks.AccountMock,
+				_ *repository_mocks.AccountMock,
 			) {
 				access.IsCheckAccountActionMock.
 					Expect(
@@ -721,7 +721,7 @@ func TestService_Account_GetByUserEmail(t *testing.T) {
 	}{
 		{
 			name: "user service error",
-			setupMocks: func(user *service_mocks.UserMock, role *service_mocks.AccountRoleMock, repo *repository_mocks.AccountMock) {
+			setupMocks: func(user *service_mocks.UserMock, _ *service_mocks.AccountRoleMock, _ *repository_mocks.AccountMock) {
 				user.GetByEmailMock.Expect(minimock.AnyContext, email).
 					Return(nil, errSomeError)
 			},
@@ -731,7 +731,7 @@ func TestService_Account_GetByUserEmail(t *testing.T) {
 		},
 		{
 			name: "account role get error",
-			setupMocks: func(user *service_mocks.UserMock, role *service_mocks.AccountRoleMock, repo *repository_mocks.AccountMock) {
+			setupMocks: func(user *service_mocks.UserMock, role *service_mocks.AccountRoleMock, _ *repository_mocks.AccountMock) {
 				users := []domain.User{
 					{ID: userID, RoleID: roleID},
 				}

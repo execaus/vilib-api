@@ -72,7 +72,7 @@ func (r *RequesterWithMocks) Version(version string) *RequesterWithMocks {
 	return r
 }
 
-func (r *RequesterWithMocks) Run(response any) (status int) {
+func (r *RequesterWithMocks) Run(response any) int {
 	gin.SetMode(gin.TestMode)
 
 	ctrl := minimock.NewController(r.t)
@@ -119,7 +119,12 @@ func (r *RequesterWithMocks) Run(response any) (status int) {
 		}
 	}
 
-	req := httptest.NewRequest(r.method, FullURI(r.version, r.target), bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequestWithContext(
+		r.t.Context(),
+		r.method,
+		FullURI(r.version, r.target),
+		bytes.NewBuffer(jsonBody),
+	)
 	req.Header.Set("Content-Type", "application/json")
 	if r.authToken != "" {
 		req.Header.Set("Authorization", r.authToken)

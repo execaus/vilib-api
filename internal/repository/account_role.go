@@ -21,6 +21,10 @@ type AccountRoleRepository struct {
 	provider *ExecutorProvider
 }
 
+func NewAccountRoleRepository(provider *ExecutorProvider) *AccountRoleRepository {
+	return &AccountRoleRepository{provider: provider}
+}
+
 func (r *AccountRoleRepository) SelectByID(ctx context.Context, rolesID ...uuid.UUID) ([]domain.AccountRole, error) {
 	exec := r.provider.GetExecutor(ctx)
 
@@ -42,10 +46,6 @@ func (r *AccountRoleRepository) SelectByID(ctx context.Context, rolesID ...uuid.
 	}
 
 	return roles, nil
-}
-
-func NewAccountRoleRepository(provider *ExecutorProvider) *AccountRoleRepository {
-	return &AccountRoleRepository{provider: provider}
 }
 
 func (r *AccountRoleRepository) Insert(

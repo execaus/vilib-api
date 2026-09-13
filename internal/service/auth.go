@@ -113,7 +113,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 
 	// Сбор всех идентификаторов организаций
 	accountsID := make([]uuid.UUID, len(accounts))
-	for i := 0; i < len(accounts); i++ {
+	for i := range accounts {
 		accountsID[i] = accounts[i].ID
 	}
 
@@ -336,7 +336,7 @@ func (s *AuthService) HashPassword(password string) (string, error) {
 func (s *AuthService) GeneratePassword() (string, error) {
 	// Генерация случайного пароля заданной длины
 	password := make([]byte, passwordLength)
-	for i := 0; i < passwordLength; i++ {
+	for i := range passwordLength {
 		indexBig, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
 		if err != nil {
 			zap.L().Error(err.Error())

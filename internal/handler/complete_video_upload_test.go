@@ -56,7 +56,6 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -89,7 +88,6 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -116,7 +114,6 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 
 	t.Run("conflict when object not found in storage", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -143,7 +140,6 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 
 	t.Run("forbidden", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -170,7 +166,6 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 
 	t.Run("unauthorized without token", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
@@ -185,7 +180,6 @@ func TestHandler_CompleteVideoUpload(t *testing.T) {
 
 	t.Run("invalid video id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(

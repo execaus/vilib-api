@@ -22,7 +22,7 @@ func TestRepository_AccountInsert_Success(t *testing.T) {
 
 		account, err := r.Account.Insert(t.Context(), name, email)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.NotEmpty(t, account.ID)
 		require.Equal(t, email, account.Email)
 		require.Equal(t, name, account.Name)
@@ -51,7 +51,7 @@ func TestRepository_AccountSelectByID_Success(t *testing.T) {
 
 		accounts, err := r.Account.SelectByID(t.Context(), accountsID[:selectCount]...)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Len(t, accounts, selectCount)
 
 		for i, account := range accounts {
@@ -64,7 +64,7 @@ func TestRepository_AccountSelectByID_Success(t *testing.T) {
 func TestRepository_AccountSelectByID_NilNotFound(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		accounts, err := r.Account.SelectByID(t.Context(), uuid.New())
 		require.Nil(t, accounts)
 		require.ErrorIs(t, repository.ErrNotFound, err)
@@ -152,7 +152,7 @@ func TestRepository_AccountSelectByUsersID_Success(t *testing.T) {
 func TestRepository_AccountSelectByUsersID_NilNotFound(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		accounts, err := r.Account.SelectByUsersID(t.Context(), uuid.New())
 		require.Nil(t, accounts)
 		require.ErrorIs(t, repository.ErrNotFound, err)

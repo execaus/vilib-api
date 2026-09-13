@@ -52,7 +52,6 @@ func TestHandler_UpdateChapter(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -92,7 +91,6 @@ func TestHandler_UpdateChapter(t *testing.T) {
 
 	t.Run("duplicate start_ms returns conflict", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -129,7 +127,6 @@ func TestHandler_UpdateChapter(t *testing.T) {
 
 	t.Run("not found", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -161,7 +158,6 @@ func TestHandler_UpdateChapter(t *testing.T) {
 
 	t.Run("invalid chapter id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(

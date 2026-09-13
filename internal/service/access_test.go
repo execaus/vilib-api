@@ -41,7 +41,7 @@ func TestService_Access_IsCheckAccountAction(t *testing.T) {
 	}{
 		{
 			name: "user not in account",
-			setupMocks: func(acc *service_mocks.AccountMock, user *service_mocks.UserMock, role *service_mocks.AccountRoleMock) {
+			setupMocks: func(acc *service_mocks.AccountMock, _ *service_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
 				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
 					Return(service.ErrForbidden)
 			},
@@ -50,7 +50,7 @@ func TestService_Access_IsCheckAccountAction(t *testing.T) {
 		},
 		{
 			name: "get user error",
-			setupMocks: func(acc *service_mocks.AccountMock, user *service_mocks.UserMock, role *service_mocks.AccountRoleMock) {
+			setupMocks: func(acc *service_mocks.AccountMock, user *service_mocks.UserMock, _ *service_mocks.AccountRoleMock) {
 				acc.IsHasUserMock.Expect(minimock.AnyContext, testAccountID, testInitiatorID).
 					Return(nil)
 				user.GetByIDMock.Expect(minimock.AnyContext, testInitiatorID).
@@ -122,7 +122,7 @@ func TestService_Access_IsCheckAccountAction(t *testing.T) {
 				func(mockServices *testutil.ServiceMock, _ *testutil.RepositoryMock) {
 					tt.setupMocks(mockServices.Account, mockServices.User, mockServices.AccountRole)
 				},
-				func(s *service.Service, r *repository.Repository) {
+				func(s *service.Service, _ *repository.Repository) {
 					srv := service.NewAccessService(s)
 
 					err := srv.IsCheckAccountAction(t.Context(), tt.args.accountID, tt.args.initiatorID, tt.args.action)

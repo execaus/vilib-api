@@ -62,7 +62,7 @@ func (r *Requester) Authorization(token string) *Requester {
 	return r
 }
 
-func (r *Requester) Run(response any) (status int) {
+func (r *Requester) Run(response any) int {
 	gin.SetMode(gin.TestMode)
 
 	ctrl := gomock.NewController(r.t)
@@ -82,7 +82,12 @@ func (r *Requester) Run(response any) (status int) {
 		}
 	}
 
-	req := httptest.NewRequest(r.method, FullURI(r.version, r.target), bytes.NewBuffer(jsonBody))
+	req := httptest.NewRequestWithContext(
+		r.t.Context(),
+		r.method,
+		FullURI(r.version, r.target),
+		bytes.NewBuffer(jsonBody),
+	)
 	req.Header.Set("Content-Type", "application/json")
 	if r.authToken != "" {
 		req.Header.Set("Authorization", r.authToken)

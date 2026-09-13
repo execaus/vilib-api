@@ -316,6 +316,8 @@ func (r *UserRepository) SelectByAccountID(
 		mods = append(mods, sm.Where(schema.Users.Columns.DeactivatedAt.IsNull()))
 	case UserStatusDeactivated:
 		mods = append(mods, sm.Where(schema.Users.Columns.DeactivatedAt.IsNotNull()))
+	case UserStatusAll:
+		// Без фильтра по статусу: и активные, и деактивированные.
 	}
 
 	usersDB, err := schema.Users.Query(mods...).All(ctx, exec)

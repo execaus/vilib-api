@@ -52,7 +52,6 @@ func TestHandler_GetVideo(t *testing.T) {
 
 	t.Run("hls kind returns master playlist url with token", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -137,7 +136,6 @@ func TestHandler_GetVideo(t *testing.T) {
 
 	t.Run("original kind returns presigned url as is", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupCommitTx(mc)
@@ -178,7 +176,6 @@ func TestHandler_GetVideo(t *testing.T) {
 
 	t.Run("conflict when video is not available", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -205,7 +202,6 @@ func TestHandler_GetVideo(t *testing.T) {
 
 	t.Run("forbidden", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		repo := setupRollbackTx(mc)
@@ -232,7 +228,6 @@ func TestHandler_GetVideo(t *testing.T) {
 
 	t.Run("unauthorized without token", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)
@@ -247,7 +242,6 @@ func TestHandler_GetVideo(t *testing.T) {
 
 	t.Run("invalid video id", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		svcMock.Auth.GetClaimsFromTokenMock.Return(

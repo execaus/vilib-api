@@ -25,12 +25,11 @@ func TestRepository_UserGroupInsert_Success(t *testing.T) {
 		require.NoError(t, err)
 		group, err := r.UserGroup.Insert(t.Context(), account.ID, name)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 
 		require.NotEmpty(t, group.ID)
 		require.Equal(t, name, group.Name)
 		require.Equal(t, account.ID, group.AccountID)
-
 	})
 }
 
@@ -61,7 +60,7 @@ func TestRepository_UserGroupSelectByID_Success(t *testing.T) {
 
 		userGroups, err := r.UserGroup.GetByID(t.Context(), generatedUserGroupsID[2]...)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Len(t, userGroups, userGroupCount)
 
 		expectedIDs := generatedUserGroupsID[2]
@@ -75,7 +74,7 @@ func TestRepository_UserGroupSelectByID_Success(t *testing.T) {
 func TestRepository_UserGroupSelectByID_NilNotFound(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		roles, err := r.UserGroup.GetByID(t.Context(), uuid.New())
 
 		require.Nil(t, roles)

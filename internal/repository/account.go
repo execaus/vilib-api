@@ -57,7 +57,7 @@ func (r *AccountRepository) SelectByUsersID(ctx context.Context, usersID ...uuid
 	}
 
 	accounts := make([]domain.Account, 0, len(accountsID))
-	for accountID, _ := range accountsID {
+	for accountID := range accountsID {
 		accountDB, err := schema.Accounts.Query(
 			sm.Where(schema.Accounts.Columns.AccountID.EQ(psql.Arg(accountID))),
 		).One(ctx, exec)

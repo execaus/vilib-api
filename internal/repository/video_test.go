@@ -158,7 +158,7 @@ func TestRepository_VideoSelect_Success(t *testing.T) {
 func TestRepository_VideoSelect_NilNotFound(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		video, err := r.Video.Select(t.Context(), uuid.New())
 
 		require.Nil(t, video)
@@ -428,7 +428,7 @@ func TestRepository_VideoAssetSelect_Success(t *testing.T) {
 func TestRepository_VideoAssetSelect_Empty(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		assets, err := r.VideoAsset.Select(t.Context(), uuid.New())
 
 		require.NoError(t, err)

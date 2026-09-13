@@ -408,7 +408,7 @@ func TestService_Auth_Login(t *testing.T) {
 				func(mockServices *testutil.ServiceMock, _ *testutil.RepositoryMock) {
 					tt.setupMocks(mockServices.User, mockServices.Account, mockServices.AccountRole, mockServices.Auth)
 				},
-				func(s *service.Service, r *repository.Repository) {
+				func(s *service.Service, _ *repository.Repository) {
 					cfg := config.AuthConfig{Key: "test-secret-key"}
 					srv := service.NewAuthService(cfg, config.FrontendConfig{}, nil, s)
 

@@ -16,7 +16,6 @@ import (
 func TestHandler_Health(t *testing.T) {
 	t.Run("returns ok without authorization", func(t *testing.T) {
 		mc := minimock.NewController(t)
-		defer mc.Finish()
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
 		router := testutil.SetupTestRouterWithoutTx(mc, svcMock)

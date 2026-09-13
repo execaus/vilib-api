@@ -9,6 +9,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
+	// Регистрирует сгенерированную swag-спецификацию, которую отдаёт маршрут /api/swagger.
 	_ "vilib-api/docs"
 )
 
@@ -48,8 +49,8 @@ var (
 	AddGroupMemberURL      = NewURLSupplier("accounts/%s/user-groups/%s/members")
 	GetGroupMembersURL     = NewURLSupplier("accounts/%s/user-groups/%s/members")
 	CreateGroupRoleURL     = NewURLSupplier("accounts/%s/user-groups/roles")
-	UploadVideoUrl         = NewURLSupplier("accounts/%s/user-groups/%s/video")
-	GetVideoUrl            = NewURLSupplier("accounts/%s/user-groups/%s/video/%s")
+	UploadVideoURL         = NewURLSupplier("accounts/%s/user-groups/%s/video")
+	GetVideoURL            = NewURLSupplier("accounts/%s/user-groups/%s/video/%s")
 	CompleteVideoUploadURL = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/complete")
 	GetVideoHLSMasterURL   = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/hls/master.m3u8")
 	GetVideoHLSPlaylistURL = NewURLSupplier("accounts/%s/user-groups/%s/video/%s/hls/%s/playlist.m3u8")
@@ -98,6 +99,8 @@ func NewHandler(saga saga.Runner[*service.Service], deps Deps) *Handler {
 	return h
 }
 
+// GetRouter собирает маршруты API: публичные ручки авторизации, ресурсы организации, HLS-выдачу и swagger.
+//
 // @title Vilib API
 // @version 1.0
 // @description API для управления внутренней видео документацией Vilib.
@@ -129,6 +132,18 @@ func (h *Handler) GetRouter() *gin.Engine {
 	// Публичный конфиг фронтенда — без авторизации (§5.2 контракта Э2, П-8).
 	v1.GET(ConfigURL, h.GetConfig)
 
+	h.registerUserRoutes(v1)
+	h.registerGroupRoutes(v1)
+	h.registerVideoRoutes(v1)
+	h.registerAssignmentRoutes(v1)
+	h.registerChapterRoutes(v1)
+
+	return engine
+}
+
+// registerUserRoutes регистрирует маршруты пользователей и ролей организации — вынесено из GetRouter,
+// чтобы регистрация маршрутов оставалась обозримой по разделам.
+func (h *Handler) registerUserRoutes(v1 *gin.RouterGroup) {
 	// Users
 	v1.POST(CreateUserURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateUser)
 	v1.GET(ListUsersURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllUsers)
@@ -153,7 +168,11 @@ func (h *Handler) GetRouter() *gin.Engine {
 		h.RequireAuthMiddleware,
 		h.DeleteAccountRole,
 	)
+}
 
+// registerGroupRoutes регистрирует маршруты групп, их участников и ролей групп — вынесено из GetRouter,
+// чтобы регистрация маршрутов оставалась обозримой по разделам.
+func (h *Handler) registerGroupRoutes(v1 *gin.RouterGroup) {
 	// User groups
 	v1.POST(CreateUserGroupURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.CreateUserGroup)
 	v1.GET(ListUserGroupsURL.WithPathParams(pathKeyAccountID), h.RequireAuthMiddleware, h.GetAllUserGroups)
@@ -208,10 +227,14 @@ func (h *Handler) GetRouter() *gin.Engine {
 		h.RequireAuthMiddleware,
 		h.DeleteGroupRole,
 	)
+}
 
+// registerVideoRoutes регистрирует маршруты видео, HLS-выдачи и прогресса просмотра — вынесено из
+// GetRouter, чтобы регистрация маршрутов оставалась обозримой по разделам.
+func (h *Handler) registerVideoRoutes(v1 *gin.RouterGroup) {
 	// Videos
 	v1.POST(
-		UploadVideoUrl.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
+		UploadVideoURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID),
 		h.RequireAuthMiddleware,
 		h.UploadVideo,
 	)
@@ -221,17 +244,17 @@ func (h *Handler) GetRouter() *gin.Engine {
 		h.GetAllVideos,
 	)
 	v1.GET(
-		GetVideoUrl.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		GetVideoURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
 		h.RequireAuthMiddleware,
 		h.GetVideo,
 	)
 	v1.PUT(
-		GetVideoUrl.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		GetVideoURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
 		h.RequireAuthMiddleware,
 		h.RenameVideo,
 	)
 	v1.DELETE(
-		GetVideoUrl.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
+		GetVideoURL.WithPathParams(pathKeyAccountID, pathKeyUserGroupID, pathKeyVideoID),
 		h.RequireAuthMiddleware,
 		h.DeleteVideo,
 	)
@@ -262,11 +285,6 @@ func (h *Handler) GetRouter() *gin.Engine {
 		h.RequireAuthMiddleware,
 		h.GetVideoProgress,
 	)
-
-	h.registerAssignmentRoutes(v1)
-	h.registerChapterRoutes(v1)
-
-	return engine
 }
 
 // registerAssignmentRoutes регистрирует маршруты назначений обязательного обучения (§4, §5

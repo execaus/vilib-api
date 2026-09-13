@@ -433,6 +433,9 @@ linters:
     # Log a warning if an exclusion rule is unused.
     # Default: false
     warn-unused: true
+    # Сгенерированная swag-спецификация (make swagger) не правится вручную.
+    paths:
+      - ^docs/
     # Predefined exclusion rules.
     # Default: []
     presets:
@@ -462,6 +465,11 @@ linters:
       - text: 'comment on exported \S+ \S+ should be of the form ".+"'
         source: '// ?(nolint|TODO)'
         linters: [ revive, staticcheck ]
+      # Ручки HTTP построены по обязательному шаблону (rules/CODESTYLE_GOLANG_API.md): одна ручка — один
+      # файл со своим swagger-godoc и своей обёрткой saga.Run. Совпадение структуры соседних ручек здесь —
+      # следствие шаблона, а не копипаст, который стоит выносить в общий код.
+      - path: '^internal/handler/[^/]+\.go$'
+        linters: [ dupl ]
       - path: '_test\.go'
         linters:
           - bodyclose

@@ -26,7 +26,7 @@ func TestRepository_GroupRoleInsert_Success(t *testing.T) {
 
 		role, err := r.GroupRole.Insert(t.Context(), account.ID, name, permission, isDefault)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.NotEmpty(t, role.ID)
 		require.Equal(t, isDefault, role.IsDefault)
 		require.Equal(t, permission, role.PermissionMask)
@@ -69,7 +69,7 @@ func TestRepository_GroupRoleSelectByAccount_Success(t *testing.T) {
 
 		roles, err := r.GroupRole.SelectByAccount(t.Context(), accounts[5].ID)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Len(t, roles, roleCount)
 
 		expectedIDs := make([]uuid.UUID, roleCount)
@@ -86,7 +86,7 @@ func TestRepository_GroupRoleSelectByAccount_Success(t *testing.T) {
 func TestRepository_GroupRoleSelectByAccount_NilNotFound(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		roles, err := r.GroupRole.SelectByAccount(t.Context(), uuid.New())
 
 		require.Nil(t, roles)
@@ -111,7 +111,7 @@ func TestRepository_GroupRoleSelectByID_Success(t *testing.T) {
 
 		roles, err := r.GroupRole.SelectByID(t.Context(), createdRole.ID)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Len(t, roles, 1)
 		require.Equal(t, createdRole.ID, roles[0].ID)
 		require.Equal(t, name, roles[0].Name)
@@ -123,7 +123,7 @@ func TestRepository_GroupRoleSelectByID_Success(t *testing.T) {
 func TestRepository_GroupRoleSelectByID_NotFound(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		roles, err := r.GroupRole.SelectByID(t.Context(), uuid.New())
 
 		require.Nil(t, roles)
@@ -145,7 +145,7 @@ func TestRepository_GroupRoleGetDefault_Success(t *testing.T) {
 
 		role, err := r.GroupRole.GetDefault(t.Context(), account.ID)
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, defaultRole.ID, role.ID)
 		require.True(t, role.IsDefault)
 	})
@@ -154,7 +154,7 @@ func TestRepository_GroupRoleGetDefault_Success(t *testing.T) {
 func TestRepository_GroupRoleGetDefault_NotFound(t *testing.T) {
 	t.Parallel()
 
-	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, f faker.Faker) {
+	testutil.TestRepositoryWithDB(t, func(r *repository.Repository, _ faker.Faker) {
 		_, err := r.GroupRole.GetDefault(t.Context(), uuid.New())
 
 		require.ErrorIs(t, repository.ErrNotFound, err)

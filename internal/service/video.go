@@ -1526,19 +1526,6 @@ func (s *VideoService) FailTimedOut(ctx context.Context, now time.Time) (domain.
 	return domain.TimedOutReport{Uploading: uploading, Queued: queued, Compressing: compressing}, nil
 }
 
-func (s *VideoService) isCheckGroupMember(
-	ctx context.Context,
-	groupID, userID uuid.UUID,
-) error {
-	// Проверка, является ли пользователь участником группы
-	_, err := s.srv.GroupMember.GetByUserIDAndGroupID(ctx, userID, groupID)
-	if err != nil {
-		return ErrForbidden
-	}
-
-	return nil
-}
-
 func (s *VideoService) isCheckGroupAction(
 	ctx context.Context,
 	groupID, userID uuid.UUID,
