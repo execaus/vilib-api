@@ -351,11 +351,35 @@ func TestService_Account_CreateUser(t *testing.T) {
 						testInitiatorID,
 						domain.AccountPermissionManageUsers,
 					).Return(nil)
-				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return(true, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{Email: testEmail}, nil)
 			},
 			args:    args{testAccountID, testInitiatorID, testName, testSurname, testEmail},
 			wantErr: service.ErrAccountUserExists,
+		},
+		{
+			name: "user existence check error",
+			setupMocks: func(
+				_ *service_mocks.AccountMock,
+				_ *service_mocks.AuthMock,
+				_ *service_mocks.AccountRoleMock,
+				user *service_mocks.UserMock,
+				_ *service_mocks.EmailMock,
+				access *service_mocks.AccessMock,
+				_ *repository_mocks.AccountMock,
+			) {
+				access.IsCheckAccountActionMock.
+					Expect(
+						minimock.AnyContext,
+						testAccountID,
+						testInitiatorID,
+						domain.AccountPermissionManageUsers,
+					).Return(nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{}, errSomeError)
+			},
+			args:    args{testAccountID, testInitiatorID, testName, testSurname, testEmail},
+			wantErr: errSomeError,
 		},
 		{
 			name: "generate testPassword error",
@@ -375,8 +399,8 @@ func TestService_Account_CreateUser(t *testing.T) {
 						testInitiatorID,
 						domain.AccountPermissionManageUsers,
 					).Return(nil)
-				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return(false, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{}, repository.ErrNotFound)
 				auth.GeneratePasswordMock.Expect().
 					Return("", errSomeError)
 			},
@@ -401,8 +425,8 @@ func TestService_Account_CreateUser(t *testing.T) {
 						testInitiatorID,
 						domain.AccountPermissionManageUsers,
 					).Return(nil)
-				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return(false, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{}, repository.ErrNotFound)
 				auth.GeneratePasswordMock.Expect().
 					Return(testPassword, nil)
 				auth.HashPasswordMock.Expect(testPassword).
@@ -429,8 +453,8 @@ func TestService_Account_CreateUser(t *testing.T) {
 						testInitiatorID,
 						domain.AccountPermissionManageUsers,
 					).Return(nil)
-				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return(false, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{}, repository.ErrNotFound)
 				auth.GeneratePasswordMock.Expect().
 					Return(testPassword, nil)
 				auth.HashPasswordMock.Expect(testPassword).
@@ -462,8 +486,8 @@ func TestService_Account_CreateUser(t *testing.T) {
 
 				role := domain.AccountRole{ID: uuid.New()}
 
-				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return(false, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{}, repository.ErrNotFound)
 				auth.GeneratePasswordMock.Expect().
 					Return(testPassword, nil)
 				auth.HashPasswordMock.Expect(testPassword).
@@ -497,8 +521,8 @@ func TestService_Account_CreateUser(t *testing.T) {
 
 				role := domain.AccountRole{ID: uuid.New()}
 
-				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return(false, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{}, repository.ErrNotFound)
 				auth.GeneratePasswordMock.Expect().
 					Return(testPassword, nil)
 				auth.HashPasswordMock.Expect(testPassword).
@@ -553,8 +577,8 @@ func TestService_Account_CreateUser(t *testing.T) {
 				role := domain.AccountRole{ID: uuid.New()}
 				resultUser := domain.User{Email: testEmail}
 
-				acc.IsExistsUserByEmailMock.Expect(minimock.AnyContext, testEmail).
-					Return(false, nil)
+				user.GetByEmailAndAccountIDMock.Expect(minimock.AnyContext, testEmail, testAccountID).
+					Return(domain.User{}, repository.ErrNotFound)
 				auth.GeneratePasswordMock.Expect().
 					Return(testPassword, nil)
 				auth.HashPasswordMock.Expect(testPassword).
@@ -662,78 +686,6 @@ func TestService_Account_GetByID(t *testing.T) {
 					srv := service.NewAccountService(r.Account, s)
 
 					got, err := srv.GetByID(t.Context(), tt.args.ids...)
-
-					require.Equal(t, tt.want, got)
-					require.Equal(t, tt.wantErr, err)
-				},
-			)
-		})
-	}
-}
-
-func TestService_Account_IsExistsUserByEmail(t *testing.T) {
-	t.Parallel()
-
-	email := testutil.Faker.Person().Contact().Email
-
-	var errSomeError = errors.New("some error")
-
-	type args struct {
-		email string
-	}
-
-	tests := []struct {
-		name       string
-		setupMocks func(*service_mocks.AccountMock)
-		args       args
-		want       bool
-		wantErr    error
-	}{
-		{
-			name: "exists",
-			setupMocks: func(acc *service_mocks.AccountMock) {
-				acc.GetByUserEmailMock.Expect(minimock.AnyContext, email).
-					Return([]domain.Account{{Email: email}}, nil)
-			},
-			args:    args{email},
-			want:    true,
-			wantErr: nil,
-		},
-		{
-			name: "not exists",
-			setupMocks: func(acc *service_mocks.AccountMock) {
-				acc.GetByUserEmailMock.Expect(minimock.AnyContext, email).
-					Return([]domain.Account{{Email: "other@mail.com"}}, nil)
-			},
-			args:    args{email},
-			want:    false,
-			wantErr: nil,
-		},
-		{
-			name: "service error",
-			setupMocks: func(acc *service_mocks.AccountMock) {
-				acc.GetByUserEmailMock.Expect(minimock.AnyContext, email).
-					Return(nil, errSomeError)
-			},
-			args:    args{email},
-			want:    false,
-			wantErr: errSomeError,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			testutil.TestService(
-				t,
-				func(mockServices *testutil.ServiceMock, _ *testutil.RepositoryMock) {
-					tt.setupMocks(mockServices.Account)
-				},
-				func(s *service.Service, r *repository.Repository) {
-					srv := service.NewAccountService(r.Account, s)
-
-					got, err := srv.IsExistsUserByEmail(t.Context(), tt.args.email)
 
 					require.Equal(t, tt.want, got)
 					require.Equal(t, tt.wantErr, err)

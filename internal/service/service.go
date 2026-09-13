@@ -70,7 +70,6 @@ type Auth interface {
 }
 
 type Account interface {
-	IsExistsUserByEmail(ctx context.Context, email string) (bool, error)
 	GetByUserEmail(ctx context.Context, email string) ([]domain.Account, error)
 	GetByID(ctx context.Context, accountsID ...uuid.UUID) ([]domain.Account, error)
 	Create(ctx context.Context, userName, userSurname, email string) (domain.Account, error)

@@ -133,7 +133,11 @@ func (s *UserService) GetByEmailAndAccountID(
 ) (domain.User, error) {
 	user, err := s.repo.SelectByEmailAndAccountID(ctx, email, accountID)
 	if err != nil {
-		zap.L().Error(err.Error())
+		// Отсутствие строки — штатный ответ (проверка уникальности при создании сотрудника),
+		// в лог как ошибку не пишется.
+		if !errors.Is(err, repository.ErrNotFound) {
+			zap.L().Error(err.Error())
+		}
 		return domain.User{}, err
 	}
 

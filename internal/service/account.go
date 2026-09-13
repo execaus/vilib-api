@@ -90,11 +90,17 @@ func (s *AccountService) CreateUser(
 		return domain.User{}, err
 	}
 
-	// Существует ли пользователь в аккаунте
-	exists, err := s.srv.Account.IsExistsUserByEmail(ctx, email)
-	if exists {
-		zap.L().Error(ErrAccountUserExists.Error())
+	// Email уникален в пределах организации: та же почта в другой организации допустима
+	// (сотрудник нескольких организаций, BR-05), повтор в этой — нет, в том числе у
+	// деактивированной строки: такого сотрудника восстанавливают, а не заводят заново.
+	_, err = s.srv.User.GetByEmailAndAccountID(ctx, email, accountID)
+	switch {
+	case err == nil:
+		zap.L().Warn(ErrAccountUserExists.Error())
 		return domain.User{}, ErrAccountUserExists
+	case !errors.Is(err, repository.ErrNotFound):
+		zap.L().Error(err.Error())
+		return domain.User{}, err
 	}
 
 	// Генерация пароля для пользователя
@@ -174,22 +180,6 @@ func (s *AccountService) GetByUserEmail(ctx context.Context, email string) ([]do
 	}
 
 	return accounts, nil
-}
-
-func (s *AccountService) IsExistsUserByEmail(ctx context.Context, email string) (bool, error) {
-	accounts, err := s.srv.Account.GetByUserEmail(ctx, email)
-	if err != nil {
-		zap.L().Error(err.Error())
-		return false, err
-	}
-
-	for _, account := range accounts {
-		if account.Email == email {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }
 
 func (s *AccountService) GetByID(ctx context.Context, accountsID ...uuid.UUID) ([]domain.Account, error) {
