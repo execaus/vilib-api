@@ -1,12 +1,18 @@
 package domain
 
 import (
-	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 	"vilib-api/internal/gen/schema"
 
 	"github.com/google/uuid"
+)
+
+// Допустимая длина названия организации в символах после обрезки пробелов по краям (A-01 ТЗ).
+const (
+	AccountNameMinLength = 2
+	AccountNameMaxLength = 128
 )
 
 type Account struct {
@@ -23,10 +29,12 @@ func (a *Account) FromDB(db *schema.Account) {
 	a.CreatedAt = db.CreatedAt
 }
 
-func NameFromEmail(email string) (string, error) {
-	if name, _, found := strings.Cut(email, "@"); found {
-		return name, nil
-	}
+// NormalizeAccountName обрезает пробелы по краям названия организации, указанного при
+// регистрации, и проверяет его длину в символах. Второе значение false означает, что название
+// вне допустимой длины. Уникальность названия не требуется: организация идентифицируется по id.
+func NormalizeAccountName(name string) (string, bool) {
+	trimmed := strings.TrimSpace(name)
+	length := utf8.RuneCountInString(trimmed)
 
-	return "", fmt.Errorf("invalid email: %s", email)
+	return trimmed, length >= AccountNameMinLength && length <= AccountNameMaxLength
 }

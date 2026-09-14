@@ -72,7 +72,7 @@ type Auth interface {
 type Account interface {
 	GetByUserEmail(ctx context.Context, email string) ([]domain.Account, error)
 	GetByID(ctx context.Context, accountsID ...uuid.UUID) ([]domain.Account, error)
-	Create(ctx context.Context, userName, userSurname, email string) (domain.Account, error)
+	Create(ctx context.Context, accountName, userName, userSurname, email string) (domain.Account, error)
 	CreateUser(ctx context.Context, accountID, initiatorID uuid.UUID, name, surname, email string) (domain.User, error)
 	IsHasUser(ctx context.Context, accountID, initiatorID uuid.UUID) error
 }

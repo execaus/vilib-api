@@ -2,10 +2,10 @@ package service_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 	"vilib-api/internal/domain"
-	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 	"vilib-api/internal/repository/repository_mocks"
 	"vilib-api/internal/service"
@@ -24,21 +24,22 @@ func TestService_Account_Create(t *testing.T) {
 		testName         = testutil.Faker.Person().FirstName()
 		testSurname      = testutil.Faker.Person().LastName()
 		testEmail        = testutil.Faker.Person().Contact().Email
-		testInvalid      = "invalid"
 		testPassword     = testutil.Faker.Person().Name()
 		testPasswordHash = testutil.Faker.Hash().MD5()
+		// Название приходит с пробелами по краям: сервис сохраняет обрезанное (A-01 ТЗ).
+		testAccountNameRaw = "  ООО «Ромашка»  "
+		testAccountName    = "ООО «Ромашка»"
 	)
-
-	testAccountName, _ := domain.NameFromEmail(testEmail)
 
 	successAccount := domain.Account{ID: uuid.New()}
 
 	var errSomeError = errors.New("some error")
 
 	type args struct {
-		name    string
-		surname string
-		email   string
+		accountName string
+		name        string
+		surname     string
+		email       string
 	}
 
 	tests := []struct {
@@ -56,7 +57,7 @@ func TestService_Account_Create(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name: "invalid email",
+			name: "account name too short after trim",
 			setupMocks: func(_ *testing.T,
 				_ *service_mocks.AccountRoleMock,
 				_ *service_mocks.AuthMock,
@@ -65,24 +66,23 @@ func TestService_Account_Create(t *testing.T) {
 				_ *repository_mocks.AccountMock,
 			) {
 			},
-			args:    args{testName, testSurname, testInvalid},
+			args:    args{"  Я  ", testName, testSurname, testEmail},
 			want:    domain.Account{},
-			wantErr: service.ErrEmailInvalid,
+			wantErr: service.ErrAccountNameInvalid,
 		},
 		{
-			name: "duplicate account name",
+			name: "account name too long",
 			setupMocks: func(_ *testing.T,
 				_ *service_mocks.AccountRoleMock,
 				_ *service_mocks.AuthMock,
 				_ *service_mocks.UserMock,
 				_ *service_mocks.EmailMock,
-				repo *repository_mocks.AccountMock,
+				_ *repository_mocks.AccountMock,
 			) {
-				repo.InsertMock.Expect(minimock.AnyContext, testAccountName, testEmail).
-					Return(domain.Account{}, dberrors.AccountErrors.ErrUniqueAccountsNameKey)
 			},
-			args:    args{testName, testSurname, testEmail},
-			wantErr: service.ErrAccountNameExists,
+			args:    args{strings.Repeat("я", domain.AccountNameMaxLength+1), testName, testSurname, testEmail},
+			want:    domain.Account{},
+			wantErr: service.ErrAccountNameInvalid,
 		},
 		{
 			name: "insert error",
@@ -96,7 +96,7 @@ func TestService_Account_Create(t *testing.T) {
 				repo.InsertMock.Expect(minimock.AnyContext, testAccountName, testEmail).
 					Return(domain.Account{}, errSomeError)
 			},
-			args:    args{testName, testSurname, testEmail},
+			args:    args{testAccountNameRaw, testName, testSurname, testEmail},
 			wantErr: errSomeError,
 		},
 		{
@@ -116,7 +116,7 @@ func TestService_Account_Create(t *testing.T) {
 				ar.CreateSystemAccountOwnerMock.Expect(minimock.AnyContext, acc.ID).
 					Return(domain.AccountRole{}, errSomeError)
 			},
-			args:    args{testName, testSurname, testEmail},
+			args:    args{testAccountNameRaw, testName, testSurname, testEmail},
 			wantErr: errSomeError,
 		},
 		{
@@ -139,7 +139,7 @@ func TestService_Account_Create(t *testing.T) {
 				auth.GeneratePasswordMock.Expect().
 					Return("", errSomeError)
 			},
-			args:    args{testName, testSurname, testEmail},
+			args:    args{testAccountNameRaw, testName, testSurname, testEmail},
 			wantErr: errSomeError,
 		},
 		{
@@ -165,7 +165,7 @@ func TestService_Account_Create(t *testing.T) {
 				auth.HashPasswordMock.Expect(testPassword).
 					Return("", errSomeError)
 			},
-			args:    args{testName, testSurname, testEmail},
+			args:    args{testAccountNameRaw, testName, testSurname, testEmail},
 			wantErr: errSomeError,
 		},
 		{
@@ -195,7 +195,7 @@ func TestService_Account_Create(t *testing.T) {
 				user.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail, testPasswordHash, role.ID).
 					Return(domain.User{}, errSomeError)
 			},
-			args:    args{testName, testSurname, testEmail},
+			args:    args{testAccountNameRaw, testName, testSurname, testEmail},
 			wantErr: errSomeError,
 		},
 		{
@@ -228,7 +228,7 @@ func TestService_Account_Create(t *testing.T) {
 				email.SendRegisteredMailMock.Expect(minimock.AnyContext, testEmail, testPassword).
 					Return(errSomeError)
 			},
-			args:    args{testName, testSurname, testEmail},
+			args:    args{testAccountNameRaw, testName, testSurname, testEmail},
 			wantErr: errSomeError,
 		},
 		{
@@ -260,7 +260,7 @@ func TestService_Account_Create(t *testing.T) {
 				email.SendRegisteredMailMock.Expect(minimock.AnyContext, testEmail, testPassword).
 					Return(nil)
 			},
-			args:    args{testName, testSurname, testEmail},
+			args:    args{testAccountNameRaw, testName, testSurname, testEmail},
 			want:    successAccount,
 			wantErr: nil,
 		},
@@ -285,7 +285,9 @@ func TestService_Account_Create(t *testing.T) {
 				func(s *service.Service, r *repository.Repository) {
 					srv := service.NewAccountService(r.Account, s)
 
-					got, err := srv.Create(t.Context(), tt.args.name, tt.args.surname, tt.args.email)
+					got, err := srv.Create(
+						t.Context(), tt.args.accountName, tt.args.name, tt.args.surname, tt.args.email,
+					)
 
 					require.Equal(t, tt.want, got)
 					require.Equal(t, tt.wantErr, err)
