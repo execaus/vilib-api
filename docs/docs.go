@@ -3287,7 +3287,7 @@ const docTemplate = `{
         },
         "/api/v1/auth/register": {
             "post": {
-                "description": "Создаёт пользователя, аккаунт, назначает роль администратора и возвращает токен авторизации",
+                "description": "Создаёт организацию с указанным названием, системную роль владельца и владельца; пароль отправляется письмом",
                 "consumes": [
                     "application/json"
                 ],
@@ -3297,7 +3297,7 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "Регистрация нового пользователя",
+                "summary": "Регистрация организации",
                 "parameters": [
                     {
                         "description": "Тело запроса для регистрации",
@@ -4602,11 +4602,17 @@ const docTemplate = `{
         "dto.RegisterRequest": {
             "type": "object",
             "required": [
+                "account_name",
                 "email",
                 "name",
                 "surname"
             ],
             "properties": {
+                "account_name": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 2
+                },
                 "email": {
                     "type": "string",
                     "maxLength": 64

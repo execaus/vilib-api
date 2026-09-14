@@ -20,9 +20,9 @@ type AccountMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
-	funcCreate          func(ctx context.Context, userName string, userSurname string, email string) (a1 domain.Account, err error)
+	funcCreate          func(ctx context.Context, accountName string, userName string, userSurname string, email string) (a1 domain.Account, err error)
 	funcCreateOrigin    string
-	inspectFuncCreate   func(ctx context.Context, userName string, userSurname string, email string)
+	inspectFuncCreate   func(ctx context.Context, accountName string, userName string, userSurname string, email string)
 	afterCreateCounter  uint64
 	beforeCreateCounter uint64
 	CreateMock          mAccountMockCreate
@@ -111,6 +111,7 @@ type AccountMockCreateExpectation struct {
 // AccountMockCreateParams contains parameters of the Account.Create
 type AccountMockCreateParams struct {
 	ctx         context.Context
+	accountName string
 	userName    string
 	userSurname string
 	email       string
@@ -119,6 +120,7 @@ type AccountMockCreateParams struct {
 // AccountMockCreateParamPtrs contains pointers to parameters of the Account.Create
 type AccountMockCreateParamPtrs struct {
 	ctx         *context.Context
+	accountName *string
 	userName    *string
 	userSurname *string
 	email       *string
@@ -134,6 +136,7 @@ type AccountMockCreateResults struct {
 type AccountMockCreateExpectationOrigins struct {
 	origin            string
 	originCtx         string
+	originAccountName string
 	originUserName    string
 	originUserSurname string
 	originEmail       string
@@ -150,7 +153,7 @@ func (mmCreate *mAccountMockCreate) Optional() *mAccountMockCreate {
 }
 
 // Expect sets up expected params for Account.Create
-func (mmCreate *mAccountMockCreate) Expect(ctx context.Context, userName string, userSurname string, email string) *mAccountMockCreate {
+func (mmCreate *mAccountMockCreate) Expect(ctx context.Context, accountName string, userName string, userSurname string, email string) *mAccountMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("AccountMock.Create mock is already set by Set")
 	}
@@ -163,7 +166,7 @@ func (mmCreate *mAccountMockCreate) Expect(ctx context.Context, userName string,
 		mmCreate.mock.t.Fatalf("AccountMock.Create mock is already set by ExpectParams functions")
 	}
 
-	mmCreate.defaultExpectation.params = &AccountMockCreateParams{ctx, userName, userSurname, email}
+	mmCreate.defaultExpectation.params = &AccountMockCreateParams{ctx, accountName, userName, userSurname, email}
 	mmCreate.defaultExpectation.expectationOrigins.origin = minimock.CallerInfo(1)
 	for _, e := range mmCreate.expectations {
 		if minimock.Equal(e.params, mmCreate.defaultExpectation.params) {
@@ -197,8 +200,31 @@ func (mmCreate *mAccountMockCreate) ExpectCtxParam1(ctx context.Context) *mAccou
 	return mmCreate
 }
 
-// ExpectUserNameParam2 sets up expected param userName for Account.Create
-func (mmCreate *mAccountMockCreate) ExpectUserNameParam2(userName string) *mAccountMockCreate {
+// ExpectAccountNameParam2 sets up expected param accountName for Account.Create
+func (mmCreate *mAccountMockCreate) ExpectAccountNameParam2(accountName string) *mAccountMockCreate {
+	if mmCreate.mock.funcCreate != nil {
+		mmCreate.mock.t.Fatalf("AccountMock.Create mock is already set by Set")
+	}
+
+	if mmCreate.defaultExpectation == nil {
+		mmCreate.defaultExpectation = &AccountMockCreateExpectation{}
+	}
+
+	if mmCreate.defaultExpectation.params != nil {
+		mmCreate.mock.t.Fatalf("AccountMock.Create mock is already set by Expect")
+	}
+
+	if mmCreate.defaultExpectation.paramPtrs == nil {
+		mmCreate.defaultExpectation.paramPtrs = &AccountMockCreateParamPtrs{}
+	}
+	mmCreate.defaultExpectation.paramPtrs.accountName = &accountName
+	mmCreate.defaultExpectation.expectationOrigins.originAccountName = minimock.CallerInfo(1)
+
+	return mmCreate
+}
+
+// ExpectUserNameParam3 sets up expected param userName for Account.Create
+func (mmCreate *mAccountMockCreate) ExpectUserNameParam3(userName string) *mAccountMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("AccountMock.Create mock is already set by Set")
 	}
@@ -220,8 +246,8 @@ func (mmCreate *mAccountMockCreate) ExpectUserNameParam2(userName string) *mAcco
 	return mmCreate
 }
 
-// ExpectUserSurnameParam3 sets up expected param userSurname for Account.Create
-func (mmCreate *mAccountMockCreate) ExpectUserSurnameParam3(userSurname string) *mAccountMockCreate {
+// ExpectUserSurnameParam4 sets up expected param userSurname for Account.Create
+func (mmCreate *mAccountMockCreate) ExpectUserSurnameParam4(userSurname string) *mAccountMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("AccountMock.Create mock is already set by Set")
 	}
@@ -243,8 +269,8 @@ func (mmCreate *mAccountMockCreate) ExpectUserSurnameParam3(userSurname string) 
 	return mmCreate
 }
 
-// ExpectEmailParam4 sets up expected param email for Account.Create
-func (mmCreate *mAccountMockCreate) ExpectEmailParam4(email string) *mAccountMockCreate {
+// ExpectEmailParam5 sets up expected param email for Account.Create
+func (mmCreate *mAccountMockCreate) ExpectEmailParam5(email string) *mAccountMockCreate {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("AccountMock.Create mock is already set by Set")
 	}
@@ -267,7 +293,7 @@ func (mmCreate *mAccountMockCreate) ExpectEmailParam4(email string) *mAccountMoc
 }
 
 // Inspect accepts an inspector function that has same arguments as the Account.Create
-func (mmCreate *mAccountMockCreate) Inspect(f func(ctx context.Context, userName string, userSurname string, email string)) *mAccountMockCreate {
+func (mmCreate *mAccountMockCreate) Inspect(f func(ctx context.Context, accountName string, userName string, userSurname string, email string)) *mAccountMockCreate {
 	if mmCreate.mock.inspectFuncCreate != nil {
 		mmCreate.mock.t.Fatalf("Inspect function is already set for AccountMock.Create")
 	}
@@ -292,7 +318,7 @@ func (mmCreate *mAccountMockCreate) Return(a1 domain.Account, err error) *Accoun
 }
 
 // Set uses given function f to mock the Account.Create method
-func (mmCreate *mAccountMockCreate) Set(f func(ctx context.Context, userName string, userSurname string, email string) (a1 domain.Account, err error)) *AccountMock {
+func (mmCreate *mAccountMockCreate) Set(f func(ctx context.Context, accountName string, userName string, userSurname string, email string) (a1 domain.Account, err error)) *AccountMock {
 	if mmCreate.defaultExpectation != nil {
 		mmCreate.mock.t.Fatalf("Default expectation is already set for the Account.Create method")
 	}
@@ -308,14 +334,14 @@ func (mmCreate *mAccountMockCreate) Set(f func(ctx context.Context, userName str
 
 // When sets expectation for the Account.Create which will trigger the result defined by the following
 // Then helper
-func (mmCreate *mAccountMockCreate) When(ctx context.Context, userName string, userSurname string, email string) *AccountMockCreateExpectation {
+func (mmCreate *mAccountMockCreate) When(ctx context.Context, accountName string, userName string, userSurname string, email string) *AccountMockCreateExpectation {
 	if mmCreate.mock.funcCreate != nil {
 		mmCreate.mock.t.Fatalf("AccountMock.Create mock is already set by Set")
 	}
 
 	expectation := &AccountMockCreateExpectation{
 		mock:               mmCreate.mock,
-		params:             &AccountMockCreateParams{ctx, userName, userSurname, email},
+		params:             &AccountMockCreateParams{ctx, accountName, userName, userSurname, email},
 		expectationOrigins: AccountMockCreateExpectationOrigins{origin: minimock.CallerInfo(1)},
 	}
 	mmCreate.expectations = append(mmCreate.expectations, expectation)
@@ -350,17 +376,17 @@ func (mmCreate *mAccountMockCreate) invocationsDone() bool {
 }
 
 // Create implements mm_service.Account
-func (mmCreate *AccountMock) Create(ctx context.Context, userName string, userSurname string, email string) (a1 domain.Account, err error) {
+func (mmCreate *AccountMock) Create(ctx context.Context, accountName string, userName string, userSurname string, email string) (a1 domain.Account, err error) {
 	mm_atomic.AddUint64(&mmCreate.beforeCreateCounter, 1)
 	defer mm_atomic.AddUint64(&mmCreate.afterCreateCounter, 1)
 
 	mmCreate.t.Helper()
 
 	if mmCreate.inspectFuncCreate != nil {
-		mmCreate.inspectFuncCreate(ctx, userName, userSurname, email)
+		mmCreate.inspectFuncCreate(ctx, accountName, userName, userSurname, email)
 	}
 
-	mm_params := AccountMockCreateParams{ctx, userName, userSurname, email}
+	mm_params := AccountMockCreateParams{ctx, accountName, userName, userSurname, email}
 
 	// Record call args
 	mmCreate.CreateMock.mutex.Lock()
@@ -379,13 +405,18 @@ func (mmCreate *AccountMock) Create(ctx context.Context, userName string, userSu
 		mm_want := mmCreate.CreateMock.defaultExpectation.params
 		mm_want_ptrs := mmCreate.CreateMock.defaultExpectation.paramPtrs
 
-		mm_got := AccountMockCreateParams{ctx, userName, userSurname, email}
+		mm_got := AccountMockCreateParams{ctx, accountName, userName, userSurname, email}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
 				mmCreate.t.Errorf("AccountMock.Create got unexpected parameter ctx, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
 					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originCtx, *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.accountName != nil && !minimock.Equal(*mm_want_ptrs.accountName, mm_got.accountName) {
+				mmCreate.t.Errorf("AccountMock.Create got unexpected parameter accountName, expected at\n%s:\nwant: %#v\n got: %#v%s\n",
+					mmCreate.CreateMock.defaultExpectation.expectationOrigins.originAccountName, *mm_want_ptrs.accountName, mm_got.accountName, minimock.Diff(*mm_want_ptrs.accountName, mm_got.accountName))
 			}
 
 			if mm_want_ptrs.userName != nil && !minimock.Equal(*mm_want_ptrs.userName, mm_got.userName) {
@@ -415,9 +446,9 @@ func (mmCreate *AccountMock) Create(ctx context.Context, userName string, userSu
 		return (*mm_results).a1, (*mm_results).err
 	}
 	if mmCreate.funcCreate != nil {
-		return mmCreate.funcCreate(ctx, userName, userSurname, email)
+		return mmCreate.funcCreate(ctx, accountName, userName, userSurname, email)
 	}
-	mmCreate.t.Fatalf("Unexpected call to AccountMock.Create. %v %v %v %v", ctx, userName, userSurname, email)
+	mmCreate.t.Fatalf("Unexpected call to AccountMock.Create. %v %v %v %v %v", ctx, accountName, userName, userSurname, email)
 	return
 }
 

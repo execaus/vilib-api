@@ -21,24 +21,26 @@ import (
 
 func TestHandler_Register(t *testing.T) {
 	var (
-		testName    = "John"
-		testSurname = "Doe"
-		testEmail   = "john@example.com"
+		testAccountName = "ИТ Консалт"
+		testName        = "John"
+		testSurname     = "Doe"
+		testEmail       = "john@example.com"
 	)
 
 	t.Run("success", func(t *testing.T) {
 		mc := minimock.NewController(t)
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
-		svcMock.Account.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail).
+		svcMock.Account.CreateMock.Expect(minimock.AnyContext, testAccountName, testName, testSurname, testEmail).
 			Return(domain.Account{}, nil)
 
 		router := testutil.SetupTestRouterWithMocks(mc, svcMock, nil)
 
 		body, _ := json.Marshal(dto.RegisterRequest{
-			Name:    testName,
-			Surname: testSurname,
-			Email:   testEmail,
+			AccountName: testAccountName,
+			Name:        testName,
+			Surname:     testSurname,
+			Email:       testEmail,
 		})
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
@@ -69,7 +71,7 @@ func TestHandler_Register(t *testing.T) {
 		mc := minimock.NewController(t)
 
 		svcMock := testutil.NewHandlerTestServiceMock(mc)
-		svcMock.Account.CreateMock.Expect(minimock.AnyContext, testName, testSurname, testEmail).
+		svcMock.Account.CreateMock.Expect(minimock.AnyContext, testAccountName, testName, testSurname, testEmail).
 			Return(domain.Account{}, errors.New("test error"))
 
 		tx := saga_mocks.NewBobTransactionMock(mc)
@@ -82,9 +84,10 @@ func TestHandler_Register(t *testing.T) {
 		router := h.GetRouter()
 
 		body, _ := json.Marshal(dto.RegisterRequest{
-			Name:    testName,
-			Surname: testSurname,
-			Email:   testEmail,
+			AccountName: testAccountName,
+			Name:        testName,
+			Surname:     testSurname,
+			Email:       testEmail,
 		})
 
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))

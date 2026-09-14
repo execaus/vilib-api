@@ -10,17 +10,8 @@ var AccountErrors = &accountErrors{
 		columns: []string{"account_id"},
 		s:       "accounts_pkey",
 	},
-
-	ErrUniqueAccountsNameKey: &UniqueConstraintError{
-		schema:  "",
-		table:   "accounts",
-		columns: []string{"name"},
-		s:       "accounts_name_key",
-	},
 }
 
 type accountErrors struct {
 	ErrUniqueAccountsPkey *UniqueConstraintError
-
-	ErrUniqueAccountsNameKey *UniqueConstraintError
 }

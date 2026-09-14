@@ -1,6 +1,7 @@
 package service_test
 
 import (
+	"strings"
 	"testing"
 	"vilib-api/config"
 	"vilib-api/internal/repository"
@@ -8,15 +9,15 @@ import (
 	"vilib-api/server"
 	"vilib-api/testutil"
 
+	"github.com/google/uuid"
 	"github.com/stephenafamo/bob"
 	"github.com/stretchr/testify/require"
 )
 
-// Проверяет распознавание нарушения уникальности имени аккаунта на настоящей PostgreSQL
-// (В-11): сентинел dberrors.AccountErrors.ErrUniqueAccountsNameKey реализует Is(target error)
-// с target *pgconn.PgError, поэтому [errors.Is](sentinel, err) — единственный рабочий порядок
-// аргументов. На моках, где возвращается сам сентинел, ошибка в порядке аргументов не видна.
-func TestService_AccountCreate_DuplicateNameReturnsErrAccountNameExists(t *testing.T) {
+// Проверяет на настоящей PostgreSQL, что название организации не уникально (A-01 ТЗ): две
+// организации с одинаковым названием и одинаковой локальной частью email владельца
+// регистрируются независимо, а название берётся из запроса, а не из адреса.
+func TestService_AccountCreate_SameNameIsAllowed(t *testing.T) {
 	t.Parallel()
 
 	testutil.WithDB(t, []string{"../../migrations"}, func(bobDB *bob.DB) {
@@ -24,18 +25,23 @@ func TestService_AccountCreate_DuplicateNameReturnsErrAccountNameExists(t *testi
 		cfg := config.Config{Server: config.ServerConfig{Mode: server.DevelopmentMode}}
 		srv := service.NewService(cfg, nil, nil, repo)
 
-		email := testutil.Faker.Person().Contact().Email
+		const accountName = "ООО «Ромашка»"
+
+		local := strings.ToLower(testutil.Faker.Person().FirstName()) + "-" + uuid.NewString()[:8]
 		surname := testutil.Faker.Person().LastName()
 
-		firstName := testutil.Faker.Person().FirstName()
-		_, err := srv.Account.Create(t.Context(), firstName, surname, email)
+		first, err := srv.Account.Create(
+			t.Context(), accountName, testutil.Faker.Person().FirstName(), surname, local+"@first.test",
+		)
 		require.NoError(t, err)
 
-		// Второй аккаунт делит с первым вычисленное из email имя — вставка в БД
-		// нарушает уникальность accounts.name и возвращает *pgconn.PgError.
-		secondName := testutil.Faker.Person().FirstName()
-		_, err = srv.Account.Create(t.Context(), secondName, surname, email)
+		second, err := srv.Account.Create(
+			t.Context(), "  "+accountName+"  ", testutil.Faker.Person().FirstName(), surname, local+"@second.test",
+		)
+		require.NoError(t, err)
 
-		require.ErrorIs(t, err, service.ErrAccountNameExists)
+		require.NotEqual(t, first.ID, second.ID)
+		require.Equal(t, accountName, first.Name)
+		require.Equal(t, accountName, second.Name)
 	})
 }

@@ -1,9 +1,10 @@
 package service
 
 var (
-	// ErrEmailInvalid — email не позволяет вычислить название организации (HTTP 400
-	// validation.email, регистрация). Раньше был ConflictError (409) — исправлено §2.2
-	// дизайна эпика.
-	ErrEmailInvalid      = NewValidationErrorCode("validation.email", "invalid email")
-	ErrAccountNameExists = NewConflictErrorCode("conflict.account_name", "account name exists")
+	// ErrAccountNameInvalid — название организации при регистрации после обрезки пробелов вне
+	// допустимой длины (HTTP 400 validation.account_name, A-01 ТЗ).
+	ErrAccountNameInvalid = NewValidationErrorCode(
+		"validation.account_name",
+		"account name must be between 2 and 128 characters",
+	)
 )

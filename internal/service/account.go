@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"vilib-api/internal/domain"
-	"vilib-api/internal/gen/dberrors"
 	"vilib-api/internal/repository"
 
 	"github.com/google/uuid"
@@ -22,21 +21,19 @@ func NewAccountService(repo repository.Account, srv *Service) *AccountService {
 	return &AccountService{repo: repo, srv: srv}
 }
 
-func (s *AccountService) Create(ctx context.Context, userName, userSurname, email string) (domain.Account, error) {
-	// Вычисление имени аккаунта на основе прикрепленного email
-	accountName, err := domain.NameFromEmail(email)
-	if err != nil {
-		zap.L().Error(err.Error())
-		return domain.Account{}, ErrEmailInvalid
+func (s *AccountService) Create(
+	ctx context.Context,
+	accountName, userName, userSurname, email string,
+) (domain.Account, error) {
+	// Название организации задаёт владелец при регистрации; уникальность не требуется (A-01 ТЗ)
+	name, ok := domain.NormalizeAccountName(accountName)
+	if !ok {
+		return domain.Account{}, ErrAccountNameInvalid
 	}
 
 	// Создание аккаунта
-	account, err := s.repo.Insert(ctx, accountName, email)
+	account, err := s.repo.Insert(ctx, name, email)
 	if err != nil {
-		if errors.Is(dberrors.AccountErrors.ErrUniqueAccountsNameKey, err) {
-			zap.L().Warn(err.Error())
-			return account, ErrAccountNameExists
-		}
 		zap.L().Error(err.Error())
 		return domain.Account{}, err
 	}
